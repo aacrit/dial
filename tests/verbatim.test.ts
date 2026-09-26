@@ -1,13 +1,14 @@
 // Law 2: the words are the author's. Every cue is a byte-exact slice of the
 // source, the cues rebuild it exactly, and the voice is given the same words
-// with only whitespace folded. Law 3: the cut is deterministic.
+// with only whitespace folded and a speaker label left out. Law 3: the cut
+// is deterministic.
 
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MAX_CUE_CHARS, PAUSE_MS, rebuild, segment } from "../web/src/engine/segment";
+import { MAX_CUE_CHARS, PAUSE_MS, rebuild, segment, speakerLabel } from "../web/src/engine/segment";
 import { assemble, encodeWav } from "../web/src/engine/wav";
 import { PLUS_MARKS, UPSTREAM_SHA256, checkUpstream, dropNotes, extractWork, sliceLines } from "../scripts/extract-work.mjs";
 
@@ -115,8 +116,11 @@ for (const slug of ["cave", "crito", "meditations"]) {
       expect(sha(rebuild(source, cues))).toBe(sha(source));
     });
 
-    it("the voice gets the same words: only whitespace differs", () => {
-      for (const c of cues) expect(c.spoken.replace(/\s/g, "")).toBe(c.text.replace(/\s/g, ""));
+    it("the voice gets the same words: only whitespace differs, and a turn's opening line leaves out its speaker label", () => {
+      for (const c of cues) {
+        const label = c.speakerRule === "speaker-label" ? speakerLabel(c.text)!.length : 0;
+        expect(c.spoken.replace(/\s/g, "")).toBe(c.text.slice(label).replace(/\s/g, ""));
+      }
     });
 
     it("every cue fits the voice's window, or had no clause mark to break at", () => {

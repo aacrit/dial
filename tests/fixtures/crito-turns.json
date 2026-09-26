@@ -1,0 +1,382 @@
+[
+ {
+  "speaker": "SOCRATES",
+  "opens": "Why have you come at this"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes, certainly."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "What is the exact time?"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "The dawn is breaking."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "I wonder that the keeper of"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "He knows me because I often"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And are you only just arrived?"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "No, I came some time ago."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then why did you sit and"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "I should not have liked myself,"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Why, Crito, when a man has"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "And yet other old men find"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "That is true. But you have"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "I come to bring you a"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "What? Has the ship come from"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "No, the ship has not actually"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Very well, Crito; if such is"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Why do you think so?"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "I will tell you. I am"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes; that is what the authorities"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "But I do not think that"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "And what was the nature of"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "There appeared to me the likeness"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "What a singular dream, Socrates!"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "There can be no doubt about"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes; the meaning is only too"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "But why, my dear Crito, should"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "But you see, Socrates, that the"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "I only wish it were so,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Well, I will not dispute with"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Yes, Crito, that is one fear"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Fear not--there are persons who are"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Dear Crito, your zeal is invaluable,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Certainly."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "The good are to be regarded,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And the opinions of the wise"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Certainly."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And what was said about another"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Of one man only."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And he ought to fear the"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Clearly so."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And he ought to act and"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "True."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And if he disobeys and disregards"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Certainly he will."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And what will the evil be,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Clearly, affecting the body; that is"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Very good; and is not this"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Certainly there is, Socrates."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Take a parallel instance:--if, acting under"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Could we live, having an evil"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Certainly not."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And will life be worth having,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Certainly not."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "More honourable than the body?"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Far more."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then, my friend, we must not"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes, Socrates; that will clearly be"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And it is true; but still"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes, that also remains unshaken."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And a good life is equivalent"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes, it does."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "From these premisses I proceed to"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "I think that you are right,"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Let us consider the matter together,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "I will."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Are we to say that we"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Yes."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then we must do no wrong?"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Certainly not."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Nor when injured injure in return,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Clearly not."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Again, Crito, may we do evil?"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Surely not, Socrates."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "And what of doing evil in"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Not just."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "For doing evil to another is"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Very true."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then we ought not to retaliate"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "You may proceed, for I have"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then I will go on to"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "He ought to do what he"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "But if this is true, what"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "I cannot tell, Socrates, for I"
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then consider the matter in this"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "Very good, Socrates."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "'And was that our agreement with"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "I think that they do."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then the laws will say: 'Consider,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "We cannot help it, Socrates."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Then will they not say: 'You,"
+ },
+ {
+  "speaker": "CRITO",
+  "opens": "I have nothing to say, Socrates."
+ },
+ {
+  "speaker": "SOCRATES",
+  "opens": "Leave me then, Crito, to fulfil"
+ }
+]

@@ -61,7 +61,8 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
    `web/public/voice` and `web/public/ort` before every build.
 2. **The words are the author's.** Every cue's `text` is a byte-exact slice
    of its source and the cues rebuild it exactly (`tests/verbatim.test.ts`).
-   `spoken` may differ only by whitespace until the Corrections sheet exists.
+   `spoken` may differ only by whitespace, and by leaving out a speaker
+   label, until the Corrections sheet exists.
    A translator's apparatus (footnotes, the markers that point at them, and
    marks of a doubtful reading) may be removed only by
    `scripts/extract-work.mjs`, which refuses unless the upstream Gutenberg
@@ -70,7 +71,9 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
    and every word of the text itself stays verbatim.
 3. **One deterministic engine that never needs to understand the text.**
    `web/src/engine/` reads form only (paragraphs, sentence and clause marks,
-   later speaker labels and tags). No LLM, ever, in the render path.
+   speaker labels, later speech tags). Voices are cast in the order speakers
+   first speak, from a fixed palette, never from a name
+   (`web/src/engine/cast.ts`). No LLM, ever, in the render path.
 
 Texts are public domain worldwide only (published before 1930 and the
 author or translator died before 1956), each with its Bookplate: source,
