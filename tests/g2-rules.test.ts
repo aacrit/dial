@@ -9,7 +9,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { ORT_FILES, ORT_WASM, STAGED_DIRS, VOICE_SHA256, stage } from "../scripts/fetch-voice.mjs";
+import { ORT_FILES, ORT_WASM, STAGED_DIRS, VOICES, stage } from "../scripts/fetch-voice.mjs";
 import { checkColorLine, checkEmDashLine, isVerbatimPath, shouldScan } from "../scripts/lint-design.mjs";
 import { walk } from "../scripts/lib/walk.mjs";
 import { aboutMegabytes, isStatableTotal, warmingLine } from "../web/src/download-size";
@@ -215,16 +215,21 @@ describe("true copy: the first voice download", () => {
     }
     // Everything the tab downloads for the voice is in the sum.
     expect(kinds.part).toBe(manifest.parts.length);
-    expect(kinds.voice).toBe(1);
+    // Every voice in the casting palette (George, Lewis, Fable) is in the total.
+    expect(kinds.voice).toBe(Object.keys(VOICES).length);
+    expect(kinds.voice).toBe(3);
     expect(kinds.mjs).toBe(1);
     expect(kinds.wasm).toBe(1);
     expect(manifest.totalBytes).toBe(sum);
   });
 
   it("the runtime and the voice file are pinned: the manifest carries their sha256", () => {
-    const manifest = JSON.parse(readFileSync(manifestPath(), "utf8")) as { runtime: string; runtimeSha256: string; narrator: string; voiceSha256: string };
-    expect(manifest.voiceSha256).toBe(VOICE_SHA256);
-    expect(sha256(readFileSync(path.join(STAGED_DIRS.voice, "voices", `${manifest.narrator}.bin`)))).toBe(VOICE_SHA256);
+    const manifest = JSON.parse(readFileSync(manifestPath(), "utf8")) as { runtime: string; runtimeSha256: string; narrator: string; voices: Record<string, string> };
+    expect(manifest.voices).toEqual(VOICES);
+    expect(Object.keys(manifest.voices)).toContain(manifest.narrator);
+    for (const [id, pin] of Object.entries(VOICES)) {
+      expect(sha256(readFileSync(path.join(STAGED_DIRS.voice, "voices", `${id}.bin`))), id).toBe(pin);
+    }
     expect(manifest.runtime).toBe(ORT_WASM);
     expect(manifest.runtimeSha256).toBe(ORT_FILES[ORT_WASM]);
     for (const [file, pin] of Object.entries(ORT_FILES)) {
@@ -296,14 +301,14 @@ describe("the voice caches are keyed to their pins", () => {
     expect(voiceSrc).toMatch(/staleVoiceCaches\(await caches\.keys\(\), current\)\) await caches\.delete/);
     // On read: a cached file that fails its pin is dropped, then fetched again.
     expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(hit\)\) !== pin\) \{\s*await cache\.delete\(key\);\s*return undefined;\s*\}\s*return hit;/);
-    expect(voiceSrc).toContain("await dropIfUnpinned(voices, voiceKey, manifest.voiceSha256);");
+    expect(voiceSrc).toMatch(/for \(const \[id, pin\] of Object\.entries\(manifest\.voices\)\) \{\s*if \(!\(await dropIfUnpinned\(voices, voiceKey\(id\), pin\)\)\) voicesKept = false;/);
     // T1 review: the runtime's .wasm is read and hashed once per load; the checked bytes are the ones handed over.
     expect(voiceSrc).toContain("const cachedRuntime = await dropIfUnpinned(runtimeCache, runtimeKey, manifest.runtimeSha256);");
     expect(voiceSrc).toContain("let binary = cachedRuntime;");
     expect([...voiceSrc.matchAll(/runtimeCache\.match\(/g)].length).toBe(0);
     // On fetch: a file that fails its pin is never used or kept.
     expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(binary\)\) !== manifest\.runtimeSha256\) throw/);
-    expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(buf\)\) !== manifest\.voiceSha256\) throw/);
+    expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(buf\)\) !== pin\) throw/);
     expect(voiceSrc).toMatch(/async function keep[\s\S]*?try \{\s*await cache\.put/);
     expect(voiceSrc).toMatch(/await hold\(runtimeCache, runtimeKey, new Response\(binary/);
   });
