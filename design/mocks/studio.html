@@ -190,7 +190,14 @@ html.still{scrollbar-width:none}html.still::-webkit-scrollbar{display:none}
 .ms .corr.ok{text-decoration:underline solid var(--color-border)}
 
 /* The Tuning Dial */
-.tuning{position:relative;isolation:isolate;margin:0 0 16px;padding:14px 16px 12px;border:1px solid var(--color-border);border-radius:var(--radius-card);background:var(--texture-console),var(--color-surface);box-shadow:inset 0 1px 0 var(--color-cream-faint),var(--shadow-card);overflow:hidden}
+/* Round 2: the Tuning Dial is a real instrument: glass, a bezel, a sprung needle, a speed gauge. */
+.tuning{position:relative;isolation:isolate;margin:0 0 16px;padding:14px 16px 12px;border:1px solid var(--color-bezel);border-radius:var(--radius-card);background:var(--gradient-glass);box-shadow:var(--shadow-glass-inset),0 0 0 6px var(--color-surface),0 0 0 7px var(--color-bezel),var(--shadow-card);overflow:hidden;
+  --color-cream:var(--color-glass-ink);--color-cream-muted:var(--color-glass-ink-muted);--color-cream-faint:var(--color-glass-ink-faint);--color-border:var(--color-glass-ink-faint);--color-filament:var(--color-glass-amber);--color-register-telling:var(--color-glass-reg-telling);--color-register-speaking:var(--color-glass-reg-speaking);--color-register-letter:var(--color-glass-reg-letter);color:var(--color-glass-ink)}
+.tuning .head h2{white-space:nowrap}
+.tuning .dw-sheen{position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 35%,var(--color-glass-sheen) 45%,transparent 55%)}
+.tuning .gauge{width:70px;height:38px;margin-left:auto}
+.gauge .g-arc{fill:none;stroke:var(--color-glass-ink-faint);stroke-width:1.2}.gauge .g-slow{fill:none;stroke:var(--color-glass-ink-muted);stroke-width:1.2;stroke-dasharray:1.5 2.5}.gauge .g-tk{stroke:var(--color-glass-ink-muted);stroke-width:1}.gauge .g-tk.rt{stroke:var(--color-glass-ink);stroke-width:1.6}.gauge .g-lb{fill:var(--color-glass-ink-muted);font:500 7px var(--font-data);text-anchor:middle}.gauge .g-nd{stroke:var(--color-glass-amber);stroke-width:1.6;stroke-linecap:round}.gauge .g-cap{fill:var(--color-glass-ink-muted)}
+.tuning .gl{font:500 .62rem/1.2 var(--font-data);letter-spacing:.08em;text-transform:uppercase;color:var(--color-glass-ink-muted);white-space:nowrap}
 .tuning::after{content:"";position:absolute;inset:0;z-index:-1;background-image:var(--texture-grain);opacity:var(--texture-grain-opacity);pointer-events:none}
 .tuning .head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px}
 .tuning .head h2{font-family:var(--font-display);font-size:1.15rem}
@@ -380,12 +387,15 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
 
     <section class="pane center" aria-label="Tuning Dial and cue sheet">
       <div class="tuning" aria-labelledby="td-h">
-        <div class="head"><h2 id="td-h">Tuning Dial</h2><span class="num" data-window>00:00 to 01:00</span></div>
+        <span class="dw-sheen" aria-hidden="true"></span>
+        <div class="head"><h2 id="td-h">Tuning Dial</h2><span class="num" data-window>00:00 to 01:00</span><svg class="gauge" viewBox="0 0 120 64" aria-hidden="true"><path class="g-arc" d="M21.9 34 A44 44 0 0 1 98.1 34"/><path class="g-slow" d="M21.9 34 A44 44 0 0 1 38 17.9"/><line class="g-tk" x1="21.9" y1="34" x2="27.1" y2="37"/><line class="g-tk rt" x1="38" y1="17.9" x2="41" y2="23.1"/><line class="g-tk" x1="60" y1="12" x2="60" y2="18"/><line class="g-tk" x1="82" y1="17.9" x2="79" y2="23.1"/><line class="g-tk" x1="98.1" y1="34" x2="92.9" y2="37"/><text class="g-lb" x="15" y="44">0</text><text class="g-lb" x="33" y="13">1×</text><text class="g-lb" x="60" y="8">2</text><text class="g-lb" x="87" y="13">3</text><text class="g-lb" x="105" y="44">4</text><line class="g-nd" x1="60" y1="56" x2="60" y2="18" transform="rotate(18 60 56)"/><circle class="g-cap" cx="60" cy="56" r="3.5"/></svg><span class="gl" data-gl>1.8× · GPU</span></div>
         <div data-not="warming">
           <svg class="tdial" id="tdial" role="img" aria-label="The chapter along time: cues by register, the render head and the play needle."></svg>
-          <div class="readout" data-not="slow exported keep"><span class="lamp" aria-hidden="true"></span><span>Rendered <b><span class="num">41</span> of <span class="num" data-ncues>64</span></b> cues</span><span><span class="num">1.8×</span> real time on this device (WebGPU)</span><span>about <span class="num">1</span> min left</span></div>
+          <div class="readout" data-not="slow exported keep keep-pd holding"><span class="lamp" aria-hidden="true"></span><span>Rendered <b><span class="num">41</span> of <span class="num" data-ncues>64</span></b> cues</span><span><span class="num">1.8×</span> real time on this device (WebGPU)</span><span>about <span class="num">1</span> min left</span></div>
+          <div class="readout" data-when="holding"><span class="lamp off" aria-hidden="true"></span><span><b>Holding at the paragraph so the voice keeps up.</b> The trial is <span class="num">3</span> s ahead of the render; it resumes at the next line once the render is <span class="num">10</span> s ahead.</span></div>
+          <div class="readout" data-not="holding exported keep keep-pd warming"><span>Trial playback starts once the render is <span class="num">10</span> s ahead, and on a device slower than real time, once enough is made that it never has to stop.</span></div>
           <div class="readout" data-when="slow"><span class="lamp" aria-hidden="true"></span><span>Rendered <b><span class="num">41</span> of <span class="num" data-ncues>64</span></b></span><span>This computer renders at <span class="num">0.7×</span> real time: no WebGPU here, so the processor does the work. About <span class="num">8</span> min for this chapter. Keep editing while it renders.</span></div>
-          <div class="readout" data-when="exported keep"><span class="pip eye" aria-hidden="true"></span><span>Rendered, all <span class="num" data-ncues>64</span> cues. Loudness in spec: voice <span class="num">-20.6</span> dBFS, peaks <span class="num">-4.1</span> dBFS.</span></div>
+          <div class="readout" data-when="exported keep keep-pd"><span class="pip eye" aria-hidden="true"></span><span>Rendered, all <span class="num" data-ncues>64</span> cues. Loudness in spec: voice <span class="num">-20.6</span> dBFS, peaks <span class="num">-4.1</span> dBFS.</span></div>
           <div class="tlegend"><span><i style="background:var(--color-register-telling)"></i>Telling</span><span><i style="background:var(--color-register-speaking)"></i>Speaking</span><span><i style="background:var(--color-register-letter)"></i>Letter or verse</span><span><i class="h"></i>Speaker unresolved: narrator's voice</span><span><i style="background:var(--color-ochre);width:6px;border-radius:50%"></i>Correction to review</span></div>
         </div>
         <div data-when="warming" role="status" style="display:grid;gap:10px;padding:18px 0 8px">
@@ -402,7 +412,7 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
         <button role="tab" data-tab="cue" aria-selected="true">Cue</button>
         <button role="tab" data-tab="voices" aria-selected="false">Voices</button>
         <button role="tab" data-tab="corrections" aria-selected="false">Corrections <span class="pip ochre" aria-hidden="true"></span></button>
-        <button role="tab" data-tab="export" aria-selected="false">Export <span class="pip ochre" aria-hidden="true" data-not="exported keep"></span></button>
+        <button role="tab" data-tab="export" aria-selected="false">Export <span class="pip ochre" aria-hidden="true" data-not="exported keep keep-pd"></span></button>
       </div>
 
       <div class="insp" data-tab-panel="cue">
@@ -457,36 +467,39 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
       <div class="insp" data-tab-panel="export" hidden>
         <div data-not="exported">
         <h3>Rights</h3>
-        <p class="note">Required before each export. There is no default; choose the one that is true.</p>
-        <div class="stack" style="margin:10px 0 4px">
+        <p class="note">Required before each export. There is no default; choose the one that is true. Your answer shows at once in the header and in the file's label below.</p>
+        <div class="stack" style="margin:10px 0 4px" role="radiogroup" aria-label="Rights">
           <label class="radio"><input type="radio" name="rights" data-r="own">I wrote this, or I hold the audio rights to it.</label>
           <label class="radio"><input type="radio" name="rights" data-r="pd">It is public domain.</label>
-          <div class="field" data-when="keep" style="margin:0"><label for="src">Source</label><input class="in" id="src" value="Project Gutenberg eBook No. 1342"></div>
+          <div class="field" data-rv="pd" style="margin:0"><label for="src">Source (required)</label><input class="in" id="src" value="Project Gutenberg eBook No. 1342"></div>
         </div>
-        <p class="pending" data-not="keep"><span class="pip ochre" aria-hidden="true"></span>Not stated yet</p>
-        <div class="sect"><h4>Free trial</h4><p class="note">This chapter: <span class="num" data-words>847</span> words. The free trial covers one chapter of your own writing, up to <span class="num">8,000</span> words. Public-domain texts with a source are free at any length.</p></div>
+        <p class="pending" data-rv="none"><span class="pip ochre" aria-hidden="true"></span>Not stated yet</p>
+        <div class="sect"><h4>Free trial</h4>
+          <p class="note" data-rv="none">This chapter: <span class="num" data-words>847</span> words. The free trial covers one chapter of your own writing, up to <span class="num">8,000</span> words. Public-domain texts with a source are free at any length.</p>
+          <p class="note" data-rv="own">This chapter: <span class="num" data-words>847</span> words, within the free chapter (up to <span class="num">8,000</span> words of your own writing).</p>
+          <p class="note" data-rv="pd">Public domain with a source: free at any length.</p></div>
         <div class="sect"><h4>Written into the file</h4>
           <dl class="label-dl">
             <dt>Label</dt><dd>AI-voiced with Dial</dd>
             <dt>Made</dt><dd><span class="num">26</span> September <span class="num">2026</span></dd>
-            <dt>Rights</dt><dd data-not="keep" class="muted">Not stated yet</dd><dd data-when="keep">Public domain. Source: Project Gutenberg eBook No. <span class="num">1342</span></dd>
+            <dt>Rights</dt><dd data-rv="none" class="muted">Not stated yet</dd><dd data-rv="own">I wrote this, or I hold the audio rights to it.</dd><dd data-rv="pd">Public domain. Source: <span data-src-echo>Project Gutenberg eBook No. 1342</span></dd>
             <dt>Source text</dt><dd><span class="num">SHA-256 9c1e44a0 7b3d2f18 …</span>, computed on this device</dd>
             <dt>Mark</dt><dd>An inaudible <span class="num">64</span>-bit mark: the Dial tag and a short fingerprint of this text. It never contains who you are.</dd>
           </dl></div>
         <div class="sect"><h4>File</h4><p class="note">WAV · <span class="num">24</span> kHz mono · about <span class="num" data-size>17.0</span> MB. M4A and Opus come with the full engine.</p>
-          <button class="btn" type="button" disabled data-not="keep">Export chapter</button><button class="btn" type="button" data-when="keep">Export chapter</button>
-          <p class="note" data-when="keep"><span class="num">2</span> corrections are not reviewed, so the voice says those words as written. You can review them first or export now.</p>
-          <p class="note" data-not="keep">State the rights above, and let the render finish (<span class="num">41</span> of <span class="num" data-ncues>64</span> cues).</p></div>
+          <button class="btn" type="button" data-export-panel>Export chapter</button>
+          <p class="note" data-export-why></p>
+          <p class="note">The file is written to your downloads; nothing is uploaded. Dial counts one finished render, with no content and no identity. You can turn it off on the <a href="seal.html">Seal</a>.</p></div>
         <div class="sect"><h4>Keep</h4>
           <p class="note">Closing this tab erases this production. Keep saves it on this device, encrypted with a passphrase you choose. Nothing is uploaded, and Dial cannot recover a forgotten passphrase.</p>
-          <div class="field" data-when="keep" style="margin:0"><label for="pp">Passphrase</label><input class="in" id="pp" type="password" value="lamplight over longbourn"></div>
+          <div class="field" data-when="keep keep-pd" style="margin:0"><label for="pp">Passphrase</label><input class="in" id="pp" type="password" value="lamplight over longbourn"></div>
           <button class="btn quiet" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-lock"/></svg>Keep on this device</button>
         </div>
         </div>
         <div data-when="exported" class="stack">
           <div class="done-panel" role="status"><p style="display:flex;gap:8px;align-items:center"><span class="pip eye" aria-hidden="true"></span><b style="font-weight:600">Exported</b></p>
             <p class="note" style="color:var(--color-cream)">pride-and-prejudice-chapter-i.wav, <span class="num" data-size>17.0</span> MB, is in your downloads.</p>
-            <p class="note">Its label reads: AI-voiced with Dial. Public domain, Project Gutenberg eBook No. <span class="num">1342</span>. <span class="num">26</span> September <span class="num">2026</span>.</p>
+            <p class="note">Its label reads: AI-voiced with Dial. <span data-rv="own">I wrote this, or I hold the audio rights to it.</span><span data-rv="pd">Public domain. Source: Project Gutenberg eBook No. <span class="num">1342</span>.</span> <span class="num">26</span> September <span class="num">2026</span>.</p>
             <a href="seal.html">Check it on the Seal</a></div>
           <p class="note">This production is still sealed in this tab. Keep it, or it is erased when the tab closes.</p>
           <button class="btn quiet" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-lock"/></svg>Keep on this device</button>
@@ -498,7 +511,7 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
   <div class="import import-desk" data-when="first-run structuring import-error">
     <div class="dropzone" data-when="first-run">
       <h2>Bring a chapter</h2>
-      <p>Paste it, or drop a .txt or .docx file here. It is read in this tab and never uploaded.</p>
+      <p>Paste it, or drop a .txt or .docx file here. It is read in this tab and never uploaded. Dial counts one finished render, with no content and no identity. You can turn it off on the <a href="seal.html">Seal</a>.</p>
       <div class="row"><button class="btn" type="button">Paste text</button><button class="btn quiet" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-imp"/></svg>Choose a file</button></div>
       <p class="terms">Free: one chapter, up to <span class="num">8,000</span> words, and any public-domain text. Your whole book: <span class="num">$15</span> once, not on sale yet. Nothing is sent: check it on the <a href="seal.html">Seal</a>.</p>
     </div>
@@ -534,7 +547,7 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
 
     <section class="card" data-when="first-run structuring import-error">
       <h2 data-when="first-run">Bring a chapter</h2>
-      <p class="muted" data-when="first-run">Paste it, or choose a .txt or .docx file. It is read on this phone and never uploaded.</p>
+      <p class="muted" data-when="first-run">Paste it, or choose a .txt or .docx file. It is read on this phone and never uploaded. Dial counts one finished render, with no content and no identity. You can turn it off on the <a href="seal.html">Seal</a>.</p>
       <h2 data-when="import-error">This file could not be read</h2>
       <p class="muted" data-when="import-error">manuscript.pages is a Pages document. Dial reads .txt and .docx. Export it as Word from Pages, then choose it here.</p>
       <p class="muted" data-when="structuring">Reading the structure of pride-and-prejudice-ch1.txt.</p>
@@ -555,15 +568,15 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
     <section class="card" data-not="first-run structuring import-error over-limit exported">
       <h2>Rights</h2>
       <p class="note">Required before export. There is no default.</p>
-      <label class="radio"><input type="radio" name="prights">I wrote this, or I hold the audio rights to it.</label>
-      <label class="radio"><input type="radio" name="prights">It is public domain.</label>
+      <label class="radio"><input type="radio" name="prights" data-r="own">I wrote this, or I hold the audio rights to it.</label>
+      <label class="radio"><input type="radio" name="prights" data-r="pd">It is public domain.</label>
       <button class="btn" type="button" disabled>Export chapter</button>
       <p class="note">State the rights, and let the trial render finish.</p>
     </section>
 
     <section class="card" data-when="exported" role="status">
       <h2>Exported</h2>
-      <p class="muted">pride-and-prejudice-chapter-i.wav, <span class="num">16.9</span> MB, is in your downloads. Its label reads: AI-voiced with Dial. Public domain, Project Gutenberg eBook No. <span class="num">1342</span>.</p>
+      <p class="muted">pride-and-prejudice-chapter-i.wav, <span class="num">16.9</span> MB, is in your downloads. Its label reads: AI-voiced with Dial. <span data-rv="own">I wrote this, or I hold the audio rights to it.</span><span data-rv="pd">Public domain, Project Gutenberg eBook No. <span class="num">1342</span>.</span></p>
     </section>
 
     <section class="card" data-when="over-limit">
@@ -577,6 +590,227 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
   </div>
 </main>
 <nav class="tabbar" aria-label="Rooms"><a href="repertory.html"><svg class="glyph" aria-hidden="true"><use href="#g-repertory"/></svg><span>Repertory</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html"><svg class="glyph" aria-hidden="true"><use href="#g-broadcast"/></svg><span>Broadcast</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html" aria-current="page"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html"><svg class="glyph" aria-hidden="true"><use href="#g-seal"/></svg><span>Seal</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
+<script>
+// Dial device: spring physics for the needle, knobs, eye, valve, gauge, meters
+// and read-along; the living AM wave in the dial window. Ported from sadhana:
+// the wave loop follows VoiceWave.tsx (dt-based rAF clamped at 0.1 s, paused
+// while the tab is hidden, sin(pi x) edge envelope, ambient drift mixed with a
+// live level), the tuning convergence follows TanpuraViz.tsx (lines converge
+// as alignment rises), and the springs are a pure-JS Hooke integrator in
+// place of framer-motion (BrandLoader.tsx / Logo.tsx presets: kan 1000/30 is
+// Dial's needle-drop).
+(function () {
+  const q = new URLSearchParams(location.search);
+  const mq = matchMedia("(prefers-reduced-motion: reduce)");
+  const DD = (window.DialDevice = { reduce: mq.matches || q.has("still") });
+  mq.addEventListener("change", (e) => (DD.reduce = e.matches || q.has("still")));
+  const tokenSpring = (name, fb) => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim().split(/\s+/).map(Number);
+    return v.length === 3 && v.every((n) => n > 0) ? v : fb;
+  };
+  DD.P = {
+    swing: tokenSpring("--spring-needle-swing", [220, 11, 1.1]),
+    drop: tokenSpring("--spring-needle-drop", [1000, 30, 1]),
+    drift: tokenSpring("--spring-dial-drift", [80, 20, 1]),
+    warm: tokenSpring("--spring-valve-warm", [150, 12, 1.2]),
+    vu: tokenSpring("--spring-vu", [400, 32, 1]),
+    follow: tokenSpring("--spring-follow", [900, 60, 1]),
+  };
+
+  class Spring {
+    constructor(p, x = 0) { this.p = p; this.x = x; this.v = 0; this.t = x; }
+    use(p) { this.p = p; return this; }
+    to(t) { this.t = t; return this; }
+    step(dt) {
+      if (DD.reduce) { this.x = this.t; this.v = 0; return; }
+      const [k, c, m] = this.p, n = Math.max(1, Math.ceil(dt / (1 / 240))), h = dt / n;
+      for (let i = 0; i < n; i++) { const a = (-k * (this.x - this.t) - c * this.v) / m; this.v += a * h; this.x += this.v * h; }
+    }
+    get resting() { return Math.abs(this.x - this.t) < 1e-3 && Math.abs(this.v) < 1e-3; }
+  }
+  DD.Spring = Spring;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.append(e); return e; };
+  const CX = 200, CY = 236, R = 176, MAXA = 68;
+  const pol = (deg, r) => { const a = (deg * Math.PI) / 180; return [CX + r * Math.sin(a), CY - r * Math.cos(a)]; };
+
+  DD.mount = function (root, o) {
+    const stations = o.stations;
+    const win = root.querySelector("[data-dialwin]");
+    const svg = win.querySelector("svg");
+    const gScale = svg.querySelector(".dw-scale"), gNeedle = svg.querySelector(".dw-needle");
+    const w = [...svg.querySelectorAll(".dw-wave path")];
+    const eyeFan = root.querySelector("[data-eye]");
+    const valveFil = root.querySelector(".v-fil"), valveGlow = root.querySelector(".v-glow");
+    const gaugeNd = root.querySelector(".g-nd");
+    const mVoice = root.querySelector('[data-m="voice"]'), mMusic = root.querySelector('[data-m="music"]');
+    const api = { onTune: o.onTune || (() => {}), stations };
+
+    // ---- the scale: tick density follows the rendered width (the 1920 rule)
+    function drawScale() {
+      gScale.innerHTML = "";
+      const px = win.clientWidth || 400, step = px > 900 ? 1 : px > 520 ? 2 : 2.5;
+      el("path", { class: "arc", d: `M${pol(-MAXA, R).join(" ")} A${R} ${R} 0 0 1 ${pol(MAXA, R).join(" ")}` }, gScale);
+      for (let a = -MAXA; a <= MAXA + 0.01; a += step) {
+        const maj = Math.abs(a % 10) < 0.01;
+        const [x1, y1] = pol(a, R), [x2, y2] = pol(a, R - (maj ? 10 : 5));
+        el("line", { class: "tk" + (maj ? " maj" : ""), x1, y1, x2, y2 }, gScale);
+      }
+      stations.forEach((s, i) => {
+        const [x1, y1] = pol(s.a, R + 4), [x2, y2] = pol(s.a, R - 16), [lx, ly] = pol(s.a, R - 30);
+        el("line", { class: "tk " + (s.prep ? "prep" : "st"), x1, y1, x2, y2 }, gScale);
+        const t = el("text", { class: "lb" + (s.prep ? " prep" : ""), x: lx, y: ly + 4, "data-i": i }, gScale);
+        t.textContent = s.label ?? s.no;
+      });
+    }
+    // ---- needle
+    el("line", { class: "nd-tail", x1: CX, y1: CY + 2, x2: CX, y2: CY + 11 }, gNeedle);
+    el("line", { class: "nd", x1: CX, y1: CY, x2: CX, y2: CY - R - 8 }, gNeedle);
+    el("circle", { class: "nd-cap", cx: CX, cy: CY, r: 10 }, gNeedle); el("circle", { class: "nd-hub", cx: CX, cy: CY, r: 3 }, gNeedle);
+
+    const needle = new Spring(DD.P.swing, stations[o.start || 0].a);
+    const align = (a) => { let best = 0; for (const s of stations) if (!s.prep) best = Math.max(best, 1 - Math.min(1, Math.abs(a - s.a) / 9)); return best; };
+    const eye = new Spring(DD.P.vu, 60), power = new Spring(DD.P.warm, o.power ?? 1);
+    const valve = new Spring(DD.P.warm, 0), gauge = new Spring(DD.P.vu, 0);
+    const mv = new Spring(DD.P.vu, 0), mm = new Spring(DD.P.vu, 0);
+    let tuned = o.start || 0, playing = !!o.playing, level = null, levelSim = true, silence = false, engine = o.engine || "valve", wave = { t: 1.3 };
+    api.needle = needle;
+
+    function tune(i, preset) {
+      i = Math.max(0, Math.min(stations.length - 1, i));
+      if (stations[i].prep) { // not on the air yet: swing to it, then settle back
+        needle.use(DD.P.swing).to(stations[i].a); setTimeout(() => tune(tuned), DD.reduce ? 0 : 520); return;
+      }
+      tuned = i; needle.use(preset || DD.P.swing).to(stations[i].a); api.onTune(i);
+      const am = svg.querySelector(".dw-am"); if (am) am.textContent = "514 · " + stations[i].no; // the readout follows the station
+      gScale.querySelectorAll(".lb").forEach((t) => t.classList.toggle("on", +t.dataset.i === i));
+    }
+    api.tune = tune;
+    api.tuned = () => tuned;
+    api.setPlaying = (b) => (playing = b);
+    api.setLevel = (v) => { level = v; levelSim = v == null; };
+    api.setSilence = (b) => (silence = b);
+    api.setPower = (v) => power.to(v); // 0 = cold, 1 = warm
+    api.setValve = (v) => valve.to(v);
+    api.setEngine = (mode) => { engine = mode; root.querySelectorAll("[data-engine-view]").forEach((e) => (e.hidden = !(mode === "both" || e.dataset.engineView === mode))); };
+    api.setSpeed = (x) => gauge.to(Math.max(0, Math.min(4, x)));
+
+    // ---- dragging the needle: follow the finger, fling, snap to the nearest station
+    const angleAt = (ev) => {
+      const r = win.getBoundingClientRect(), sx = 400 / r.width, sy = 250 / r.height, s = Math.max(sx, sy);
+      const x = (ev.clientX - r.left) * sx - CX, y = (ev.clientY - r.top) * sy - CY;
+      return Math.max(-MAXA, Math.min(MAXA, (Math.atan2(x, -y) * 180) / Math.PI));
+    };
+    const nearest = (a) => { let bi = tuned, bd = 1e9; stations.forEach((s, i) => { if (!s.prep && Math.abs(s.a - a) < bd) { bd = Math.abs(s.a - a); bi = i; } }); return bi; };
+    let drag = false;
+    win.addEventListener("pointerdown", (e) => { drag = true; win.setPointerCapture(e.pointerId); needle.use(DD.P.follow).to(angleAt(e)); });
+    win.addEventListener("pointermove", (e) => { if (drag) needle.to(angleAt(e)); });
+    const release = () => { if (!drag) return; drag = false; const proj = needle.x + needle.v * 0.16; tune(nearest(proj)); };
+    win.addEventListener("pointerup", release); win.addEventListener("pointercancel", release);
+    win.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); let j = tuned + 1; while (stations[j] && stations[j].prep) j++; if (stations[j]) tune(j); }
+      if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); if (tuned > 0) tune(tuned - 1); }
+    });
+
+    // ---- knobs: turn by dragging around the centre, or with the arrow keys
+    root.querySelectorAll("[data-knob]").forEach((k) => {
+      const dial = k.querySelector(".kn-rot"), kind = k.dataset.knob;
+      const spring = new Spring(DD.P.follow, kind === "vol" ? 70 : 0);
+      let last = null, val = kind === "vol" ? 0.7 : 0;
+      const ang = (e) => { const r = k.querySelector(".kn-dial").getBoundingClientRect(); return (Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))) * 180) / Math.PI; };
+      const turn = (d) => {
+        if (kind === "vol") { val = Math.max(0, Math.min(1, val + d / 270)); spring.to(-135 + val * 270); k.setAttribute("aria-valuenow", Math.round(val * 100)); api.onVolume && api.onVolume(val); }
+        else { spring.to(spring.t + d); needle.use(DD.P.follow).to(Math.max(-MAXA, Math.min(MAXA, needle.t + d * 0.45))); }
+      };
+      spring.to(kind === "vol" ? -135 + val * 270 : 0); spring.x = spring.t;
+      k.addEventListener("pointerdown", (e) => { last = ang(e); k.setPointerCapture(e.pointerId); });
+      k.addEventListener("pointermove", (e) => { if (last == null) return; const a = ang(e); let d = a - last; if (d > 180) d -= 360; if (d < -180) d += 360; last = a; turn(d); });
+      const up = () => { if (last == null) return; last = null; if (kind === "tune") tune(nearest(needle.t)); };
+      k.addEventListener("pointerup", up); k.addEventListener("pointercancel", up);
+      k.addEventListener("keydown", (e) => {
+        if (kind === "vol" && /Arrow/.test(e.key)) { e.preventDefault(); turn(/Right|Up/.test(e.key) ? 13.5 : -13.5); }
+        if (kind === "tune" && /Arrow/.test(e.key)) { e.preventDefault(); spring.to(spring.t + (/Right|Up/.test(e.key) ? 30 : -30)); let j = tuned + (/Right|Up/.test(e.key) ? 1 : -1); while (stations[j] && stations[j].prep) j += /Right|Up/.test(e.key) ? 1 : -1; if (stations[j]) tune(j); }
+      });
+      k._spring = spring; k._dial = dial;
+    });
+    const knobs = [...root.querySelectorAll("[data-knob]")];
+
+    // ---- the living wave (VoiceWave's loop, TanpuraViz's convergence)
+    function drawWave(t, L, a) {
+      const x0 = 40, x1 = 360, y0 = 198, W = x1 - x0;
+      for (let li = 0; li < 3; li++) {
+        let d = "";
+        const off = li * (1 - a) * 1.7, fr = 9 + li * (1 - a) * 1.3;
+        for (let x = 0; x <= W; x += 3) {
+          const u = x / W, env = Math.sin(Math.PI * u);
+          const carrier = 0.16 + L * (0.62 + 0.38 * Math.sin(2 * Math.PI * u * 1.5 + 0.7 + t * 1.3));
+          const hiss = (1 - a) * 5 * Math.sin(x * 1.7 + t * 23 + li * 3) * Math.sin(x * 0.31 - t * 7);
+          const y = y0 + env * (19 * carrier * Math.sin(2 * Math.PI * fr * u - t * 2.4 + off) + hiss);
+          d += (x ? "L" : "M") + (x0 + x).toFixed(1) + " " + y.toFixed(1);
+        }
+        w[li].setAttribute("d", d);
+      }
+      w[1].style.opacity = String(0.08 + (1 - a) * 0.3); w[2].style.opacity = String(0.04 + (1 - a) * 0.22);
+    }
+    function eyePath(deg) { // the eye's shadow wedge: wide when off station, a hairline when tuned
+      const r = 28, c = 32, a0 = ((-90 + deg / 2) * Math.PI) / 180, a1 = ((270 - deg / 2) * Math.PI) / 180;
+      return `M${c} ${c} L${(c + r * Math.cos(a0)).toFixed(2)} ${(c + r * Math.sin(a0)).toFixed(2)} A${r} ${r} 0 1 1 ${(c + r * Math.cos(a1)).toFixed(2)} ${(c + r * Math.sin(a1)).toFixed(2)} Z`;
+    }
+    const simLevel = (t) => { const s = 0.55 + 0.22 * Math.sin(t * 7.1) + 0.14 * Math.sin(t * 12.7 + 1) + 0.09 * Math.sin(t * 3.3); return Math.max(0.05, Math.min(1, s)) * (Math.sin(t * 0.9) > -0.92 ? 1 : 0.05); };
+
+    let last = 0;
+    function frame(ms) {
+      const dt = last ? Math.min((ms - last) / 1000, 0.1) : 0.016; last = ms;
+      if (!document.hidden) {
+        if (!DD.reduce) wave.t += dt;
+        needle.step(dt);
+        const a = align(needle.x);
+        const L = silence || !playing ? 0 : level != null && !levelSim ? level : simLevel(wave.t);
+        eye.to(8 + (1 - a) * 110).step(dt); power.step(dt); valve.step(dt); gauge.step(dt);
+        mv.to(playing && !silence ? L * 100 * 0.9 : 0).step(dt); mm.to(0).step(dt);
+        gNeedle.setAttribute("transform", `rotate(${needle.x.toFixed(2)} ${CX} ${CY})`);
+        drawWave(wave.t, L * power.x, a);
+        if (eyeFan) { eyeFan.setAttribute("d", eyePath(Math.max(4, eye.x))); eyeFan.style.opacity = String(0.25 + 0.75 * Math.max(0, Math.min(1, power.x))); }
+        if (valveFil) { const g = Math.max(0, Math.min(1.2, valve.x)); const flick = g < 0.35 && !DD.reduce ? 0.6 + 0.4 * Math.sin(ms / 37) * Math.sin(ms / 91) : 1; valveFil.style.opacity = String(0.15 + 0.85 * Math.min(1, g) * flick); valveGlow.style.opacity = String(Math.min(1, g) * flick); }
+        if (gaugeNd) gaugeNd.setAttribute("transform", `rotate(${(-60 + gauge.x * 30).toFixed(2)} 60 56)`);
+        if (mVoice) mVoice.style.width = Math.max(0, Math.min(100, mv.x)).toFixed(1) + "%";
+        if (mMusic) mMusic.style.width = Math.max(0, mm.x).toFixed(1) + "%";
+        for (const k of knobs) { k._spring.step(dt); k._dial.style.transform = `rotate(${k._spring.x.toFixed(2)}deg)`; }
+        if (api.onFrame) api.onFrame(dt, a);
+      }
+      requestAnimationFrame(frame);
+    }
+    drawScale();
+    addEventListener("resize", drawScale);
+    tune(tuned, DD.P.drop);
+    requestAnimationFrame(frame);
+
+    // ---- read-along: the new line rises into place on the needle-drop spring
+    const ra = root.querySelector("[data-readalong]");
+    if (ra && o.lines) {
+      const P = ra.querySelector(".prev"), L = ra.querySelector(".live"), N = ra.querySelector(".next"), who = ra.querySelector("[data-ra-who]");
+      const sp = new Spring(DD.P.drop, 0);
+      let idx = o.line || 0;
+      const fmt = (s) => s.replace(/\b(I said|I replied|he said|he replied)\b/g, '<span class="tag">$1</span>');
+      api.setLine = (i) => {
+        idx = Math.max(0, Math.min(o.lines.length - 1, i));
+        P.innerHTML = idx > 0 ? fmt(o.lines[idx - 1].t) : "&nbsp;";
+        L.innerHTML = fmt(o.lines[idx].t);
+        N.innerHTML = idx < o.lines.length - 1 ? fmt(o.lines[idx + 1].t) : "&nbsp;";
+        if (who) who.textContent = o.lines[idx].s;
+        sp.x = 18; sp.v = 0; sp.to(0);
+      };
+      api.line = () => idx;
+      const prev = api.onFrame;
+      api.onFrame = (dt, a) => { prev && prev(dt, a); sp.step(dt); const y = sp.x; [P, L, N].forEach((e, j) => { e.style.transform = `translateY(${(y * (j + 1) * 0.5).toFixed(2)}px)`; e.style.opacity = j === 1 ? String(1 - Math.min(0.6, Math.abs(y) / 30)) : ""; }); };
+      api.setLine(idx);
+    }
+    return api;
+  };
+})();
+
+</script>
 <footer class="playerbar" aria-label="Player" data-not="first-run structuring import-error">
   <div class="now"><span class="lamp" aria-hidden="true"></span><div><b>Pride and Prejudice, Chapter I</b><span>Trial render · cue <span class="num" data-ref="sel">7</span> of <span class="num" data-ncues>64</span></span></div></div>
   <div class="transport">
@@ -602,7 +836,7 @@ select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-o
     <dt><span class="keycap">Esc</span></dt><dd>Close a sheet or dialog</dd>
   </dl></div></div>
 <script>
-window.MOCK_STATES=[["first-run","First visit: import"],["structuring","Reading the structure"],["import-error","Import error"],["workspace","Console: Direction report"],["voices","Voices and casting"],["corrections","Corrections sheet"],["export","Export: rights not stated"],["keep","Export: ready, Keep"],["exported","Exported"],["warming","Warming the voices"],["slow","Device renders slowly"],["over-limit","Longer than the free chapter"]];
+window.MOCK_STATES=[["first-run","First visit: import"],["structuring","Reading the structure"],["import-error","Import error"],["workspace","Console: Direction report"],["voices","Voices and casting"],["corrections","Corrections sheet"],["export","Export: rights not stated"],["keep","Export: ready, I wrote this"],["keep-pd","Export: ready, public domain"],["exported","Exported"],["warming","Warming the voices"],["slow","Device renders slowly"],["holding","Holding at a paragraph"],["over-limit","Longer than the free chapter"]];
 (()=>{
 const P=["It is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife.","However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered as the rightful property of some one or other of their daughters.","“My dear Mr. Bennet,” said his lady to him one day, “have you heard that Netherfield Park is let at last?”","Mr. Bennet replied that he had not.","“But it is,” returned she; “for Mrs. Long has just been here, and she told me all about it.”","Mr. Bennet made no answer.","“Do not you want to know who has taken it?” cried his wife, impatiently.","“_You_ want to tell me, and I have no objection to hearing it.”","This was invitation enough.","“Why, my dear, you must know, Mrs. Long says that Netherfield is taken by a young man of large fortune from the north of England; that he came down on Monday in a chaise and four to see the place, and was so much delighted with it that he agreed with Mr. Morris immediately; that he is to take possession before Michaelmas, and some of his servants are to be in the house by the end of next week.”","“What is his name?”","“Bingley.”","“Is he married or single?”","“Oh, single, my dear, to be sure! A single man of large fortune; four or five thousand a year. What a fine thing for our girls!”","“How so? how can it affect them?”","“My dear Mr. Bennet,” replied his wife, “how can you be so tiresome? You must know that I am thinking of his marrying one of them.”","“Is that his design in settling here?”","“Design? Nonsense, how can you talk so! But it is very likely that he _may_ fall in love with one of them, and therefore you must visit him as soon as he comes.”","“I see no occasion for that. You and the girls may go--or you may send them by themselves, which perhaps will be still better; for as you are as handsome as any of them, Mr. Bingley might like you the best of the party.”","“My dear, you flatter me. I certainly _have_ had my share of beauty, but I do not pretend to be anything extraordinary now. When a woman has five grown-up daughters, she ought to give over thinking of her own beauty.”","“In such cases, a woman has not often much beauty to think of.”","“But, my dear, you must indeed go and see Mr. Bingley when he comes into the neighbourhood.”","“It is more than I engage for, I assure you.”","“But consider your daughters. Only think what an establishment it would be for one of them. Sir William and Lady Lucas are determined to go, merely on that account; for in general, you know, they visit no new comers. Indeed you must go, for it will be impossible for _us_ to visit him, if you do not.”","“You are over scrupulous, surely. I dare say Mr. Bingley will be very glad to see you; and I will send a few lines by you to assure him of my hearty consent to his marrying whichever he chooses of the girls--though I must throw in a good word for my little Lizzy.”","“I desire you will do no such thing. Lizzy is not a bit better than the others: and I am sure she is not half so handsome as Jane, nor half so good-humoured as Lydia. But you are always giving _her_ the preference.”","“They have none of them much to recommend them,” replied he: “they are all silly and ignorant like other girls; but Lizzy has something more of quickness than her sisters.”","“Mr. Bennet, how can you abuse your own children in such a way? You take delight in vexing me. You have no compassion on my poor nerves.”","“You mistake me, my dear. I have a high respect for your nerves. They are my old friends. I have heard you mention them with consideration these twenty years at least.”","“Ah, you do not know what I suffer.”","“But I hope you will get over it, and live to see many young men of four thousand a year come into the neighbourhood.”","“It will be no use to us, if twenty such should come, since you will not visit them.”","“Depend upon it, my dear, that when there are twenty, I will visit them all.”","Mr. Bennet was so odd a mixture of quick parts, sarcastic humour, reserve, and caprice, that the experience of three-and-twenty years had been insufficient to make his wife understand his character. _Her_ mind was less difficult to develope. She was a woman of mean understanding, little information, and uncertain temper. When she was discontented, she fancied herself nervous. The business of her life was to get her daughters married: its solace was visiting and news."];
 const R=155/60, cues=[]; let src=0;
@@ -673,16 +907,27 @@ function drawRibbon(){const svg=document.getElementById("sribbon");const W=1000,
   const rx=renderT/total*W;o+=`<line class="renderhead" x1="${rx}" x2="${rx}" y1="5" y2="25" vector-effect="non-scaling-stroke"/><line class="needle" x1="${played/total*W}" x2="${played/total*W}" y1="2" y2="28" vector-effect="non-scaling-stroke"/>`;svg.innerHTML=o;
   const md=document.getElementById("minidial");if(md){md.setAttribute("viewBox",`0 0 ${W} 56`);md.setAttribute("preserveAspectRatio","none");let m="";for(const c of cues){const x=c.start/total*W,w=Math.max(.8,c.dur/total*W-.8);const h=c.reg==="speaking"?20:14;m+=`<rect x="${x}" y="${28-h}" width="${w}" height="${h*2}" rx="1" style="fill:${c.start>=renderT?"var(--color-cream-faint)":`var(--color-register-${c.reg})`}"/>`;}m+=`<line x1="${rx}" x2="${rx}" y1="0" y2="56" style="stroke:var(--color-tally)" vector-effect="non-scaling-stroke"/>`;md.innerHTML=m;}}
 window.addEventListener("resize",drawDial);
+// The needle drops onto a chosen cue on the needle-drop spring (1000/30), never a jump.
+const nsp=new DialDevice.Spring(DialDevice.P.drop, played*PXS);
+function animNeedle(){nsp.step(1/60);const n=document.querySelector("#tdial .needle"),c=document.querySelector("#tdial .needlecap");if(n){n.setAttribute("x1",nsp.x);n.setAttribute("x2",nsp.x);c.setAttribute("cx",nsp.x);}if(!nsp.resting)requestAnimationFrame(animNeedle);}
+tb.addEventListener("click",e=>{const tr=e.target.closest("tr");if(!tr)return;const i=[...tb.children].indexOf(tr);tb.querySelectorAll("tr.sel").forEach(r=>r.classList.remove("sel"));tr.classList.add("sel");nsp.to(cues[i].start*PXS);requestAnimationFrame(animNeedle);});
 const tabs=[...document.querySelectorAll("[data-tab]")];
 function showTab(n){tabs.forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===n)));document.querySelectorAll("[data-tab-panel]").forEach(p=>p.hidden=p.dataset.tabPanel!==n);}
 tabs.forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
 // One production model drives the header chips, the Export button and the Export panel,
 // so they can never disagree.
 const LAMP='<span class="lamp" aria-hidden="true"></span>',OCH='<span class="pip ochre" aria-hidden="true"></span>',EYE='<span class="pip eye" aria-hidden="true"></span>',OK='<svg class="glyph" aria-hidden="true" style="width:16px;height:16px"><use href="#g-check"/></svg>';
+let rights="none",curState="first-run";
 function model(s){const ready=s==="keep",done=s==="exported";
-  return {rights:ready||done?"pd":"none",render:s==="warming"?"warming":(ready||done)?"done":"rendering",exported:done};}
+  return {rights,render:s==="warming"?"warming":(ready||done)?"done":"rendering",exported:done};}
+function paintRights(){document.querySelectorAll("[data-rv]").forEach(e=>e.hidden=!e.dataset.rv.split(" ").includes(rights));
+  document.querySelectorAll("input[data-r]").forEach(r=>r.checked=r.dataset.r===rights);
+  const m=model(curState),n=cues.length,can=rights!=="none"&&m.render==="done";const b=document.querySelector("[data-export-panel]");if(b){b.disabled=!can;}
+  const why=document.querySelector("[data-export-why]");if(why)why.innerHTML=can?'<span class="num">2</span> corrections are not reviewed, so the voice says those words as written. You can review them first or export now.':rights==="none"?`State the rights above${m.render==="done"?"":`, and let the render finish (<span class="num">41</span> of <span class="num">${n}</span> cues)`}.`:`Let the render finish (<span class="num">41</span> of <span class="num">${n}</span> cues).`;}
+document.addEventListener("change",e=>{const r=e.target.closest("input[data-r]");if(!r)return;rights=r.dataset.r;paintChips(curState);paintRights();});
+document.getElementById("src")?.addEventListener("input",e=>{const x=document.querySelector("[data-src-echo]");if(x)x.textContent=e.target.value||"not given yet";});
 function paintChips(s){const m=model(s),n=cues.length;let c=`<button class="chip" type="button" data-go="corrections">${OCH}Corrections: <span class="num">2</span> ${m.exported?"not reviewed":"to review"}</button>`;
-  c+=m.rights==="pd"?`<button class="chip" type="button" data-go="export">${OK}Rights: public domain</button>`:`<button class="chip" type="button" data-go="export">${OCH}Rights: not stated</button>`;
+  c+=m.rights==="pd"?`<button class="chip" type="button" data-go="export">${OK}Rights: public domain</button>`:m.rights==="own"?`<button class="chip" type="button" data-go="export">${OK}Rights: I wrote this</button>`:`<button class="chip" type="button" data-go="export">${OCH}Rights: not stated</button>`;
   c+=m.render==="warming"?`<button class="chip" type="button">${LAMP}Getting the voices ready</button>`:m.render==="done"?`<button class="chip" type="button">${EYE}Rendered: <span class="num">${n}</span> of <span class="num">${n}</span></button>`:`<button class="chip" type="button">${LAMP}Rendering: <span class="num">41</span> of <span class="num">${n}</span></button>`;
   if(m.exported)c+=`<button class="chip" type="button">${EYE}Exported <span class="num">21:46</span></button>`;
   document.getElementById("chips").innerHTML=c;
@@ -690,9 +935,10 @@ function paintChips(s){const m=model(s),n=cues.length;let c=`<button class="chip
   b.title=can?"":(m.rights==="none"?"State the rights in the Export tab first":"Wait for the render to finish");
   rendered=m.render==="done"?n:41;}
 document.getElementById("chips").addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g)showTab(g.dataset.go);});
-window.onMockState=(s)=>{paintChips(s);
+window.onMockState=(s)=>{curState=s==="keep-pd"?"keep":s;rights=(s==="keep"||s==="exported")?"own":s==="keep-pd"?"pd":"none";if(s==="keep-pd")s="keep";paintChips(s);paintRights();
+  const gl=document.querySelector("[data-gl]"),gn=document.querySelector(".tuning .g-nd");const sp=s==="slow"?0.7:s==="holding"?0.9:1.8;if(gl)gl.textContent=s==="slow"?"0.7× · CPU":s==="holding"?"0.9× · CPU":"1.8× · GPU";if(gn)gn.setAttribute("transform",`rotate(${-60+sp*30} 60 56)`);
   showTab({voices:"voices",corrections:"corrections",export:"export",keep:"export",exported:"export"}[s]||"cue");
-  document.querySelectorAll('input[data-r="pd"]').forEach(r=>r.checked=(s==="keep"||s==="exported"));
+
   document.body.dataset.onair=(s==="exported"||s==="first-run"||s==="import-error")?"false":"true";
   document.querySelectorAll(".playerbar .lamp").forEach(l=>l.classList.toggle("off",document.body.dataset.onair==="false"));
   if(s==="shortcuts")document.getElementById("shortcuts").hidden=false;

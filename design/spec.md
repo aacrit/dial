@@ -1,4 +1,4 @@
-# Dial: design spec (G2, round 1, revised after the user-sim dry run)
+# Dial: design spec (G2 round 2: the device is the hero)
 
 Studio designer, 2026-09-26. Covers the four charter surfaces: Repertory `/`, Broadcast `/play/<work>`, Studio `/studio`, Seal `/seal` (with `/verify`). `/privacy.html` exists and is not redesigned here.
 
@@ -6,16 +6,134 @@ Grammar is Ink & Momentum (Fraunces, Inter, JetBrains Mono with `tabular-nums`, 
 
 Files:
 - `design/tokens.css`: the only colour file. Seven source hexes; everything else derived.
+- `design/mocks/device-motion.html` (**R2**): the interactive physics prototype.
 - `design/mocks/{repertory,broadcast,studio,seal}.html`: self-contained mocks. Each has a state switcher (top right; bottom right on a phone). `?state=<id>` opens a state, `?theme=daylight|night` pins a theme, `?clean` hides the switcher, `?still` freezes motion for screenshots.
 - `design/mocks/shots/<surface>-<width>.png`: 375, 768, 1280 and 1920 px, dark theme, default state. The default state of every surface is a **first visit**: nothing playing, nothing loaded.
+
+**Founder decisions on round 2 (2026-09-26, in chat):**
+- The timed device test runs the first time the device makes speech, right after the voice arrives. It does not run on a first visit.
+- The countdown plans on 80% of measured speed. Above a 2-minute wait, Dial offers the prepared recording.
+- On the Broadcast, the Tune knob changes station; scrubbing stays on the progress strip and J/K/L.
+- A finished listen of the prepared recording counts toward `chapter_rendered` (G2 round 1).
+- Rendering is Kokoro everywhere, with no TTS API. Prepared recordings are rendered once with Kokoro, and the Studio renders on the device only.
 
 State ids (every one works with `?state=`; the first is the default):
 | Mock | States |
 |---|---|
-| Repertory | `first-run`, `listening`, `saving`, `saved`, `after-listen`, `after-listen-ios`, `loading`, `offline`, `error`, `search-empty` |
-| Broadcast | `first-run`, `playing`, `saving`, `saved`, `rendering`, `warming`, `slow`, `paused`, `rendered`, `offline`, `error`, `bookplate` |
-| Studio | `first-run`, `structuring`, `import-error`, `workspace`, `voices`, `corrections`, `export`, `keep`, `exported`, `warming`, `slow`, `over-limit` |
-| Seal | `first-visit`, `sealed`, `counts-off`, `blocked`, `warming`, `verify-found`, `verify-match`, `verify-nomatch`, `verify-none`, `verify-unreadable` |
+| Repertory | `first-run`, `tuned-002`, `between`, `listening`, `saving`, `saved`, `after-listen`, `after-listen-ios`, `loading`, `offline`, `error`, `search-empty` |
+| Broadcast | `first-run`, `playing`, `saving`, `saved`, `device-test`, `warming`, `countdown`, `rendering`, `holding`, `no-webgpu`, `slow`, `paused`, `rendered`, `offline`, `error`, `bookplate`, `script` |
+| Studio | `first-run`, `structuring`, `import-error`, `workspace`, `voices`, `corrections`, `export`, `keep`, `keep-pd`, `exported`, `warming`, `slow`, `holding`, `over-limit` |
+| Seal | `first-visit`, `sealed`, `counts-off`, `blocked`, `warming`, `bench-running`, `bench-results`, `bench-no-webgpu`, `verify-found`, `verify-match`, `verify-nomatch`, `verify-none`, `verify-unreadable` |
+
+---
+
+## 0. Round 2 (G2, 2026-09-26): the radio is the hero
+
+**Founder direction:** "it needs to feel like a retro device, sleek, great motion physics" and "Center stage is text right now, hope that is going to change". A beautifully made object, not a cartoon radio. This section overrides sections 2 and 3 where they differ; everything else in this spec (colour meanings, the seven G2 defaults, the laws, copy rules, states not listed here) stands. Round-2 changes are marked **R2** below.
+
+What stays: Tune in plays at once; Save for offline versus Download the file; a finished listen counts; Voice and Music meters; Daylight follows the device; violet for letter and verse; counts on, with the Seal switch.
+
+### 0.1 The faceplate (Repertory and Broadcast)
+One device, two rooms. The Repertory is the radio tuned but not yet playing; the Broadcast is the same radio on air. Anatomy, top to bottom on a phone:
+
+| Part | What it is | What it does |
+|---|---|---|
+| **Dial window** | An arch of dark glass (the cathedral mark's shape), lit from behind; a scale arc of 136°, minor ticks, the five stations as long ticks labelled `001` to `005` in mono (`004` and `005` dashed: in preparation); "AM 514" at the foot | Drag the needle, fling it, or use the arrow keys (it is an ARIA slider). Tick density follows width: 2.5° on a phone, 2° on a tablet, 1° past 900 px of glass |
+| **Needle** | Amber hairline with a soft glow, a short counterweight, a hub cap that rims tally red while on air | Swings on `needle-swing` (220 / 11 / 1.1): about 30% overshoot, then settles. A dragged needle follows the finger on `follow` (900 / 60 / 1); on release it keeps its speed, the landing is projected 0.16 s ahead, and it snaps to the nearest live station. Tuning to a dashed station swings there and returns: not on the air yet |
+| **Living wave** | The AM carrier glowing across the lower window | Height is loudness (the voice analyser while playing; a faint 0.16 carrier at rest). Off station it breaks into hiss and its two ghost lines drift apart; on station they converge into one line (sadhana's TanpuraViz alignment). A silence cue flattens it for exactly the cue |
+| **Tuning eye** (instrument 1) | A small magic eye | Its shadow wedge closes to a hairline as the needle lands on a station: the eye's real job on a 1930s set. Dim while the device is cold |
+| **Valve** (instrument 2) | A glass envelope with a filament | Warms on `valve-warm` (150 / 12 / 1.2) while the voice downloads, flickering below 35%. Doubles as the **countdown** before a made-here recording starts: its glow is the share of the lead already made. Label: "48 of 115 MB", "Starting in 5:03", "Ready" |
+| **Speed gauge** (instrument 2, alternate) | A 0 to 4× needle gauge; the band below 1× dashed | While the device makes speech: "2.6× · GPU", "1.1× · CPU". Shown beside the valve during a countdown, so the listener sees why they wait |
+| **Voice and Music meters** | Two slim bars on the glass, the Voice bar marked with the in-range band | `vu` spring (400 / 32 / 1, 99% in about 300 ms). Voice hue follows register; "Voice level in range" with a green pip |
+| **Read-along strip** | The previous line, the live line in amber, the next line (phone: live and next only) | A new line rises into place on `needle-drop` (1000 / 30). Speech tags in muted ink. "Script" and "Bookplate" at its head; "Open the full script" at its foot (desktop) opens the full verbatim script as a sheet |
+| **Keys** | Push keys with 3 px of travel and a hard shadow that closes when pressed | Broadcast: Previous line, Play/Pause (latches down while playing, amber rim), Next line. Repertory: station presets 001, 002, 003 (the tuned one latches). Release springs back on `needle-drop`. The press is felt in motion only; the app makes no sounds |
+| **Knobs** | Knurled Bakelite knobs, 56 to 76 px | **Volume** (-135° to +135°, 0 to 100) and **Tune** (turning moves the needle; release snaps to the nearest station). Drag around the centre or use the arrow keys; both are ARIA sliders |
+| **Ribbon** (Broadcast) | The cue ribbon in the work's realm colour | Drag to scrub; J, K and L as before |
+
+Materials: glass tokens (`--color-glass*`) are identical in both themes, because a dial is lit from behind. The cabinet follows the theme: walnut and console by night, cream Bakelite by day. One texture layer (4% grain) on the cabinet only.
+
+**Layouts.** Phone (below 768): the faceplate is the screen: the page ground becomes the cabinet, no card edge, the controls sit in the bottom third for thumbs, the tab bar stays. Order on the Repertory: window, station line, Tune in, keys and knobs, then the glass display; on the Broadcast: window, station line, glass display, ribbon, keys and knobs, Save and Download. Tablet: the same portrait device, centred. Desktop (1024 and up): a landscape cabinet centred with generous space: the dial window left (1.2 fr), everything else right. **1920 rule:** the device grows to 1,420 px; extra width goes to the dial's resolution (1° ticks) and knob size, never to the read-along line, which stays at 68ch.
+
+### 0.2 Speed instruments and the lead before playback
+**R2** The founder's rule: render enough that the listener never feels the lag; an upfront wait beats buffering.
+
+Definitions, for Forge:
+- `r_measured`: seconds of audio made per second on this device, first from the device test, then re-measured live every 10 cues (exponential average, weight 0.3).
+- `r_plan = 0.8 × r_measured` (the safety margin).
+- `D`: the work's running time. `E`: audio already made (0 at the start).
+- **Lead before playback:** if `r_plan ≥ 1`, lead = 10 s of audio made. If `r_plan < 1`, lead = `max(10, D × (1 / r_plan − 1))` seconds of making, shown as a countdown: "Starting in 5:03, so it won't pause".
+- Examples for the Cave (`D` = 20:12): GPU 4.1× → 10 s lead; CPU 1.0× → plan 0.8× → 5:03; CPU 1.1× → plan 0.88× → 2:45; slow 0.6× → plan 0.48× → 21:53.
+- **Thresholds:** lead up to 10 s: no countdown, the valve simply warms. 10 s to 2 min: countdown only. Over 2 min: countdown plus, for a Repertory work with a prepared recording, "Play Dial's recording now" (primary) and "Download to listen later"; Studio trials show "Render first, then play". Over 20 min: those alternatives lead, and waiting is the third choice ("Wait 21:53 and play here").
+- **Holding:** if the made-ahead margin ever falls below 3 s, playback finishes the current line and holds at the next paragraph silence (never mid-word, never mid-sentence), until the margin is back to 10 s: "Holding at the paragraph so the voice keeps up. Playback resumes in 0:12, at the start of the next line, never mid-word." The valve counts the hold down; the gauge shows the slowed speed.
+
+**Device test (b).** It needs the voice model, so it cannot run before a first Tune in without a 115 MB download, which would break "Tune in plays at once". Design: what the browser reports for free is shown on the Seal's speed panel, not in the listener's first view (0.7): "This device has a graphics chip Dial can use (WebGPU) and 8 processor threads. Its speaking speed is measured the first time it makes a recording." The timed 3 s test runs the first time the device is asked to make speech ("Make it on this device", or Tune in on a work without a prepared recording), right after the voice arrives and before playback: "Testing this device: one short sentence, about 3 s. It tries the graphics chip first, then the processor." Its result sets `r_measured` and picks GPU or CPU.
+
+### 0.3 Faceplate states and copy (R2)
+Repertory (`first-run` is the default): `first-run`, `tuned-002`, `between`, `listening`, `saving`, `saved`, `after-listen`, `after-listen-ios`, `loading`, `offline`, `error`, `search-empty`.
+- Station line: `514 · No. 001 · about 20 min` / title / credit. Display: the one-sentence description, the turn map (desktop and tablet), words, voices, "Public domain worldwide". Under it: **Tune in** and "Plays at once: Dial made this recording in advance." (the Cave) or "Made on your device as you listen, after a short wait sized to its speed." (the others). Then Save for offline with its size, the Bookplate drill, and "In preparation": "Apology and Phaedo … They take their places on the dial (the dashed marks) when their performances pass the same checks as the rest."
+- `between`: the needle rests between stations; the eye is open, the wave hisses, no station is named.
+- `loading`: "Warming up. Reading the list of stations from dial.voidvision.org." The device is cold: dim eye, valve at a low flicker.
+- `error`: "The stations did not load. The list of works could not be fetched from dial.voidvision.org. Check your connection, then try again." Button: Try again.
+- All other Repertory copy (Save for offline sizes, install cards, offline notice, search) is unchanged from section 2.
+
+Broadcast (`first-run` is the default): `first-run`, `playing`, `saving`, `saved`, `device-test`, `warming`, `countdown`, `rendering`, `holding`, `no-webgpu`, `slow`, `paused`, `rendered`, `offline`, `error`, `bookplate`, `script`.
+
+| State | Status line / glass note / instruments | Actions |
+|---|---|---|
+| `first-run` | "Tuned to 514 · 001, the Cave. Press Tune in: it plays at once, from a recording Dial made in advance." Valve "Voice ready"; the Play key reads "Tune in" and is the only Tune in | Small link: "Or make it on this device (downloads the voice once, 115 MB)" |
+| `playing` | Lamp. "On air. Playing a recording Dial made in advance from Jowett's words. Nothing is made or sent while you listen." | |
+| `device-test` | Gauge climbing, "Testing · GPU". "Testing this device: one short sentence, about 3 s. It tries the graphics chip first, then the processor." | |
+| `warming` | Valve warming, "48 of 115 MB". "Getting the voice ready: 48.2 of 114.6 MB. It downloads once from dial.voidvision.org, then stays on this device." | Stop, and play Dial's recording instead |
+| `countdown` | Valve "Starting in 5:03" beside the gauge "1.0× · CPU". Big line "Starting in 5:03, so it won't pause", then "This device makes speech at 1.0× on its processor. Dial plans on 0.8× to be safe, makes the first 5:03, then stays ahead to the end." | Play Dial's recording now; Download to listen later |
+| `rendering` | Lamp; gauge "2.6× · GPU". "On air. Made on this device as you listen: 41 s ahead of you and gaining, line 64 of 118." | |
+| `holding` | Valve "Resuming 0:12", gauge "0.9× · CPU". "Holding at the paragraph so the voice keeps up. The device slowed down (another app is busy). Playback resumes in 0:12, at the start of the next line, never mid-word." | Play Dial's recording instead |
+| `no-webgpu` | Gauge "1.1× · CPU". "No WebGPU in this browser, so the processor makes the speech: 1.1× on 8 threads. Dial plans on 0.88×, so it starts in 2:45, and won't pause after that." | Play Dial's recording now |
+| `slow` | Gauge "0.6× · CPU", valve "Would wait 21:53". "This device makes speech at 0.6× the speed it plays. To play without pausing, it would make the first 21:53 before starting. Dial's own recording plays now." | Play Dial's recording now; Download to listen later; Wait 21:53 and play here |
+| `paused` | Unlit lamp. "Paused at 01:27. Line 9 of 118." | |
+| `rendered` | Green pip. "Made on this device. All 118 lines, 20:12. Nothing was sent anywhere." Home Screen card below | |
+| `offline` | Cold device. "You are offline, and the voice is not on this device yet. It downloads once (about 115 MB). Connect once to fetch it; after that, this work plays with no connection." | Try again |
+| `error` | Gauge "Stopped". "Making the recording stopped at line 64. Your browser stopped the graphics chip that runs the voice. Lines 1 to 63 are kept. Resume, and Dial carries on in a slower mode, about three times slower on this device." | Resume from line 64; Play Dial's recording |
+| `bookplate`, `script` | The Bookplate sheet; the full script sheet ("Jowett's words, exactly as printed. Tap a line to play from it.") | Close |
+
+For a work with no prepared recording, "Play Dial's recording" is replaced by "Download to listen later", which makes the whole file on the device and offers it when done.
+
+### 0.4 Studio and Seal (R2)
+- **Studio:** stays desktop-first and dense. The Tuning Dial becomes a real instrument in the same material: glass, a bezel ring, a sheen, and the speed gauge in its head ("1.8× · GPU"). Choosing a cue drops the needle onto it on `needle-drop`. Trial playback obeys the same lead rule: "Trial playback starts once the render is 10 s ahead, and on a device slower than real time, once enough is made that it never has to stop." New state `holding`: "Holding at the paragraph so the voice keeps up. The trial is 3 s ahead of the render; it resumes at the next line once the render is 10 s ahead."
+- **Seal: "Speed of this device"** (benchmark, founder's (c)), between the request log and Verify. "Dial makes speech on this device. The test times one short sentence on the processor and on the graphics chip, using the voice already saved here (or downloading it once, 115 MB). Results stay on this screen. They are never sent, not even as a count." Two glass columns, **Processor · WebAssembly** and **Graphics chip · WebGPU**, each with a gauge, its speed, threads or adapter ("intel · gen-12lp", as the browser reports it), voice load time and first-sentence time. Verdict: "Dial will use the graphics chip: 4.1×. It plans on 80% of that (3.3×), so works start after a 10 s lead and never pause." States: `bench-running` ("Timing one short sentence on the processor…"), `bench-results`, `bench-no-webgpu` ("Not available. This browser does not offer WebGPU, so Dial uses the processor." and "Dial will use the processor: 1.1×. It plans on 0.88×, so a 20-minute work starts after about 2:45 and never pauses."). Buttons: Run the test / Run it again.
+
+### 0.7 Polish after the round-3 user-sim (both personas reached their goal)
+1. **One Tune in.** Tune in on the Repertory goes straight into the Broadcast, already on air (`broadcast.html?state=playing` in the mocks). On the Broadcast's own first visit, the Play key is the only Tune in; making the recording on the device is a small secondary link under the display, never a peer of Play: "Or make it on this device (downloads the voice once, 115 MB)". Status line: "Tuned to 514 · 001, the Cave. Press Tune in: it plays at once, from a recording Dial made in advance." On a phone first visit the keys move above the display so Tune in is in the first view.
+2. **Rights show at once, the same way everywhere.** One value, `none`, `own` or `pd`, set only by the author's answer, drives the radio buttons, the header chip ("Rights: not stated" ochre, "Rights: I wrote this" or "Rights: public domain" with a check), "Written into the file" ("Not stated yet", "I wrote this, or I hold the audio rights to it.", or "Public domain. Source: …", echoing the source field as it is typed), the Free trial note ("This chapter: 847 words, within the free chapter (up to 8,000 words of your own writing)." or "Public domain with a source: free at any length."), both Export buttons, the Exported panel and the phone. Nothing is ever seeded: the ready state (`keep`) shows "I wrote this"; `keep-pd` shows the public-domain path.
+3. **Bring your own chapter.** Under the device on the Repertory, phone and desktop: "Have writing of your own? Bring your own chapter to the Studio. It is made on your device and never uploaded." (link to `/studio`).
+4. **Listener clarity.**
+   - The readout in the dial window follows the station: "514 · 001", "514 · 002", "514 · 003".
+   - Under the dial: "Each station on the dial is one work: 514 · 001 is the Cave, 002 is Crito, 003 is the Meditations. The dashed marks are works coming soon." The dashed marks carry the word "Coming" on the dial itself.
+   - Instruments are labelled in plain words: "On station" (the eye), "Voice ready" (the valve), "Loudness" with "Voice" and "Music", and "Loudness: voice steady".
+   - The WebGPU and threads line is gone from the listener's first view and now opens the Seal's speed panel: "This browser reports a graphics chip Dial can use (WebGPU) and 8 processor threads."
+5. **Seal speed panel.** Under the results: "Voice load is the time to have the voice ready: downloading it (the first time only) and loading it into memory. Times are measured on this device and shown only here." The verdict explains the margin: "It plans on 80% of that (3.3×): a safety margin, because devices slow down as they warm up." The raw adapter string sits behind "Show details".
+6. **Counts, said plainly in the Studio.** Counts stay on by default (approved). Next to "never uploaded" on the import screen (desktop and phone) and under Export chapter: "Dial counts one finished render, with no content and no identity. You can turn it off on the Seal."
+
+### 0.5 Motion demo
+`design/mocks/device-motion.html`: the landscape device plus a control panel. It shows:
+- tuning between stations, with a live trace of the needle's angle against its target, and readouts for angle, speed, overshoot and damping ratio;
+- sliders for the needle spring's stiffness, damping and mass, and a reset;
+- a voice level slider or simulated voice, and a silence cue;
+- the start-up sequence (valve warm-up with MB, the 3 s test on the gauge, the lead countdown at 40× speed) for three device speeds;
+- a mid-play slowdown that holds at the paragraph;
+- a reduced-motion switch that makes everything snap.
+
+Verified in a browser: 001 → 003 peaks at 46.6° against a 26° target (29% overshoot) and settles in about 0.9 s; a drag-and-fling snaps to the nearest station.
+
+### 0.6 Transplant table (sadhana → Dial; sadhana read-only, nothing copied into it)
+| sadhana file | Dial use | Disposition |
+|---|---|---|
+| `frontend/app/components/VoiceWave.tsx` | The dial window's living wave | **Tweak.** Lift the loop: rAF with real `dt` clamped at 0.1 s, skipped while `document.hidden`, one static draw under reduced motion, the `sin(πx)` edge envelope, the 3 px step, ambient drift mixed with the live analyser. Change: five coloured lines become one amber carrier and two ghost lines; drawn as SVG paths with token colours instead of canvas `rgba` literals (the colour law); amplitude is AM loudness, not mic samples. Leave behind the swara markers and Hz scale |
+| `frontend/app/lib/VoiceWaveContext.tsx` | One shared analyser for the wave, the meters and the eye | **Tweak.** Lift the context pattern (register an `AnalyserNode` when playback starts, fall back to ambient when none). Replace `saHz` with the current cue's register and level; it merges with On Air's AudioProvider |
+| `frontend/app/components/TanpuraViz.tsx` | Tuning convergence | **Tweak.** Lift the idea that lines converge as alignment rises and diverge when off; alignment becomes needle-to-station proximity. Lift the props-as-refs pattern (no loop restart per prop). Leave behind the fixed 0.016 s step (use VoiceWave's real `dt`), the hardcoded string colours and the Sa/Pa ratios |
+| `frontend/app/components/BrandLoader.tsx` | The valve warm-up replaces every spinner | **Tweak.** Lift the principle (a brand moment in place of a spinner, resolved by a spring) and its exit spring feel. Leave behind framer-motion and `AnimatePresence` (Dial integrates its own springs: no dependency), the full-screen overlay (Dial warms inside the faceplate) and the Cormorant tagline |
+| `frontend/app/components/Logo.tsx` | Spring presets and the standing-wave path | **Lift** `standingWavePath` for the standing-wave loader, and the Ragamala presets as numbers: kan 1000 / 30 is Dial's needle-drop exactly. **Leave behind** the CSS keyframe loops (Dial's loaders are spring-driven) |
+| `frontend/app/lib/useReducedMotion.ts` | Reduced motion everywhere | **Lift** (live `matchMedia` listener); in Dial's vanilla code it is `DialDevice.reduce`, and every spring snaps when it is set |
+| `frontend/app/lib/usePerfTier.ts` | Visual degradation on weak devices | **Tweak.** Use its signals only to thin the drawing (fewer wave points, no ghost lines). **Leave behind** its use as a speed estimate: Dial measures speed with the device test and never guesses it from memory, cores or user agent |
 
 ---
 
@@ -103,7 +221,7 @@ In the Studio, "Keep" is a third thing: an encrypted copy of a production, on th
 
 ---
 
-## 2. Repertory `/`
+## 2. Repertory `/` (round 1; the programme-guide layout is superseded by 0.1 and 0.3, the listing data, Save for offline and states stand)
 **Job:** choose a work to hear. **Hero:** the programme guide, works as listings, never a feed.
 
 **Layout.** Phone: header, then "The Repertory" and one column of listings. Tablet: listings as a compact list (catalogue number, title, credit) beside a detail pane with the selected listing in full, Bookplate open. Desktop: title and intro side by side, listings in three columns (a printed guide), "In preparation" as a quiet row beneath. 1920: the same guide, one type size up.
@@ -155,7 +273,7 @@ Events: `work_opened` fires when a Broadcast opens from a listing.
 
 ---
 
-## 3. Broadcast `/play/<work>`
+## 3. Broadcast `/play/<work>` (round 1; the script page is superseded by the faceplate and read-along in 0.1 and 0.3, the copy and states stand)
 **Job:** listen, following the words. **Hero:** the script page with the live line in amber, and the VU pair.
 
 **Layout.** Phone: a sheet. Top: grabber, Minimise, `514 · No. 001`, and a **Bookplate** button (44 px tall) that opens the Bookplate as a bottom sheet (grabber, title, close button, the full Bookplate; tapping the scrim or Esc closes it; on tablet and up it is a centred dialog). Title and credit, the status line, then the script in a scrolling window with faded edges that keeps the live line about 40% down. The dock: the level pair as two thin horizontal bars (Voice, Music), the cue ribbon, elapsed and remaining time, the transport (Previous line, Back 10 s, Play/Pause 56 px, Forward 10 s, Next line), then two labelled buttons side by side: **Save for offline** and **Download the file**. Tablet: script beside a rail (chapter card, VU pair, download, Bookplate), player bar below. Desktop: three columns: the VU rail (vertical meters, legend), the script at 68ch with speaker names in the left margin, the side rail. 1920: rails widen and meters lengthen; the script does not.
@@ -188,7 +306,7 @@ Events: `work_opened` fires when a Broadcast opens from a listing.
 | Bookplate open (`bookplate`) | The phone Bookplate sheet over the player. |
 | Silence cue (transient) | The VU falls to zero and the arch's wave flattens for exactly the cue's duration. No text. |
 
-The prepared recording and the in-tab render both count `chapter_rendered` at the end of a completed listen (see open question 1).
+The prepared recording and the in-tab render both count `chapter_rendered` at the end of a completed listen (founder decision, G2 round 1).
 
 ---
 
@@ -206,8 +324,8 @@ The Studio opens on its import screen (a first visit); the production bar, conso
 |---|---|---|---|---|---|
 | Rights not stated, rendering | ochre "Corrections: 2 to review" | ochre "Rights: not stated" | lamp "Rendering: 41 of 47" | Export, disabled ("State the rights in the Export tab first") | "Not stated yet"; Export chapter disabled with "State the rights above, and let the render finish (41 of 47 cues)." |
 | Voices downloading | same | same | lamp "Getting the voices ready" | Export, disabled | same |
-| Rights stated, rendered (`keep`) | ochre "Corrections: 2 to review" | check "Rights: public domain" | green "Rendered: 47 of 47" | Export, enabled | Source filled, Export chapter enabled, and "2 corrections are not reviewed, so the voice says those words as written. You can review them first or export now." |
-| Exported | ochre "Corrections: 2 not reviewed" | check "Rights: public domain" | green "Rendered: 47 of 47", plus green "Exported 21:46" | Export again, enabled | The Exported panel |
+| Rights stated, rendered (`keep`: "I wrote this"; `keep-pd`: public domain) | ochre "Corrections: 2 to review" | check "Rights: I wrote this" or "Rights: public domain", whichever was chosen | green "Rendered: 47 of 47" | Export, enabled | Source filled, Export chapter enabled, and "2 corrections are not reviewed, so the voice says those words as written. You can review them first or export now." |
+| Exported | ochre "Corrections: 2 not reviewed" | check, the chosen answer | green "Rendered: 47 of 47", plus green "Exported 21:46" | Export again, enabled | The Exported panel |
 Pending corrections never block an export; unstated rights and an unfinished render do. Tapping the Corrections or Rights chip opens that inspector tab. Three panes below, each scrolling on its own:
 1. **Manuscript**, verbatim (Fraunces 300, 68ch max). Cues are spans; the selected cue has an amber outline and, while playing, the amber live treatment. Pending corrections carry an ochre dotted underline; accepted ones a thin rule. Italics marked `_like this_` in a .txt display as italics; the characters stay in the source.
 2. **Tuning Dial and cue sheet.** The dial sits on the console texture (filament glow from above plus 4% grain: the only textured surface in Dial). Top: a time scale, a tick per second and a mono label every 10 s. Middle: each cue as a block along time, height its loudness, hue its register; unresolved speakers drawn hollow; ochre pins where a correction waits; the selected cue in a dashed amber frame; past the render head, a hatched static band and a tally line labelled RENDERING; the amber needle with a cap at the playhead. Readout: "Rendered 41 of 47 cues · 1.8× real time on this device (WebGPU) · about 1 min left". Legend underneath. The cue sheet: Cue, Start, Voice, Register, Text, Pause; overridden values carry a "yours" tag; unresolved voices are italic.
@@ -314,11 +432,11 @@ Footer: "Rights questions: rights@voidvision.org. We host nothing people make wi
 ## 8. Anti-slop checklist
 | # | Question | Repertory | Broadcast | Studio | Seal |
 |---|---|---|---|---|---|
-| 1 | Template-marketplace look? | No: a programme guide with catalogue numbers and turn maps drawn from the texts | No: a script page with a live line and broadcast VU meters | No: a console with a tuning dial, cue sheet and rule-by-rule report | No: a tuning-eye tube and a raw request log |
+| 1 | Template-marketplace look? | No: a cathedral-arch dial with the works as stations, preset keys and knobs (R2) | No: the same radio on air, instruments on glass and a read-along strip (R2) | No: a console with a tuning dial, cue sheet and rule-by-rule report | No: a tuning-eye tube and a raw request log |
 | 2 | Every accent semantic? | Pass: amber on actions only; green only on the checked PD basis | Pass: amber live line and actions; tally lamp while live; register hues only on meters | Pass: ochre only on pending corrections and rights; tally only on the render head and lamps | Pass: green eye and pip mean sealed; ochre only on a blocked row |
 | 3 | Numerals in the data face? | Pass | Pass | Pass (cue sheet, dial scale, readouts, sizes) | Pass (times, sizes, totals, fingerprints) |
 | 4 | Exclaiming or cliché copy? | Pass | Pass (the one "!" is Jowett's, verbatim) | Pass ("Not on sale yet", never "unlock") | Pass |
-| 5 | Motion means state? | Pass: rack focus on hover, shimmer on load, the tab wave marks the current room | Pass: needle-drop on the live line, 300 ms VU ballistics, hard cut on register | Pass: needle-drop to cues, dial-drift scrub, render head advance | Pass: valve-warm closing the eye as the record completes |
-| 6 | Negative space? | Pass | Pass: one column of text at 68ch | **Watch:** dense by nature at 1280 × 800; three panes scroll separately and the inspector keeps one tab open at a time | Pass |
+| 5 | Motion means state? | Pass: the needle swings to the chosen station, the eye closes when tuned, the wave converges on station and hisses between (R2) | Pass: the valve warms and counts down the lead, the gauge shows speed, a new line rises into the read-along, keys latch (R2) | Pass: the needle drops onto a chosen cue on a spring; the gauge shows render speed (R2) | Pass: valve-warm closing the eye as the record completes |
+| 6 | Negative space? | Pass: the device centred, one station at a time | Pass: three lines of text at a time; the full script is one tap away | **Watch:** dense by nature at 1280 × 800; three panes scroll separately and the inspector keeps one tab open at a time | Pass |
 
 All four mocks pass `scripts/lint-design.mjs` (no colour literals outside `tokens.css`, no em dashes). Reduced motion: every mock collapses motion through the tokens' reduced-motion block, and scripted motion (the eye, the arch wave, the VU) checks `prefers-reduced-motion` and draws its final state.

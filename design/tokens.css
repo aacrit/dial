@@ -56,6 +56,16 @@
  *   register-speaking on surface             5.53  4.5
  *   register-letter on surface               5.85  4.5
  *   bg on tally                              6.37  (still forbidden as text by rule)
+ *
+ *   GLASS (round 2; identical in both themes)
+ *   glass-ink on glass                      15.66  4.5
+ *   glass-ink-muted on glass                 6.27  4.5
+ *   glass-amber on glass (needle, live line) 8.63  4.5
+ *   glass-amber on its live-line glow        7.40  4.5
+ *   glass-eye on glass                       9.81  4.5
+ *   glass-tally on glass (lamp, graphic)     4.20  3.0
+ *   glass-ink-faint is decoration only (minor scale ticks, 1.41); every
+ *   scale label uses glass-ink-muted or brighter.
  */
 
 /* Faces are self-hosted (design/fonts.css); never a font CDN (V3). */
@@ -164,6 +174,49 @@
   --dur-vu-ballistics: 300ms;
   --ease-vu-ballistics: cubic-bezier(0.2, 0.9, 0.3, 1);
   --dur-hard-cut: 0ms;
+
+  /* ---- Round 2: the device (G2 round 2, 2026-09-26) ------------------------
+     The radio is the hero. Three more springs, integrated in JS (never CSS
+     keyframes); the numbers are stiffness damping mass:
+       needle-swing  tuning between stations: a weighted needle that overshoots
+                     about 30% and settles (damping ratio 0.35)
+       vu            the Voice and Music meters and the speed gauge: 99% in
+                     about 300 ms with a slight overshoot (the VU standard)
+       follow        the needle or a knob tracking a finger while dragged */
+  --spring-needle-swing: 220 11 1.1;
+  --spring-vu: 400 32 1;
+  --spring-follow: 900 60 1;
+  --key-travel: 3px; /* how far a push key goes down; a latched key stays down */
+
+  /* Glass: the dial window and the read-along strip. Lit from behind, so the
+     same in both themes (a radio's dial glass is dark by day too). */
+  --color-glass: oklch(from var(--hex-walnut) calc(l - 0.05) c h);
+  --color-glass-ink: var(--hex-cream);
+  --color-glass-ink-muted: oklch(from var(--hex-cream) l c h / 0.62);
+  --color-glass-ink-faint: oklch(from var(--hex-cream) l c h / 0.16);
+  --color-glass-amber: var(--hex-amber); /* needle, carrier, live line */
+  --color-glass-amber-glow: oklch(from var(--hex-amber) l c h / 0.35);
+  --color-glass-eye: var(--hex-eye);
+  --color-glass-eye-dim: oklch(from var(--hex-eye) calc(l - 0.5) calc(c * 0.5) h);
+  --color-glass-tally: var(--hex-tally);
+  --color-glass-sheen: oklch(from var(--hex-cream) l c h / 0.07);
+  /* Register hues on glass: the night values, fixed, because the glass is always dark */
+  --color-glass-reg-telling: var(--hex-cream);
+  --color-glass-reg-speaking: oklch(0.76 0.075 235);
+  --color-glass-reg-letter: oklch(0.74 0.08 305);
+  --gradient-glass: radial-gradient(120% 70% at 50% 110%, oklch(from var(--hex-amber) l c h / 0.12), transparent 62%), var(--color-glass);
+
+  /* Cabinet: the faceplate around the glass. Follows the theme: walnut and
+     console by night, cream bakelite by day. */
+  --color-bezel: oklch(from var(--color-cream) l c h / 0.2);
+  --gradient-cabinet: linear-gradient(180deg, var(--color-surface-raised), var(--color-surface) 40%, oklch(from var(--color-surface) calc(l - 0.015) c h));
+  --gradient-key: linear-gradient(180deg, var(--color-surface-raised), var(--color-surface));
+  --gradient-knob: radial-gradient(circle at 38% 30%, oklch(from var(--color-surface-raised) calc(l + 0.06) c h), var(--color-surface) 70%);
+  --shadow-device: inset 0 1px 0 oklch(from var(--hex-cream) l c h / 0.07), 0 2px 4px rgb(0 0 0 / 0.35), 0 30px 80px rgb(12 8 4 / 0.55);
+  --shadow-glass-inset: inset 0 3px 14px rgb(0 0 0 / 0.65), inset 0 0 0 1px oklch(from var(--hex-cream) l c h / 0.1);
+  --shadow-key: 0 var(--key-travel) 0 oklch(from var(--color-surface) calc(l - 0.06) c h), 0 6px 12px rgb(0 0 0 / 0.35);
+  --shadow-key-pressed: 0 0 0 oklch(from var(--color-surface) calc(l - 0.06) c h), 0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-knob: 0 2px 0 oklch(from var(--color-surface) calc(l - 0.06) c h), 0 8px 18px rgb(0 0 0 / 0.45);
 }
 
 /* ---- Daylight: the same station by day ------------------------------------
@@ -193,6 +246,22 @@
     --shadow-card: 0 1px 2px rgb(40 28 16 / 0.08), 0 8px 24px rgb(40 28 16 / 0.08);
     --shadow-hover: 0 2px 4px rgb(40 28 16 / 0.1), 0 16px 40px rgb(40 28 16 / 0.12);
   }
+}
+
+/* Daylight device: cream bakelite cabinet, softer shadows; the glass is unchanged. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) {
+    --shadow-device: inset 0 1px 0 oklch(from var(--hex-cream) calc(l + 0.05) c h / 0.9), 0 2px 4px rgb(40 28 16 / 0.12), 0 30px 70px rgb(40 28 16 / 0.18);
+    --shadow-key: 0 var(--key-travel) 0 oklch(from var(--color-surface) calc(l - 0.12) c h), 0 5px 10px rgb(40 28 16 / 0.12);
+    --shadow-key-pressed: 0 0 0 oklch(from var(--color-surface) calc(l - 0.12) c h), 0 1px 2px rgb(40 28 16 / 0.12);
+    --shadow-knob: 0 2px 0 oklch(from var(--color-surface) calc(l - 0.12) c h), 0 8px 16px rgb(40 28 16 / 0.18);
+  }
+}
+:root[data-theme="daylight"] {
+  --shadow-device: inset 0 1px 0 oklch(from var(--hex-cream) calc(l + 0.05) c h / 0.9), 0 2px 4px rgb(40 28 16 / 0.12), 0 30px 70px rgb(40 28 16 / 0.18);
+  --shadow-key: 0 var(--key-travel) 0 oklch(from var(--color-surface) calc(l - 0.12) c h), 0 5px 10px rgb(40 28 16 / 0.12);
+  --shadow-key-pressed: 0 0 0 oklch(from var(--color-surface) calc(l - 0.12) c h), 0 1px 2px rgb(40 28 16 / 0.12);
+  --shadow-knob: 0 2px 0 oklch(from var(--color-surface) calc(l - 0.12) c h), 0 8px 16px rgb(40 28 16 / 0.18);
 }
 
 :root[data-theme="daylight"] {

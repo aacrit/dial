@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="The Broadcast player: the script page with the live line, the VU pair, cue scrubbing and download.">
+<meta name="description" content="The Broadcast as a radio: the dial, the tuning eye, the valve and speed gauge, the read-along strip and physical controls.">
 <title>Broadcast · Dial mock</title>
 <link rel="stylesheet" href="../tokens.css">
 <style>
@@ -163,141 +163,190 @@ html.still{scrollbar-width:none}html.still::-webkit-scrollbar{display:none}
 .arch-body{fill:var(--color-surface);stroke:var(--color-cream);stroke-width:6;stroke-linejoin:round}.arch-inner{fill:none;stroke:var(--color-cream);stroke-width:1.6;opacity:.4}.arch .live{fill:none;stroke:var(--color-filament);stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round}body[data-onair="true"] .arch .live{stroke:var(--color-tally)}
 </style>
 <style>
-/* Broadcast: the script page with the live line in amber, plus the VU pair. */
-.bc{max-width:1680px;margin:0 auto}
-.bc-grid{display:grid;grid-template-columns:minmax(0,1fr)}
-.script-head{display:grid;gap:6px;padding:0 0 18px}
-.script-head h1{font-size:1.5rem;line-height:1.1}
-.script-head .by{font-family:var(--font-display);font-style:italic;color:var(--color-cream-muted);font-size:.95rem}
-.status{display:flex;align-items:flex-start;gap:10px;font-size:.9rem;color:var(--color-cream-muted);margin-top:6px}
-.status .lamp{margin-top:6px}
+/* ---- The device (round 2): a faceplate with a dial behind glass ---------- */
+.device{position:relative;display:grid;gap:14px;width:100%;max-width:560px;margin:0 auto;padding:16px;border-radius:30px;background:var(--gradient-cabinet);box-shadow:var(--shadow-device);isolation:isolate}
+.device::after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background-image:var(--texture-grain);opacity:var(--texture-grain-opacity);pointer-events:none}
+.glasspanel{position:relative;border-radius:18px;background:var(--gradient-glass);box-shadow:var(--shadow-glass-inset);color:var(--color-glass-ink)}
+
+/* Dial window: an arch of glass, like the cathedral mark */
+.dialwin{position:relative;width:100%;user-select:none;-webkit-user-select:none;aspect-ratio:400/250;border-radius:50% 50% 18px 18px / 80% 80% 7.2% 7.2%;background:var(--gradient-glass);box-shadow:var(--shadow-glass-inset);overflow:hidden;touch-action:none;cursor:grab;outline-offset:4px}
+.dialwin:active{cursor:grabbing}
+.dialwin svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dw-sheen{position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 30%,var(--color-glass-sheen) 42%,transparent 55%),radial-gradient(90% 40% at 50% 0%,var(--color-glass-sheen),transparent 70%)}
+.dw-scale .tk{stroke:var(--color-glass-ink-faint);stroke-width:1}
+.dw-scale .tk.maj{stroke:var(--color-glass-ink-muted);stroke-width:1.2}
+.dw-scale .tk.st{stroke:var(--color-glass-ink);stroke-width:1.6}
+.dw-scale .tk.prep{stroke:var(--color-glass-ink-muted);stroke-dasharray:2 2}
+.dw-scale .arc{fill:none;stroke:var(--color-glass-ink-faint);stroke-width:1}
+.dw-scale .lb{fill:var(--color-glass-ink-muted);font:500 11px var(--font-data);letter-spacing:.06em;text-anchor:middle}
+.dw-scale .lb.on{fill:var(--color-glass-ink)}
+.dw-scale .lb.prep{fill:var(--color-glass-ink-muted);font:500 9px var(--font-structure);letter-spacing:.04em}
+.dw-am{fill:var(--color-glass-ink-muted);font:500 9px var(--font-data);letter-spacing:.16em}
+.dw-wave path{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.dw-wave .w0{stroke:var(--color-glass-amber);stroke-width:2;filter:drop-shadow(0 0 4px var(--color-glass-amber-glow)) drop-shadow(0 0 10px var(--color-glass-amber-glow))}
+.dw-wave .w1{stroke:var(--color-glass-ink);stroke-width:1;opacity:.28}
+.dw-wave .w2{stroke:var(--color-glass-ink);stroke-width:1;opacity:.14}
+.dw-needle .nd{stroke:var(--color-glass-amber);stroke-width:2.2;stroke-linecap:round;filter:drop-shadow(0 0 5px var(--color-glass-amber-glow))}
+.dw-needle .nd-tail{stroke:var(--color-glass-ink-muted);stroke-width:3;stroke-linecap:round}
+.dw-needle .nd-cap{fill:var(--color-surface);stroke:var(--color-bezel);stroke-width:1.5}
+.dw-needle .nd-hub{fill:var(--color-glass-amber)}
+body[data-onair="true"] .dw-needle .nd-cap{stroke:var(--color-glass-tally)}
+
+/* Station line on the cabinet */
+.station-line{display:grid;gap:2px;padding:0 4px}
+.station-line h1,.station-line h2{font-size:1.45rem;line-height:1.12}
+.station-line .by{font-family:var(--font-display);font-style:italic;color:var(--color-cream-muted);font-size:.92rem}
+
+/* The display: instruments over the read-along strip, one piece of glass */
+.display{display:grid;gap:0;overflow:hidden}
+.instruments{display:flex;gap:14px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--color-glass-ink-faint)}
+.inst{display:grid;justify-items:center;gap:3px;min-width:52px}
+.il{font:500 .6rem/1.2 var(--font-data);letter-spacing:.08em;text-transform:uppercase;color:var(--color-glass-ink-muted);text-align:center;white-space:nowrap}
+.mini-eye{width:40px;height:40px}
+.mini-eye .me-glass{fill:var(--color-glass-eye-dim)}
+.mini-eye .me-fan{fill:var(--color-glass-eye);filter:drop-shadow(0 0 5px var(--color-glass-eye))}
+.mini-eye .me-cap{fill:var(--color-glass);stroke:var(--color-glass-ink-faint)}
+.valve{width:40px;height:40px}
+.valve .v-env{fill:none;stroke:var(--color-glass-ink-muted);stroke-width:1.2}
+.valve .v-base{fill:var(--color-glass-ink-faint)}
+.valve .v-fil{fill:none;stroke:var(--color-glass-amber);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 4px var(--color-glass-amber))}
+.valve .v-glow{fill:var(--color-glass-amber-glow)}
+.gauge{width:78px;height:42px}
+.gauge .g-arc{fill:none;stroke:var(--color-glass-ink-faint);stroke-width:1.2}
+.gauge .g-slow{fill:none;stroke:var(--color-glass-ink-muted);stroke-width:1.2;stroke-dasharray:1.5 2.5}
+.gauge .g-tk{stroke:var(--color-glass-ink-muted);stroke-width:1}
+.gauge .g-tk.rt{stroke:var(--color-glass-ink);stroke-width:1.6}
+.gauge .g-lb{fill:var(--color-glass-ink-muted);font:500 7px var(--font-data);text-anchor:middle}
+.gauge .g-nd{stroke:var(--color-glass-amber);stroke-width:1.6;stroke-linecap:round;filter:drop-shadow(0 0 3px var(--color-glass-amber-glow))}
+.gauge .g-cap{fill:var(--color-glass-ink-muted)}
+.meters{display:grid;gap:6px;justify-items:stretch;min-width:0;flex:1}
+.mrow{display:grid;grid-template-columns:3.6em minmax(0,1fr);gap:8px;align-items:center;font:500 .6rem/1 var(--font-data);letter-spacing:.08em;text-transform:uppercase;color:var(--color-glass-ink-muted)}
+.mbar{position:relative;height:6px;border-radius:3px;background:var(--color-glass-ink-faint);overflow:hidden}
+.mbar i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;background:var(--reg,var(--color-glass-ink))}
+.mbar b{position:absolute;top:-1px;bottom:-1px;left:42.5%;width:12.5%;border-left:1px solid var(--color-glass-ink-muted);border-right:1px solid var(--color-glass-ink-muted)}
+.meters .il{justify-self:start;text-align:left;display:flex;align-items:center;gap:6px}
+.meters .il .pip{width:6px;height:6px}
+
+/* Read-along strip: the current line and its neighbours */
+.readalong{position:relative;padding:12px 16px 12px;display:grid;gap:6px;min-height:150px}
+.ra-who{font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-glass-ink-muted);display:flex;justify-content:space-between;gap:10px}
+.ra-lines{display:grid;gap:6px;max-width:var(--measure-reading)}
+.ra{margin:0;font-family:var(--font-display);font-weight:300;line-height:1.5;color:var(--color-glass-ink-muted);will-change:transform,opacity}
+.ra.prev,.ra.next{font-size:.92rem;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.ra.live{font-size:1.12rem;color:var(--color-glass-amber);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.ra .tag{color:var(--color-glass-ink-muted)}
+.ra-open{justify-self:start;background:none;border:0;padding:0;min-height:36px;color:var(--color-glass-amber);font:500 .84rem var(--font-structure);cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+
+/* Knobs: turnable where a control is continuous */
+.knob{display:grid;justify-items:center;gap:6px;touch-action:none;user-select:none}
+.kn-dial{position:relative;width:64px;height:64px;border-radius:50%;background:var(--gradient-knob);box-shadow:var(--shadow-knob),inset 0 0 0 1px var(--color-bezel);cursor:grab}
+.kn-dial::before{content:"";position:absolute;inset:-5px;border-radius:50%;background:repeating-conic-gradient(var(--color-bezel) 0 2.5deg,transparent 2.5deg 7.5deg);-webkit-mask:radial-gradient(circle,transparent 31px,black 32px 36px,transparent 37px);mask:radial-gradient(circle,transparent 31px,black 32px 36px,transparent 37px)}
+.kn-rot{position:absolute;inset:0;border-radius:50%;will-change:transform}
+.kn-mark{position:absolute;left:50%;top:7px;width:3px;height:14px;margin-left:-1.5px;border-radius:2px;background:var(--color-cream)}
+.knob:focus-visible .kn-dial{outline:2px solid var(--color-filament);outline-offset:6px}
+.knob .kl{font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
+
+/* Push keys: press depth, and a play key that latches */
+.keys{display:flex;gap:8px;justify-content:center;align-items:flex-end;min-width:0}
+.key{position:relative;display:grid;justify-items:center;align-content:center;gap:4px;min-width:56px;min-height:56px;padding:6px 10px;border:1px solid var(--color-bezel);border-radius:12px;background:var(--gradient-key);color:var(--color-cream);box-shadow:var(--shadow-key);font:600 .66rem/1 var(--font-structure);letter-spacing:.02em;cursor:pointer;transform:translateY(0);transition:transform var(--dur-needle-drop) var(--ease-needle-drop),box-shadow var(--dur-needle-drop) var(--ease-needle-drop)}
+.key .glyph{width:22px;height:22px}
+.key:active,.key[aria-pressed="true"]{transform:translateY(var(--key-travel));box-shadow:var(--shadow-key-pressed);transition-duration:var(--dur-instant)}
+.key[aria-pressed="true"]{border-color:var(--color-filament)}
+.key[aria-pressed="true"] .glyph{color:var(--color-filament)}
+.key.big{min-width:72px;min-height:64px}
+.key.station{font:500 .8rem/1 var(--font-data);font-variant-numeric:tabular-nums;min-width:64px}
+.key.station span.t{font:500 .56rem/1.2 var(--font-structure);letter-spacing:0;color:var(--color-cream-muted);max-width:8em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.controls{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:end;padding:4px 2px 2px}
+
+/* Progress ribbon inside the device */
+.dev-ribbon{display:grid;gap:4px;padding:0 4px}
+.dev-ribbon .ribbon{height:26px}
+.dev-ribbon .times{display:flex;justify-content:space-between}
+
+/* Portrait (phone, tablet): the faceplate is the screen */
+@media (max-width:767px){
+  .device>.dialwin{order:1}.device>.station-line{order:2}.device>.tunein{order:3}.device>.controls{order:4}.device>.display{order:5}.device>.dev-ribbon{order:3}
+  body.faceplate-page{background:var(--gradient-cabinet)}
+  .device{padding:8px 12px 12px;border-radius:0;box-shadow:none;background:transparent}
+  .device::after{display:none}
+  .readalong{min-height:128px}
+  .kn-dial{width:56px;height:56px}
+  .kn-dial::before{-webkit-mask:radial-gradient(circle,transparent 27px,black 28px 32px,transparent 33px);mask:radial-gradient(circle,transparent 27px,black 28px 32px,transparent 33px)}
+  .key{min-width:52px;min-height:52px}
+}
+/* Landscape (desktop): the device sits centred; the dial on the left */
+@media (min-width:1024px){
+  .device{max-width:1080px;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);grid-auto-flow:dense;column-gap:26px;row-gap:14px;padding:26px;align-items:start}
+  .device>.dialwin{grid-column:1;grid-row:1 / span 5;align-self:center}
+  .device>*:not(.dialwin){grid-column:2}
+}
+@media (min-width:1920px){
+  .device{max-width:1420px;padding:34px;column-gap:40px}
+  .kn-dial{width:76px;height:76px}
+  .kn-dial::before{-webkit-mask:radial-gradient(circle,transparent 37px,black 38px 42px,transparent 43px);mask:radial-gradient(circle,transparent 37px,black 38px 42px,transparent 43px)}
+}
+
+/* Broadcast (round 2): the faceplate plays; the script is a read-along strip under the dial. */
+.bc2{padding:0 0 24px}
+.status{display:flex;gap:8px;align-items:flex-start;font-size:.86rem;color:var(--color-cream-muted);margin-top:4px}
+.status .lamp{margin-top:5px}
 .status b{color:var(--color-cream);font-weight:500}
-.script{font-family:var(--font-display);font-weight:300;font-size:1.12rem;line-height:1.75;max-width:var(--measure-reading)}
-.script p{margin:0 0 1.05em;position:relative}
-.script .tag{color:var(--color-cream-muted)}
-.script .who{display:none}
-.script .live{color:var(--color-filament);background:var(--color-filament-glow);border-radius:4px;box-decoration-break:clone;-webkit-box-decoration-break:clone;padding:1px 2px;transition:color var(--dur-needle-drop) var(--ease-needle-drop),background-color var(--dur-needle-drop) var(--ease-needle-drop)}
-body[data-state="first-run"] .script .live,body[data-state="warming"] .script .live,body[data-state="offline"] .script .live{color:inherit;background:none}
-.script .past{color:var(--color-cream)}
-.panel{display:grid;gap:12px;justify-items:start;margin:0 0 22px;padding:20px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-card)}
-.panel h2{font-size:1.3rem}
-.panel p{font-size:.93rem;max-width:56ch}
-.panel .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.meter-line{width:100%;height:4px;border-radius:2px;background:var(--color-cream-faint);overflow:hidden}
-.meter-line i{display:block;height:100%;background:var(--color-filament)}
-.panel .standing{width:96px;height:28px}
-
-/* VU pair: height is loudness, hue is register */
-.vu{display:flex;gap:18px;align-items:flex-end}
-.vu .m{display:grid;justify-items:center;gap:8px}
-.vu .col{position:relative;width:14px;height:240px;border-radius:3px;background:var(--color-cream-faint);overflow:visible}
-.vu .fill{position:absolute;left:0;right:0;bottom:0;border-radius:3px;background:var(--reg,var(--color-register-telling));height:0;transition:height var(--dur-vu-ballistics) var(--ease-vu-ballistics),background-color var(--dur-hard-cut)}
-.vu .peak{position:absolute;left:-2px;right:-2px;height:2px;background:var(--color-cream);bottom:0;transition:bottom 600ms var(--ease-out)}
-.vu .band{position:absolute;left:-6px;right:-6px;border-top:1px solid var(--color-cream-muted);border-bottom:1px solid var(--color-cream-muted)}
-.vu .lab{font:500 .66rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
-.vu .scale{position:relative;height:240px;width:30px;font:400 .62rem/1 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted)}
-.vu .scale span{position:absolute;right:0;transform:translateY(50%)}
-.legend{display:grid;gap:6px;font-size:.78rem;color:var(--color-cream-muted)}
-.legend span{display:flex;align-items:center;gap:8px}
-.legend i{width:14px;height:4px;border-radius:2px;display:inline-block}
-.inspec{display:flex;align-items:center;gap:8px;font:400 .74rem/1.3 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted)}
-.chapter-card{display:grid;gap:8px;padding:20px;border-radius:var(--radius-card);background:var(--color-surface);border:1px solid var(--color-border);box-shadow:var(--shadow-card);border-top:3px solid var(--color-realm);transition:border-color var(--dur-realm-bleed) linear}
-.chapter-card h2{font-size:1.35rem;line-height:1.15}
-.chapter-card .now-line{font-size:.88rem}
-.chapter-card dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:6px 0 0;font:400 .78rem/1.4 var(--font-data);font-variant-numeric:tabular-nums}
-.chapter-card dt{color:var(--color-cream-muted)}
-.chapter-card dd{margin:0}
-.dl-card{display:grid;gap:10px;padding:20px;border-radius:var(--radius-card);background:var(--color-surface);border:1px solid var(--color-border)}
-.dl-card h2{font-size:1.1rem}
-.dl-card p{font-size:.84rem;color:var(--color-cream-muted)}
-.dl-card .spec{font:400 .78rem/1.4 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream)}
-.bookplate dl{display:grid;gap:2px;margin:0;font-size:.86rem}
-.bookplate dt{font:500 .64rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);padding-top:10px}
-.bookplate dd{margin:0}
-.pd{color:var(--color-magic-eye)}
-
-/* Keep this work: save for offline (in Dial) and download the file (to your files) */
-.keepcard{display:grid;gap:0;padding:6px 20px;border-radius:var(--radius-card);background:var(--color-surface);border:1px solid var(--color-border)}
-.keepcard h2{font-size:1.1rem;padding:14px 0 4px}
-.kc{display:grid;gap:8px;padding:12px 0 14px;border-top:1px solid var(--color-border)}
-.kc h3{margin:0;font:600 .9rem/1.3 var(--font-structure)}
-.kc p{font-size:.82rem;color:var(--color-cream-muted)}
-.kc .btn{justify-self:start;min-height:40px;font-size:.88rem}
-.kc .ok{display:inline-flex;align-items:center;gap:8px;font-weight:500;font-size:.9rem}
-.kc .bar{height:4px;border-radius:2px;background:var(--color-cream-faint);overflow:hidden}
-.kc .bar i{display:block;height:100%;background:var(--color-filament)}
-.keep-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.devnote{display:flex;gap:8px;align-items:flex-start;padding:12px 16px 2px;font-size:.84rem;line-height:1.45;color:var(--color-glass-ink-muted)}
+.devnote b{color:var(--color-glass-ink);font-weight:500}
+.devnote .big{font:400 1.25rem/1.2 var(--font-display);color:var(--color-glass-ink)}
+.devactions{display:flex;flex-wrap:wrap;gap:8px;padding:0 4px}
+.devactions .btn{min-height:44px;font-size:.9rem}
+.keep-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 2px}
 .keep-row .btn{min-height:44px;padding:0 10px;font-size:.84rem;gap:6px}
 .keep-row .btn .glyph{width:18px;height:18px}
 .keep-row .state{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;font-size:.84rem;border:1px solid var(--color-border);border-radius:var(--radius-control)}
-.bp-sheet{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;background:var(--color-scrim)}
-.bp-sheet .panel-s{width:100%;max-height:82dvh;overflow:auto;padding:10px 20px calc(24px + env(safe-area-inset-bottom));background:var(--color-surface);border-top:1px solid var(--color-border);border-radius:var(--radius-card) var(--radius-card) 0 0;box-shadow:var(--shadow-hover);animation:rise var(--dur-morph) var(--ease-cinematic)}
-.bp-sheet .grab{display:block;width:36px;height:4px;margin:0 auto 10px;border-radius:2px;background:var(--color-border)}
-.bp-sheet .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.bp-sheet h2{font-size:1.35rem}
-.bp-sheet dl{display:grid;gap:2px;margin:6px 0 0;font-size:.92rem}
-.bp-sheet dt{font:500 .64rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);padding-top:12px}
-.bp-sheet dd{margin:0}
-@media (min-width:768px){.bp-sheet{align-items:center;justify-content:center;padding:16px}.bp-sheet .panel-s{max-width:520px;border-radius:var(--radius-card);border:1px solid var(--color-border)}}
+.below{display:grid;gap:14px;max-width:560px;margin:0 auto;padding:16px 16px 0}
+.card h2{font-size:1.15rem}
+.kc{display:grid;gap:8px;padding:12px 0 14px;border-top:1px solid var(--color-border)}
+.kc:first-of-type{border-top:0}
+.kc h3{margin:0;font:600 .9rem/1.3 var(--font-structure)}
+.kc p{font-size:.84rem;color:var(--color-cream-muted)}
+.kc .btn{justify-self:start;min-height:42px;font-size:.88rem}
+.kc .ok{display:inline-flex;align-items:center;gap:8px;font-weight:500;font-size:.9rem;color:var(--color-cream)}
+.kc .bar{height:4px;border-radius:2px;background:var(--color-cream-faint);overflow:hidden}
+.kc .bar i{display:block;height:100%;background:var(--color-filament)}
 .steps{margin:0;padding-left:1.3em;display:grid;gap:6px;font-size:.93rem}
-.steps li::marker{font-family:var(--font-data);color:var(--color-cream-muted)}
-
-/* ---- Phone: the full player is a sheet over the tabs ---------------------- */
+.sheet{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;background:var(--color-scrim)}
+.sheet .panel-s{width:100%;max-height:84dvh;overflow:auto;padding:10px 20px calc(24px + env(safe-area-inset-bottom));background:var(--color-surface);border-radius:var(--radius-card) var(--radius-card) 0 0;box-shadow:var(--shadow-hover);animation:rise var(--dur-morph) var(--ease-cinematic)}
+.sheet .grab{display:block;width:36px;height:4px;margin:0 auto 10px;border-radius:2px;background:var(--color-border)}
+.sheet .top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sheet h2{font-size:1.35rem}
+.sheet dl{display:grid;gap:2px;margin:6px 0 0;font-size:.92rem}
+.sheet dt{font:500 .64rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);padding-top:12px}
+.sheet dd{margin:0}
+.script{font-family:var(--font-display);font-weight:300;font-size:1.06rem;line-height:1.7;max-width:var(--measure-reading)}
+.script p{margin:0 0 1em}
+.script .tag{color:var(--color-cream-muted)}
+.script .live{color:var(--color-filament);background:var(--color-filament-glow);border-radius:4px}
+.pd{color:var(--color-magic-eye)}
+.hdr-actions{display:flex;justify-content:flex-end;padding:0 16px}
 @media (max-width:767px){
-  .bc{padding:0 16px}
-  .sheet-top{display:flex;align-items:center;gap:8px;padding-top:max(10px,env(safe-area-inset-top))}
-  .sheet-top .grab{position:absolute;top:6px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--color-border)}
-  .sheet-top .eyebrow{flex:1;text-align:center}
-  .script-head{padding:6px 0 12px}
-  .script-head h1{font-size:1.35rem}
-  .script{font-size:1.06rem;line-height:1.7}
-  .script-scroll{height:calc(100dvh - 390px);overflow:auto;-webkit-mask-image:linear-gradient(transparent,black 8%,black 88%,transparent);mask-image:linear-gradient(transparent,black 8%,black 88%,transparent);padding:10px 0 40vh}
-  .vu-rail,.side-rail{display:none}
-  .dock{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--color-bg);border-top:1px solid var(--color-border)}
-  .dock .hvu{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}
-  .dock .hvu .lab{font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
-  .dock .hvu .bar{height:5px;border-radius:3px;background:var(--color-cream-faint);overflow:hidden}
-  .dock .hvu .bar i{display:block;height:100%;background:var(--reg,var(--color-register-telling));transition:width var(--dur-vu-ballistics) var(--ease-vu-ballistics)}
-  .dock .times{display:flex;justify-content:space-between}
-  .dock .ctrl{display:flex;justify-content:space-between;align-items:center}
-  .dock .ctrl .btn.icon{border:none}
-  .room{padding-bottom:0}
-  .tabbar,.mini{display:none}
+  .device{gap:10px}
+  .device>.dialwin{order:1}.device>.station-line{order:2}.device>.display{order:3}.device>.devactions{order:4}.device>.dev-ribbon{order:5}.device>.controls{order:6}.device>.keep-row{order:7}
+  body[data-state="first-run"] .device>.controls{order:3}body[data-state="first-run"] .device>.devactions{order:4}body[data-state="first-run"] .device>.display{order:5}
+  .readalong{min-height:0;padding:10px 14px}
+  .ra.live{-webkit-line-clamp:3;font-size:1.04rem}
+  .ra.prev,.ra-open{display:none}
+  .instruments{padding:8px 12px}
+  .dialwin{max-width:300px;margin:0 auto}
+  .station-line h1{font-size:1.25rem}
+  .phone-head .btn{min-height:36px}
 }
-/* ---- Tablet and up -------------------------------------------------------- */
-@media (min-width:768px){
-  .dock,.sheet-top{display:none}
-  .bc{padding:28px 24px 0}
-  .bc-grid{grid-template-columns:120px minmax(0,1fr) 260px;gap:32px;align-items:start}
-  .vu-rail,.side-rail{position:sticky;top:88px;display:grid;gap:22px}
-  .script-head h1{font-size:2.1rem}
-  .script .who{display:block;position:absolute;left:-9.5em;width:8.5em;text-align:right;top:.5em;font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
-  .script-col{display:flex;flex-direction:column;height:calc(100dvh - 60px - 76px - 28px)}
-  .script-scroll{flex:1;min-height:0;overflow:auto;padding:24px 0 40vh 9.5em;margin-left:-9.5em;scrollbar-width:thin;-webkit-mask-image:linear-gradient(transparent,black 10%,black 85%,transparent);mask-image:linear-gradient(transparent,black 10%,black 85%,transparent)}
+@media (min-width:768px){.bc2{padding:28px 24px 40px}.below{max-width:640px;padding-top:24px}.hdr-actions{display:none}}
+@media (min-width:1024px){
+  .device{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+  .below{max-width:1080px;grid-template-columns:1fr 1fr;align-items:start}
+  .sheet{align-items:center;justify-content:center;padding:16px}.sheet .panel-s{max-width:720px;border-radius:var(--radius-card)}
 }
-@media (min-width:768px) and (max-width:1279px){
-  .bc-grid{grid-template-columns:minmax(0,1fr) 250px}
-  .vu-rail{display:none}
-  .script .who{display:none}
-  .side-rail .vu-mini{display:grid}
-}
-.vu-mini{display:none;gap:10px;padding:16px 20px;border-radius:var(--radius-card);background:var(--color-surface);border:1px solid var(--color-border)}
-.vu-mini .hvu{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}
-.vu-mini .lab{font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
-.vu-mini .bar{height:6px;border-radius:3px;background:var(--color-cream-faint);overflow:hidden}
-.vu-mini .bar i{display:block;height:100%;background:var(--reg,var(--color-register-telling));transition:width var(--dur-vu-ballistics) var(--ease-vu-ballistics)}
-@media (min-width:1280px){
-  .bc{padding:36px 40px 0}
-  .bc-grid{grid-template-columns:170px minmax(0,var(--measure-reading)) 300px;justify-content:space-between;gap:48px}
-  .script-head h1{font-size:2.6rem}
-}
-@media (min-width:1920px){
-  .bc-grid{grid-template-columns:220px minmax(0,var(--measure-reading)) 340px;justify-content:center;gap:120px}
-  .vu .col,.vu .scale{height:320px}
-}
+@media (min-width:1920px){.below{max-width:1420px}}
 </style>
 </head>
-<body data-onair="true">
+<body class="faceplate-page" data-onair="false">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="g-repertory" viewBox="0 0 24 24"><path d="M6 3.5h12a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5Z"/><path d="M8 8h3M8 12h8M8 15.5h6"/></symbol>
 <symbol id="g-broadcast" viewBox="0 0 24 24"><path d="M3 12h2.5l1.6-4 2 9 2.1-12 2 14 2-10 1.4 5 1-2H21"/></symbol>
@@ -326,157 +375,84 @@ body[data-state="first-run"] .script .live,body[data-state="warming"] .script .l
   <nav class="tabs" aria-label="Rooms"><a href="repertory.html">Repertory<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html" aria-current="page">Broadcast<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html">Studio<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html">Seal<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
   <div class="right"><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a><button class="keycap" type="button" data-open-shortcuts aria-label="Keyboard shortcuts">?</button></div>
 </header>
-<main class="room bc" id="main" data-realm="cave">
-  <div class="sheet-top"><span class="grab" aria-hidden="true"></span><a class="btn icon" href="repertory.html" aria-label="Minimise the player" style="border:none"><svg class="glyph" aria-hidden="true"><use href="#g-chev"/></svg></a><p class="eyebrow num">514 · No. 001</p><button class="btn text" type="button" data-open-bp aria-haspopup="dialog">Bookplate</button></div>
-  <div class="bc-grid">
-    <aside class="vu-rail" aria-label="Levels">
-      <div class="vu" role="img" aria-label="Voice level in range, speech; music silent.">
-        <div class="scale" aria-hidden="true"><span style="bottom:100%">0</span><span style="bottom:75%">-10</span><span style="bottom:50%">-20</span><span style="bottom:25%">-30</span><span style="bottom:0">-40</span></div>
-        <div class="m"><div class="col" data-vu="voice"><div class="band" style="bottom:42.5%;height:12.5%"></div><div class="fill"></div><div class="peak"></div></div><span class="lab">Voice</span></div>
-        <div class="m"><div class="col" data-vu="score"><div class="fill"></div></div><span class="lab">Music</span></div>
+<div class="phone-head"><svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z"/><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145"/><path class="live" d="M20 94 L100 94"/></svg><svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark"/></svg><span class="freq">AM <span class="num">514</span> kHz</span><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a></div>
+<main class="room bc2" id="main" data-realm="cave">
+  <section class="device" data-device aria-label="Dial, the radio, tuned to 514 No. 001">
+    <div class="dialwin" data-dialwin role="slider" tabindex="0" aria-label="Tuning dial. Drag the needle, or use the arrow keys to move between stations." aria-valuetext="514, No. 001, The Allegory of the Cave">
+  <svg viewBox="0 0 400 250" aria-hidden="true"><g class="dw-wave"><path class="w2"/><path class="w1"/><path class="w0"/></g><g class="dw-scale"></g><g class="dw-needle"></g><text class="dw-am" x="24" y="240">514 · 001</text></svg>
+  <span class="dw-sheen" aria-hidden="true"></span>
+</div>
+    <div class="station-line">
+      <p class="eyebrow num">514 · No. 001 · about 20 min</p>
+      <h1>The Allegory of the Cave</h1>
+      <p class="status" role="status" data-status></p>
+    </div>
+    <div class="glasspanel display">
+      <div class="instruments">
+  <div class="inst" title="Tuning eye: closes when a station is tuned"><svg class="mini-eye" viewBox="0 0 64 64" aria-hidden="true"><circle class="me-glass" cx="32" cy="32" r="28"/><path class="me-fan" data-eye d=""/><circle class="me-cap" cx="32" cy="32" r="10"/></svg><span class="il" data-eye-label>On station</span></div>
+  <div class="inst" data-engine-view="valve"><svg class="valve" viewBox="0 0 64 64" aria-hidden="true"><circle class="v-glow" cx="32" cy="40" r="20"/><path class="v-env" d="M22 56 V26 a10 10 0 0 1 20 0 V56"/><rect class="v-base" x="18" y="56" width="28" height="5" rx="2"/><path class="v-fil" d="M27 50 V37 l5 -7 l5 7 V50"/></svg><span class="il" data-valve-label>Voice ready</span></div>
+  <div class="inst" data-engine-view="gauge" hidden><svg class="gauge" viewBox="0 0 120 64" aria-hidden="true"><path class="g-arc" d="M21.9 34 A44 44 0 0 1 98.1 34"/><path class="g-slow" d="M21.9 34 A44 44 0 0 1 38 17.9"/><line class="g-tk" x1="21.9" y1="34" x2="27.1" y2="37"/><line class="g-tk rt" x1="38" y1="17.9" x2="41" y2="23.1"/><line class="g-tk" x1="60" y1="12" x2="60" y2="18"/><line class="g-tk" x1="82" y1="17.9" x2="79" y2="23.1"/><line class="g-tk" x1="98.1" y1="34" x2="92.9" y2="37"/><text class="g-lb" x="15" y="44">0</text><text class="g-lb" x="33" y="13">1×</text><text class="g-lb" x="60" y="8">2</text><text class="g-lb" x="87" y="13">3</text><text class="g-lb" x="105" y="44">4</text><line class="g-nd" x1="60" y1="56" x2="60" y2="18"/><circle class="g-cap" cx="60" cy="56" r="3.5"/></svg><span class="il" data-gauge-label>2.6× · GPU</span></div>
+  <div class="meters" aria-label="Loudness"><div class="mrow"><span>Voice</span><span class="mbar"><b></b><i data-m="voice"></i></span></div><div class="mrow"><span>Music</span><span class="mbar"><i data-m="music"></i></span></div><span class="il" data-meter-label><span class="pip eye" aria-hidden="true"></span>Loudness: voice steady</span></div>
+</div>
+      <div class="devnote" data-devnote aria-live="polite"></div>
+      <div class="readalong" data-readalong>
+        <p class="ra-who"><span data-ra-who>Glaucon</span><span style="display:flex;gap:14px"><button class="btn text" type="button" data-open-script style="min-height:28px;padding:0;font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-glass-amber)">Script</button><button class="btn text" type="button" data-open-bp style="min-height:28px;padding:0;font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-glass-amber)">Bookplate</button></span></p>
+        <div class="ra-lines"><p class="ra prev"></p><p class="ra live"></p><p class="ra next"></p></div>
+        <button class="ra-open" type="button" data-open-script-2>Open the full script</button>
       </div>
-      <p class="inspec" data-not="first-run warming offline error paused"><span class="pip eye" aria-hidden="true"></span>Voice level in range</p>
-      <p class="inspec" data-not="first-run warming offline error">Music: silent under dialogue</p>
-      <div class="legend" aria-label="What the colours mean"><span><i style="background:var(--color-register-telling)"></i>Narration</span><span><i style="background:var(--color-register-speaking)"></i>Speech</span><span><i style="background:var(--color-register-letter)"></i>Letter or verse</span></div>
-    </aside>
-
-    <article class="script-col">
-      <header class="script-head">
-        <p class="eyebrow num desk-only">514 · No. 001 · about 20 min</p>
-        <h1>The Allegory of the Cave</h1>
-        <p class="by">Plato, Republic VII. Translated by Benjamin Jowett.</p>
-        <p class="status" role="status" data-when="playing"><span class="lamp" aria-hidden="true"></span><span><b>On air.</b> Playing a recording Dial made in advance from Jowett's words. Nothing is made or sent while you listen.</span></p>
-        <p class="status" role="status" data-when="rendering"><span class="lamp" aria-hidden="true"></span><span><b>On air.</b> Your device is making the recording just ahead of you: line <span class="num">64</span> of <span class="num">118</span>.</span></p>
-        <p class="status" role="status" data-when="paused"><span class="lamp off" aria-hidden="true"></span><span>Paused at <span class="num">01:27</span>. Line <span class="num">11</span> of <span class="num">118</span>.</span></p>
-        <p class="status" role="status" data-when="rendered"><span class="pip eye" aria-hidden="true" style="margin-top:6px"></span><span><b>Made on this device.</b> All <span class="num">118</span> lines, <span class="num">20:12</span>. Nothing was sent anywhere.</span></p>
-      </header>
-
-      <section class="panel" data-when="first-run" aria-labelledby="fr-h">
-        <h2 id="fr-h">Tune in</h2>
-        <p>Plays at once: Dial made this recording in advance, from Jowett's words and nothing else. Or your device can make its own copy as you listen.</p>
-        <div class="row"><button class="btn" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-play"/></svg>Tune in</button><button class="btn quiet" type="button">Make it on this device</button></div>
-        <p class="muted" style="font-size:.84rem">Making it here downloads the voice once, about <span class="num">115</span> MB. Tune in needs no download.</p>
-      </section>
-
-      <section class="panel" data-when="warming" aria-labelledby="wa-h" role="status">
-        <div class="row"><svg class="standing" viewBox="0 0 120 36" aria-hidden="true"><path class="n2" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/><path class="n1" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/></svg><h2 id="wa-h">Getting the voice ready</h2></div>
-        <div class="meter-line" aria-hidden="true"><i style="width:42%"></i></div>
-        <p><span class="num">48.2</span> of <span class="num">114.6</span> MB. It downloads once, from dial.voidvision.org, and then stays on this device. The first line plays as soon as it is ready.</p>
-        <button class="btn quiet" type="button">Stop, and play Dial's recording instead</button>
-      </section>
-
-      <section class="panel" data-when="slow" aria-labelledby="sl-h">
-        <h2 id="sl-h">This device makes the recording slower than it plays</h2>
-        <p>It makes <span class="num">0.6</span> seconds of audio each second, so listening now would stop and start. Making the whole work first takes about <span class="num">34</span> min; leave this page open while it does.</p>
-        <div class="row"><button class="btn" type="button">Play Dial's recording</button><button class="btn quiet" type="button">Make it first, then play</button></div>
-      </section>
-
-      <section class="panel" data-when="offline" aria-labelledby="of-h">
-        <h2 id="of-h">You are offline, and the voice is not on this device yet</h2>
-        <p>The voice downloads once (about <span class="num">115</span> MB). Connect once to fetch it; after that, this work plays with no connection. The words below are saved and readable now.</p>
-        <button class="btn quiet" type="button">Try again</button>
-      </section>
-
-      <section class="panel" data-when="error" aria-labelledby="er-h" role="alert">
-        <h2 id="er-h">Making the recording stopped at line 64</h2>
-        <p>Your browser stopped the graphics chip that runs the voice. Lines 1 to 63 are kept. Resume, and Dial carries on in a slower mode, about three times slower on this device.</p>
-        <div class="row"><button class="btn" type="button">Resume from line 64</button><button class="btn quiet" type="button">Play Dial's recording</button></div>
-      </section>
-
-      <section class="panel phone-only" data-when="rendered" aria-labelledby="in-h">
-        <h2 id="in-h">Add Dial to your Home Screen</h2>
-        <ol class="steps"><li>In Safari, tap Share: the square with an arrow pointing up.</li><li>Scroll down and tap Add to Home Screen.</li><li>Tap Add.</li></ol>
-        <p>From the Home Screen, Dial keeps your saved works and shows lock-screen controls. Browsers that offer an install prompt show an Install button here instead.</p>
-        <div class="row"><button class="btn quiet" type="button">Not now</button></div>
-      </section>
-
-      <div class="script-scroll">
-      <div class="script" lang="en" id="script">
-        <p><span class="who">Socrates</span><span class="past">And now, <span class="tag">I said</span>, let me show in a figure how far our nature is enlightened or unenlightened:&mdash;Behold! human beings living in a underground den, which has a mouth open towards the light and reaching all along the den; here they have been from their childhood, and have their legs and necks chained so that they cannot move, and can only see before them, being prevented by the chains from turning round their heads. Above and behind them a fire is blazing at a distance, and between the fire and the prisoners there is a raised way; and you will see, if you look, a low wall built along the way, like the screen which marionette players have in front of them, over which they show the puppets.</span></p>
-        <p><span class="who">Glaucon</span>I see.</p>
-        <p><span class="who">Socrates</span>And do you see, <span class="tag">I said</span>, men passing along the wall carrying all sorts of vessels, and statues and figures of animals made of wood and stone and various materials, which appear over the wall? Some of them are talking, others silent.</p>
-        <p><span class="who">Glaucon</span>You have shown me a strange image, and they are strange prisoners.</p>
-        <p><span class="who">Socrates</span>Like ourselves, <span class="tag">I replied</span>; and they see only their own shadows, or the shadows of one another, which the fire throws on the opposite wall of the cave?</p>
-        <p><span class="who">Glaucon</span>True, <span class="tag">he said</span>; <span class="live" aria-current="true">how could they see anything but the shadows if they were never allowed to move their heads?</span></p>
-        <p><span class="who">Socrates</span>And of the objects which are being carried in like manner they would only see the shadows?</p>
-        <p><span class="who">Glaucon</span>Yes, <span class="tag">he said</span>.</p>
-        <p><span class="who">Socrates</span>And if they were able to converse with one another, would they not suppose that they were naming what was actually before them?</p>
-        <p><span class="who">Glaucon</span>Very true.</p>
-        <p><span class="who">Socrates</span>And suppose further that the prison had an echo which came from the other side, would they not be sure to fancy when one of the passers-by spoke that the voice which they heard came from the passing shadow?</p>
-        <p><span class="who">Glaucon</span>No question, <span class="tag">he replied</span>.</p>
-        <p><span class="who">Socrates</span>To them, <span class="tag">I said</span>, the truth would be literally nothing but the shadows of the images.</p>
-        <p><span class="who">Glaucon</span>That is certain.</p>
+    </div>
+    <div class="devactions" data-devactions></div>
+    <div class="dev-ribbon">
+      <svg class="ribbon" data-ribbon data-played="87" data-rendered="99999" preserveAspectRatio="none" role="slider" tabindex="0" aria-label="Position in the work. Drag to move, or use J and L."></svg>
+      <div class="times timecode"><b data-t-el>01:27</b><span data-t-rem>-18:45</span></div>
+    </div>
+    <div class="controls">
+      <div class="knob" data-knob="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Volume</span></div>
+      <div class="keys" role="group" aria-label="Transport">
+        <button class="key" type="button" aria-label="Previous line"><svg class="glyph" aria-hidden="true"><use href="#g-prev"/></svg><span>Line</span></button>
+        <button class="key big" type="button" data-play aria-pressed="true"><svg class="glyph" aria-hidden="true"><use href="#g-pause"/></svg><span data-play-label>Pause</span></button>
+        <button class="key" type="button" aria-label="Next line"><svg class="glyph" aria-hidden="true"><use href="#g-next"/></svg><span>Line</span></button>
       </div>
-      </div>
-    </article>
-
-    <aside class="side-rail" aria-label="This work">
-      <section class="chapter-card" aria-labelledby="cc-h">
-        <p class="eyebrow num">514 · No. 001</p>
-        <h2 id="cc-h">The Allegory of the Cave</h2>
-        <p class="now-line" data-not="first-run warming offline"><span class="muted">Now:</span> Glaucon, speaking</p>
-        <dl><dt>Line</dt><dd data-cc-line>11 of 118</dd><dt>Time</dt><dd data-cc-time>01:27 of 20:12</dd><dt>Voices</dt><dd>George, Lewis</dd></dl>
-      </section>
-      <div class="vu-mini" aria-label="Levels">
-        <div class="hvu"><span class="lab">Voice</span><span class="bar"><i data-hvu="voice" style="width:62%"></i></span><span class="lab">Music</span><span class="bar"><i data-hvu="score" style="width:0"></i></span></div>
-        <p class="inspec"><span class="pip eye" aria-hidden="true"></span>Voice level in range</p>
-      </div>
-      <section class="keepcard" aria-labelledby="kc-h">
-        <h2 id="kc-h">Keep this work</h2>
-        <div class="kc" data-save-slot></div>
-        <div class="kc"><h3>Download the file</h3><p>A WAV file in your downloads, <span class="num">58.2</span> MB, to play in any app or keep. Its tags carry the Bookplate. A smaller M4A file comes later.</p><a class="btn quiet" href="#"><svg class="glyph" aria-hidden="true"><use href="#g-file"/></svg>Download the file</a></div>
-      </section>
-      <details class="drill bookplate" id="bookplate"><summary>Bookplate</summary><div class="drill-body"><dl>
-        <dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1497</span>, translated by Benjamin Jowett. From &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo;</dd>
-        <dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Published <span class="num">1871</span>; Jowett died <span class="num">1893</span>.</dd>
-        <dt>Corrections</dt><dd>&ldquo;a underground&rdquo; is spoken &ldquo;an underground&rdquo;; Glaucon is spoken GLAW-kon. The page keeps what Jowett printed.</dd>
-        <dt>Also</dt><dd><a href="https://librivox.org/platos_republic/" rel="noopener">A human reading on LibriVox</a></dd>
-      </dl></div></details>
-    </aside>
-  </div>
-
-  <div class="dock" aria-label="Player">
-    <div class="hvu"><span class="lab">Voice</span><span class="bar"><i data-hvu="voice" style="width:62%"></i></span><span class="lab">Music</span><span class="bar"><i data-hvu="score" style="width:0"></i></span></div>
-    <svg class="ribbon" data-ribbon data-played="87" data-rendered="99999" preserveAspectRatio="none" role="img" aria-label="Position: 1 minute 27 of 20 minutes 12"></svg>
-    <div class="times timecode"><b>01:27</b><span>-18:45</span></div>
-    <div class="ctrl">
-      <button class="btn icon" type="button" aria-label="Previous line"><svg class="glyph" aria-hidden="true"><use href="#g-prev"/></svg></button>
-      <button class="btn icon" type="button" aria-label="Back 10 seconds"><svg class="glyph" aria-hidden="true"><use href="#g-back"/></svg></button>
-      <button class="btn icon play" type="button" aria-label="Pause" id="pp"><svg class="glyph" aria-hidden="true"><use href="#g-pause"/></svg></button>
-      <button class="btn icon" type="button" aria-label="Forward 10 seconds"><svg class="glyph" aria-hidden="true"><use href="#g-fwd"/></svg></button>
-      <button class="btn icon" type="button" aria-label="Next line"><svg class="glyph" aria-hidden="true"><use href="#g-next"/></svg></button>
+      <div class="knob" data-knob="tune" role="slider" tabindex="0" aria-label="Tune" aria-valuetext="Turn to move between stations"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Tune</span></div>
     </div>
     <div class="keep-row"><span data-save-slot-phone style="display:contents"></span><a class="btn quiet" href="#"><svg class="glyph" aria-hidden="true"><use href="#g-file"/></svg>Download the file</a></div>
+  </section>
+
+  <div class="below">
+    <section class="card" data-when="rendered" aria-labelledby="in-h">
+      <h2 id="in-h">Add Dial to your Home Screen</h2>
+      <ol class="steps" style="margin:10px 0"><li>In Safari, tap Share: the square with an arrow pointing up.</li><li>Scroll down and tap Add to Home Screen.</li><li>Tap Add.</li></ol>
+      <p class="muted" style="font-size:.88rem">From the Home Screen, Dial keeps your saved works and shows lock-screen controls. Browsers that offer an install prompt show an Install button here instead.</p>
+    </section>
+    <section class="card" aria-labelledby="kc-h">
+      <h2 id="kc-h">Keep this work</h2>
+      <div class="kc" data-save-slot></div>
+      <div class="kc"><h3>Download the file</h3><p>A WAV file in your downloads, <span class="num">58.2</span> MB, to play in any app or keep. Its tags carry the Bookplate. A smaller M4A file comes later.</p><a class="btn quiet" href="#"><svg class="glyph" aria-hidden="true"><use href="#g-file"/></svg>Download the file</a></div>
+    </section>
+    <section class="card" aria-labelledby="bpc-h">
+      <h2 id="bpc-h">Bookplate</h2>
+      <dl class="label-dl" style="display:grid;gap:2px;margin:6px 0 0;font-size:.88rem" data-bp-inline></dl>
+    </section>
   </div>
 </main>
-<div class="bp-sheet" id="bp" data-when="bookplate">
+
+<div class="sheet" id="bp" data-when="bookplate">
   <div class="panel-s" role="dialog" aria-modal="true" aria-labelledby="bp-h">
     <span class="grab" aria-hidden="true"></span>
-    <div class="top"><h2 id="bp-h">Bookplate</h2><button class="btn icon" type="button" data-close-bp aria-label="Close the Bookplate"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button></div>
+    <div class="top"><h2 id="bp-h">Bookplate</h2><button class="btn icon" type="button" data-close aria-label="Close the Bookplate"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button></div>
     <p class="eyebrow num" style="margin-top:6px">514 · No. 001 · The Allegory of the Cave</p>
-    <dl>
-      <dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1497</span>, The Republic, translated by Benjamin Jowett. Performed from &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo; Jowett's introduction and the rest of the Republic are not performed.</dd>
-      <dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Jowett's translation was published in <span class="num">1871</span>, and he died in <span class="num">1893</span>.</dd>
-      <dt>Voices</dt><dd>Socrates, George. Glaucon, Lewis. The voice is Kokoro-82M, an open speech model. AI-voiced; the words are Jowett's, exactly as printed.</dd>
-      <dt>Corrections</dt><dd>&ldquo;a underground&rdquo; is spoken &ldquo;an underground&rdquo;; Glaucon is spoken GLAW-kon. The page keeps what Jowett printed.</dd>
-      <dt>Direction</dt><dd>Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone.</dd>
-      <dt>Also</dt><dd>Prefer a human reader? <a href="https://librivox.org/platos_republic/" rel="noopener">LibriVox has a volunteer reading of Jowett's Republic</a>.</dd>
-    </dl>
+    <dl data-bp-sheet></dl>
+  </div>
+</div>
+<div class="sheet" id="script-sheet" data-when="script">
+  <div class="panel-s" role="dialog" aria-modal="true" aria-labelledby="sc-h">
+    <span class="grab" aria-hidden="true"></span>
+    <div class="top"><h2 id="sc-h">The full script</h2><button class="btn icon" type="button" data-close aria-label="Close the script"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button></div>
+    <p class="eyebrow" style="margin:6px 0 14px">Jowett's words, exactly as printed. Tap a line to play from it.</p>
+    <div class="script" lang="en" data-script></div>
   </div>
 </div>
 <nav class="tabbar" aria-label="Rooms"><a href="repertory.html"><svg class="glyph" aria-hidden="true"><use href="#g-repertory"/></svg><span>Repertory</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html" aria-current="page"><svg class="glyph" aria-hidden="true"><use href="#g-broadcast"/></svg><span>Broadcast</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html"><svg class="glyph" aria-hidden="true"><use href="#g-seal"/></svg><span>Seal</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
-<footer class="playerbar" data-realm="cave" aria-label="Player">
-  <div class="now"><span class="lamp" aria-hidden="true"></span><div><b>The Allegory of the Cave</b><span><span class="num">514 · No. 001</span> · Plato, translated by Benjamin Jowett</span></div></div>
-  <div class="transport">
-    <button class="btn icon" type="button" aria-label="Previous line ([)"><svg class="glyph" aria-hidden="true"><use href="#g-prev"/></svg></button>
-    <button class="btn icon" type="button" aria-label="Back 10 seconds (J)"><svg class="glyph" aria-hidden="true"><use href="#g-back"/></svg></button>
-    <button class="btn icon play" type="button" aria-label="Pause (space)"><svg class="glyph" aria-hidden="true"><use href="#g-pause"/></svg></button>
-    <button class="btn icon" type="button" aria-label="Forward 10 seconds (L)"><svg class="glyph" aria-hidden="true"><use href="#g-fwd"/></svg></button>
-    <button class="btn icon" type="button" aria-label="Next line (])"><svg class="glyph" aria-hidden="true"><use href="#g-next"/></svg></button>
-  </div>
-  <div class="ribbon-wrap"><svg class="ribbon" data-ribbon data-played="87" data-rendered="99999" preserveAspectRatio="none" role="img" aria-label="Position: 1 minute 27 of 20 minutes 12"></svg></div>
-  <span class="timecode"><b>01:27</b> / 20:12</span>
-</footer>
 <div class="dialog-scrim" id="shortcuts" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="kb-h">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 id="kb-h" style="font-size:1.4rem">Keyboard</h2><button class="btn icon" type="button" data-close aria-label="Close"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button></div>
   <dl class="keys">
@@ -490,33 +466,280 @@ body[data-state="first-run"] .script .live,body[data-state="warming"] .script .l
     <dt><span class="keycap">Esc</span></dt><dd>Close a sheet or dialog</dd>
   </dl></div></div>
 <script>
-window.MOCK_STATES=[["first-run","First visit"],["playing","Playing Dial's recording"],["saving","Saving for offline"],["saved","Saved for offline"],["rendering","Made on this device, ahead"],["warming","Getting the voice ready"],["slow","Device too slow"],["paused","Paused"],["rendered","Made on this device, finished"],["offline","Offline, no voice"],["error","Making it stopped"],["bookplate","Bookplate open (phone)"]];
-(()=>{const live=["playing","saving","saved","rendering","slow","rendered","bookplate"];let timer=0;
-  const DL='<svg class="glyph" aria-hidden="true"><use href="#g-down"/></svg>';
-  const SAVE={
-    idle:['<h3>Save for offline</h3><p>Keeps this work playable in Dial with no connection. It stays inside Dial on this device. <span class="num">7.3</span> MB: the recording Dial made in advance, with no voice download.</p><button class="btn quiet" type="button">'+DL+'Save for offline</button>',
-          '<button class="btn quiet" type="button">'+DL+'Save for offline</button>'],
-    saving:['<h3>Save for offline</h3><p class="ok">Saving&hellip; <span class="num">3.1</span> of <span class="num">7.3</span> MB</p><span class="bar"><i style="width:42%"></i></span><button class="btn text" type="button">Cancel</button>',
-          '<span class="state">Saving&hellip; <span class="num">42</span>%</span>'],
-    saved:['<h3>Save for offline</h3><p class="ok"><span class="pip eye" aria-hidden="true"></span>Saved for offline</p><p>Plays in Dial with no connection. <span class="num">7.3</span> MB on this device.</p><button class="btn text" type="button">Remove</button>',
-          '<span class="state"><span class="pip eye" aria-hidden="true"></span>Saved for offline</span>']};
-  const renderSave=(s)=>{const k=s==="saving"?"saving":(s==="saved"||s==="offline")?"saved":"idle";document.querySelectorAll("[data-save-slot]").forEach(e=>e.innerHTML=SAVE[k][0]);document.querySelectorAll("[data-save-slot-phone]").forEach(e=>e.innerHTML=SAVE[k][1]);};
-  const bp=document.getElementById("bp");
-  document.querySelectorAll("[data-open-bp]").forEach(b=>b.addEventListener("click",()=>{bp.hidden=false;bp.querySelector("[data-close-bp]").focus();}));
-  bp.addEventListener("click",e=>{if(e.target===bp||e.target.closest("[data-close-bp]"))bp.hidden=true;});
-  const setLevels=(v,s)=>{document.querySelectorAll('[data-vu="voice"] .fill').forEach(e=>e.style.height=v+"%");document.querySelectorAll('[data-vu="voice"] .peak').forEach(e=>e.style.bottom=Math.min(100,v+6)+"%");document.querySelectorAll('[data-vu="score"] .fill').forEach(e=>e.style.height=s+"%");document.querySelectorAll('[data-hvu="voice"]').forEach(e=>e.style.width=v+"%");document.querySelectorAll('[data-hvu="score"]').forEach(e=>e.style.width=s+"%");};
-  document.documentElement.style.setProperty("--reg","var(--color-register-speaking)");
-  window.onMockState=(s)=>{renderSave(s);const fr=s==="first-run";document.querySelector("[data-cc-line]").textContent=fr?"1 of 118":"11 of 118";document.querySelector("[data-cc-time]").textContent=fr?"00:00 of 20:12":"01:27 of 20:12";setTimeout(centre,0);document.querySelectorAll(".timecode b").forEach(b=>b.textContent=fr?"00:00":"01:27");document.querySelectorAll(".dock .times span").forEach(b=>b.textContent=fr?"-20:12":"-18:45");const on=live.includes(s)&&s!=="rendered";document.body.dataset.onair=on?"true":"false";
-    document.querySelectorAll(".playerbar .lamp").forEach(l=>l.classList.toggle("off",!on));
-    for(const r of document.querySelectorAll("[data-ribbon]")){r.dataset.rendered=(s==="rendering"||s==="error")?"560":(s==="warming"||s==="offline")?"0":"99999";r.dataset.played=s==="first-run"?"0":"87";}
-    document.querySelectorAll(".play use").forEach(u=>u.setAttribute("href",on?"#g-pause":"#g-play"));
-    if(window.drawRibbons)drawRibbons();
-    clearInterval(timer);
-    if(!on){setLevels(0,0);return;}
-    setLevels(48,0);
-    if(!window.DIAL_REDUCED)timer=setInterval(()=>setLevels(44+Math.random()*9,0),300);};
-  const centre=()=>{if(document.body.dataset.state==="first-run"){document.querySelectorAll(".script-scroll").forEach(e=>e.scrollTop=0);return;}const sc=document.querySelector('.script-scroll'),lv=document.querySelector('.script .live');if(sc&&lv){sc.scrollTop+=lv.getBoundingClientRect().top-sc.getBoundingClientRect().top-sc.clientHeight*0.4;}};addEventListener('load',centre);setTimeout(centre,50);
-  window.onMockSpace=()=>setMockState(document.body.dataset.state==="paused"?"playing":"paused");
+// Dial device: spring physics for the needle, knobs, eye, valve, gauge, meters
+// and read-along; the living AM wave in the dial window. Ported from sadhana:
+// the wave loop follows VoiceWave.tsx (dt-based rAF clamped at 0.1 s, paused
+// while the tab is hidden, sin(pi x) edge envelope, ambient drift mixed with a
+// live level), the tuning convergence follows TanpuraViz.tsx (lines converge
+// as alignment rises), and the springs are a pure-JS Hooke integrator in
+// place of framer-motion (BrandLoader.tsx / Logo.tsx presets: kan 1000/30 is
+// Dial's needle-drop).
+(function () {
+  const q = new URLSearchParams(location.search);
+  const mq = matchMedia("(prefers-reduced-motion: reduce)");
+  const DD = (window.DialDevice = { reduce: mq.matches || q.has("still") });
+  mq.addEventListener("change", (e) => (DD.reduce = e.matches || q.has("still")));
+  const tokenSpring = (name, fb) => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim().split(/\s+/).map(Number);
+    return v.length === 3 && v.every((n) => n > 0) ? v : fb;
+  };
+  DD.P = {
+    swing: tokenSpring("--spring-needle-swing", [220, 11, 1.1]),
+    drop: tokenSpring("--spring-needle-drop", [1000, 30, 1]),
+    drift: tokenSpring("--spring-dial-drift", [80, 20, 1]),
+    warm: tokenSpring("--spring-valve-warm", [150, 12, 1.2]),
+    vu: tokenSpring("--spring-vu", [400, 32, 1]),
+    follow: tokenSpring("--spring-follow", [900, 60, 1]),
+  };
+
+  class Spring {
+    constructor(p, x = 0) { this.p = p; this.x = x; this.v = 0; this.t = x; }
+    use(p) { this.p = p; return this; }
+    to(t) { this.t = t; return this; }
+    step(dt) {
+      if (DD.reduce) { this.x = this.t; this.v = 0; return; }
+      const [k, c, m] = this.p, n = Math.max(1, Math.ceil(dt / (1 / 240))), h = dt / n;
+      for (let i = 0; i < n; i++) { const a = (-k * (this.x - this.t) - c * this.v) / m; this.v += a * h; this.x += this.v * h; }
+    }
+    get resting() { return Math.abs(this.x - this.t) < 1e-3 && Math.abs(this.v) < 1e-3; }
+  }
+  DD.Spring = Spring;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.append(e); return e; };
+  const CX = 200, CY = 236, R = 176, MAXA = 68;
+  const pol = (deg, r) => { const a = (deg * Math.PI) / 180; return [CX + r * Math.sin(a), CY - r * Math.cos(a)]; };
+
+  DD.mount = function (root, o) {
+    const stations = o.stations;
+    const win = root.querySelector("[data-dialwin]");
+    const svg = win.querySelector("svg");
+    const gScale = svg.querySelector(".dw-scale"), gNeedle = svg.querySelector(".dw-needle");
+    const w = [...svg.querySelectorAll(".dw-wave path")];
+    const eyeFan = root.querySelector("[data-eye]");
+    const valveFil = root.querySelector(".v-fil"), valveGlow = root.querySelector(".v-glow");
+    const gaugeNd = root.querySelector(".g-nd");
+    const mVoice = root.querySelector('[data-m="voice"]'), mMusic = root.querySelector('[data-m="music"]');
+    const api = { onTune: o.onTune || (() => {}), stations };
+
+    // ---- the scale: tick density follows the rendered width (the 1920 rule)
+    function drawScale() {
+      gScale.innerHTML = "";
+      const px = win.clientWidth || 400, step = px > 900 ? 1 : px > 520 ? 2 : 2.5;
+      el("path", { class: "arc", d: `M${pol(-MAXA, R).join(" ")} A${R} ${R} 0 0 1 ${pol(MAXA, R).join(" ")}` }, gScale);
+      for (let a = -MAXA; a <= MAXA + 0.01; a += step) {
+        const maj = Math.abs(a % 10) < 0.01;
+        const [x1, y1] = pol(a, R), [x2, y2] = pol(a, R - (maj ? 10 : 5));
+        el("line", { class: "tk" + (maj ? " maj" : ""), x1, y1, x2, y2 }, gScale);
+      }
+      stations.forEach((s, i) => {
+        const [x1, y1] = pol(s.a, R + 4), [x2, y2] = pol(s.a, R - 16), [lx, ly] = pol(s.a, R - 30);
+        el("line", { class: "tk " + (s.prep ? "prep" : "st"), x1, y1, x2, y2 }, gScale);
+        const t = el("text", { class: "lb" + (s.prep ? " prep" : ""), x: lx, y: ly + 4, "data-i": i }, gScale);
+        t.textContent = s.label ?? s.no;
+      });
+    }
+    // ---- needle
+    el("line", { class: "nd-tail", x1: CX, y1: CY + 2, x2: CX, y2: CY + 11 }, gNeedle);
+    el("line", { class: "nd", x1: CX, y1: CY, x2: CX, y2: CY - R - 8 }, gNeedle);
+    el("circle", { class: "nd-cap", cx: CX, cy: CY, r: 10 }, gNeedle); el("circle", { class: "nd-hub", cx: CX, cy: CY, r: 3 }, gNeedle);
+
+    const needle = new Spring(DD.P.swing, stations[o.start || 0].a);
+    const align = (a) => { let best = 0; for (const s of stations) if (!s.prep) best = Math.max(best, 1 - Math.min(1, Math.abs(a - s.a) / 9)); return best; };
+    const eye = new Spring(DD.P.vu, 60), power = new Spring(DD.P.warm, o.power ?? 1);
+    const valve = new Spring(DD.P.warm, 0), gauge = new Spring(DD.P.vu, 0);
+    const mv = new Spring(DD.P.vu, 0), mm = new Spring(DD.P.vu, 0);
+    let tuned = o.start || 0, playing = !!o.playing, level = null, levelSim = true, silence = false, engine = o.engine || "valve", wave = { t: 1.3 };
+    api.needle = needle;
+
+    function tune(i, preset) {
+      i = Math.max(0, Math.min(stations.length - 1, i));
+      if (stations[i].prep) { // not on the air yet: swing to it, then settle back
+        needle.use(DD.P.swing).to(stations[i].a); setTimeout(() => tune(tuned), DD.reduce ? 0 : 520); return;
+      }
+      tuned = i; needle.use(preset || DD.P.swing).to(stations[i].a); api.onTune(i);
+      const am = svg.querySelector(".dw-am"); if (am) am.textContent = "514 · " + stations[i].no; // the readout follows the station
+      gScale.querySelectorAll(".lb").forEach((t) => t.classList.toggle("on", +t.dataset.i === i));
+    }
+    api.tune = tune;
+    api.tuned = () => tuned;
+    api.setPlaying = (b) => (playing = b);
+    api.setLevel = (v) => { level = v; levelSim = v == null; };
+    api.setSilence = (b) => (silence = b);
+    api.setPower = (v) => power.to(v); // 0 = cold, 1 = warm
+    api.setValve = (v) => valve.to(v);
+    api.setEngine = (mode) => { engine = mode; root.querySelectorAll("[data-engine-view]").forEach((e) => (e.hidden = !(mode === "both" || e.dataset.engineView === mode))); };
+    api.setSpeed = (x) => gauge.to(Math.max(0, Math.min(4, x)));
+
+    // ---- dragging the needle: follow the finger, fling, snap to the nearest station
+    const angleAt = (ev) => {
+      const r = win.getBoundingClientRect(), sx = 400 / r.width, sy = 250 / r.height, s = Math.max(sx, sy);
+      const x = (ev.clientX - r.left) * sx - CX, y = (ev.clientY - r.top) * sy - CY;
+      return Math.max(-MAXA, Math.min(MAXA, (Math.atan2(x, -y) * 180) / Math.PI));
+    };
+    const nearest = (a) => { let bi = tuned, bd = 1e9; stations.forEach((s, i) => { if (!s.prep && Math.abs(s.a - a) < bd) { bd = Math.abs(s.a - a); bi = i; } }); return bi; };
+    let drag = false;
+    win.addEventListener("pointerdown", (e) => { drag = true; win.setPointerCapture(e.pointerId); needle.use(DD.P.follow).to(angleAt(e)); });
+    win.addEventListener("pointermove", (e) => { if (drag) needle.to(angleAt(e)); });
+    const release = () => { if (!drag) return; drag = false; const proj = needle.x + needle.v * 0.16; tune(nearest(proj)); };
+    win.addEventListener("pointerup", release); win.addEventListener("pointercancel", release);
+    win.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === "ArrowUp") { e.preventDefault(); let j = tuned + 1; while (stations[j] && stations[j].prep) j++; if (stations[j]) tune(j); }
+      if (e.key === "ArrowLeft" || e.key === "ArrowDown") { e.preventDefault(); if (tuned > 0) tune(tuned - 1); }
+    });
+
+    // ---- knobs: turn by dragging around the centre, or with the arrow keys
+    root.querySelectorAll("[data-knob]").forEach((k) => {
+      const dial = k.querySelector(".kn-rot"), kind = k.dataset.knob;
+      const spring = new Spring(DD.P.follow, kind === "vol" ? 70 : 0);
+      let last = null, val = kind === "vol" ? 0.7 : 0;
+      const ang = (e) => { const r = k.querySelector(".kn-dial").getBoundingClientRect(); return (Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))) * 180) / Math.PI; };
+      const turn = (d) => {
+        if (kind === "vol") { val = Math.max(0, Math.min(1, val + d / 270)); spring.to(-135 + val * 270); k.setAttribute("aria-valuenow", Math.round(val * 100)); api.onVolume && api.onVolume(val); }
+        else { spring.to(spring.t + d); needle.use(DD.P.follow).to(Math.max(-MAXA, Math.min(MAXA, needle.t + d * 0.45))); }
+      };
+      spring.to(kind === "vol" ? -135 + val * 270 : 0); spring.x = spring.t;
+      k.addEventListener("pointerdown", (e) => { last = ang(e); k.setPointerCapture(e.pointerId); });
+      k.addEventListener("pointermove", (e) => { if (last == null) return; const a = ang(e); let d = a - last; if (d > 180) d -= 360; if (d < -180) d += 360; last = a; turn(d); });
+      const up = () => { if (last == null) return; last = null; if (kind === "tune") tune(nearest(needle.t)); };
+      k.addEventListener("pointerup", up); k.addEventListener("pointercancel", up);
+      k.addEventListener("keydown", (e) => {
+        if (kind === "vol" && /Arrow/.test(e.key)) { e.preventDefault(); turn(/Right|Up/.test(e.key) ? 13.5 : -13.5); }
+        if (kind === "tune" && /Arrow/.test(e.key)) { e.preventDefault(); spring.to(spring.t + (/Right|Up/.test(e.key) ? 30 : -30)); let j = tuned + (/Right|Up/.test(e.key) ? 1 : -1); while (stations[j] && stations[j].prep) j += /Right|Up/.test(e.key) ? 1 : -1; if (stations[j]) tune(j); }
+      });
+      k._spring = spring; k._dial = dial;
+    });
+    const knobs = [...root.querySelectorAll("[data-knob]")];
+
+    // ---- the living wave (VoiceWave's loop, TanpuraViz's convergence)
+    function drawWave(t, L, a) {
+      const x0 = 40, x1 = 360, y0 = 198, W = x1 - x0;
+      for (let li = 0; li < 3; li++) {
+        let d = "";
+        const off = li * (1 - a) * 1.7, fr = 9 + li * (1 - a) * 1.3;
+        for (let x = 0; x <= W; x += 3) {
+          const u = x / W, env = Math.sin(Math.PI * u);
+          const carrier = 0.16 + L * (0.62 + 0.38 * Math.sin(2 * Math.PI * u * 1.5 + 0.7 + t * 1.3));
+          const hiss = (1 - a) * 5 * Math.sin(x * 1.7 + t * 23 + li * 3) * Math.sin(x * 0.31 - t * 7);
+          const y = y0 + env * (19 * carrier * Math.sin(2 * Math.PI * fr * u - t * 2.4 + off) + hiss);
+          d += (x ? "L" : "M") + (x0 + x).toFixed(1) + " " + y.toFixed(1);
+        }
+        w[li].setAttribute("d", d);
+      }
+      w[1].style.opacity = String(0.08 + (1 - a) * 0.3); w[2].style.opacity = String(0.04 + (1 - a) * 0.22);
+    }
+    function eyePath(deg) { // the eye's shadow wedge: wide when off station, a hairline when tuned
+      const r = 28, c = 32, a0 = ((-90 + deg / 2) * Math.PI) / 180, a1 = ((270 - deg / 2) * Math.PI) / 180;
+      return `M${c} ${c} L${(c + r * Math.cos(a0)).toFixed(2)} ${(c + r * Math.sin(a0)).toFixed(2)} A${r} ${r} 0 1 1 ${(c + r * Math.cos(a1)).toFixed(2)} ${(c + r * Math.sin(a1)).toFixed(2)} Z`;
+    }
+    const simLevel = (t) => { const s = 0.55 + 0.22 * Math.sin(t * 7.1) + 0.14 * Math.sin(t * 12.7 + 1) + 0.09 * Math.sin(t * 3.3); return Math.max(0.05, Math.min(1, s)) * (Math.sin(t * 0.9) > -0.92 ? 1 : 0.05); };
+
+    let last = 0;
+    function frame(ms) {
+      const dt = last ? Math.min((ms - last) / 1000, 0.1) : 0.016; last = ms;
+      if (!document.hidden) {
+        if (!DD.reduce) wave.t += dt;
+        needle.step(dt);
+        const a = align(needle.x);
+        const L = silence || !playing ? 0 : level != null && !levelSim ? level : simLevel(wave.t);
+        eye.to(8 + (1 - a) * 110).step(dt); power.step(dt); valve.step(dt); gauge.step(dt);
+        mv.to(playing && !silence ? L * 100 * 0.9 : 0).step(dt); mm.to(0).step(dt);
+        gNeedle.setAttribute("transform", `rotate(${needle.x.toFixed(2)} ${CX} ${CY})`);
+        drawWave(wave.t, L * power.x, a);
+        if (eyeFan) { eyeFan.setAttribute("d", eyePath(Math.max(4, eye.x))); eyeFan.style.opacity = String(0.25 + 0.75 * Math.max(0, Math.min(1, power.x))); }
+        if (valveFil) { const g = Math.max(0, Math.min(1.2, valve.x)); const flick = g < 0.35 && !DD.reduce ? 0.6 + 0.4 * Math.sin(ms / 37) * Math.sin(ms / 91) : 1; valveFil.style.opacity = String(0.15 + 0.85 * Math.min(1, g) * flick); valveGlow.style.opacity = String(Math.min(1, g) * flick); }
+        if (gaugeNd) gaugeNd.setAttribute("transform", `rotate(${(-60 + gauge.x * 30).toFixed(2)} 60 56)`);
+        if (mVoice) mVoice.style.width = Math.max(0, Math.min(100, mv.x)).toFixed(1) + "%";
+        if (mMusic) mMusic.style.width = Math.max(0, mm.x).toFixed(1) + "%";
+        for (const k of knobs) { k._spring.step(dt); k._dial.style.transform = `rotate(${k._spring.x.toFixed(2)}deg)`; }
+        if (api.onFrame) api.onFrame(dt, a);
+      }
+      requestAnimationFrame(frame);
+    }
+    drawScale();
+    addEventListener("resize", drawScale);
+    tune(tuned, DD.P.drop);
+    requestAnimationFrame(frame);
+
+    // ---- read-along: the new line rises into place on the needle-drop spring
+    const ra = root.querySelector("[data-readalong]");
+    if (ra && o.lines) {
+      const P = ra.querySelector(".prev"), L = ra.querySelector(".live"), N = ra.querySelector(".next"), who = ra.querySelector("[data-ra-who]");
+      const sp = new Spring(DD.P.drop, 0);
+      let idx = o.line || 0;
+      const fmt = (s) => s.replace(/\b(I said|I replied|he said|he replied)\b/g, '<span class="tag">$1</span>');
+      api.setLine = (i) => {
+        idx = Math.max(0, Math.min(o.lines.length - 1, i));
+        P.innerHTML = idx > 0 ? fmt(o.lines[idx - 1].t) : "&nbsp;";
+        L.innerHTML = fmt(o.lines[idx].t);
+        N.innerHTML = idx < o.lines.length - 1 ? fmt(o.lines[idx + 1].t) : "&nbsp;";
+        if (who) who.textContent = o.lines[idx].s;
+        sp.x = 18; sp.v = 0; sp.to(0);
+      };
+      api.line = () => idx;
+      const prev = api.onFrame;
+      api.onFrame = (dt, a) => { prev && prev(dt, a); sp.step(dt); const y = sp.x; [P, L, N].forEach((e, j) => { e.style.transform = `translateY(${(y * (j + 1) * 0.5).toFixed(2)}px)`; e.style.opacity = j === 1 ? String(1 - Math.min(0.6, Math.abs(y) / 30)) : ""; }); };
+      api.setLine(idx);
+    }
+    return api;
+  };
+})();
+
+</script>
+<script>
+window.MOCK_STATES=[["first-run","First visit"],["playing","Playing Dial's recording"],["saving","Saving for offline"],["saved","Saved for offline"],["device-test","Testing this device"],["warming","Getting the voice ready"],["countdown","Starting in 5:03"],["rendering","Made on this device, ahead"],["holding","Holding at a paragraph"],["no-webgpu","No WebGPU"],["slow","Slow device"],["paused","Paused"],["rendered","Made on this device, finished"],["offline","Offline, no voice"],["error","Making it stopped"],["bookplate","Bookplate open"],["script","Full script open"]];
+(()=>{
+const LINES=[{"t":"And now, I said, let me show in a figure how far our nature is enlightened or unenlightened:&mdash;Behold!","p":0,"s":"Socrates"},{"t":"human beings living in a underground den, which has a mouth open towards the light and reaching all along the den; here they have been from their childhood, and have their legs and necks chained so that they cannot move, and can only see before them, being prevented by the chains from turning round their heads.","p":0,"s":"Socrates"},{"t":"Above and behind them a fire is blazing at a distance, and between the fire and the prisoners there is a raised way; and you will see, if you look, a low wall built along the way, like the screen which marionette players have in front of them, over which they show the puppets.","p":0,"s":"Socrates"},{"t":"I see.","p":1,"s":"Glaucon"},{"t":"And do you see, I said, men passing along the wall carrying all sorts of vessels, and statues and figures of animals made of wood and stone and various materials, which appear over the wall?","p":2,"s":"Socrates"},{"t":"Some of them are talking, others silent.","p":2,"s":"Socrates"},{"t":"You have shown me a strange image, and they are strange prisoners.","p":3,"s":"Glaucon"},{"t":"Like ourselves, I replied; and they see only their own shadows, or the shadows of one another, which the fire throws on the opposite wall of the cave?","p":4,"s":"Socrates"},{"t":"True, he said; how could they see anything but the shadows if they were never allowed to move their heads?","p":5,"s":"Glaucon"},{"t":"And of the objects which are being carried in like manner they would only see the shadows?","p":6,"s":"Socrates"},{"t":"Yes, he said.","p":7,"s":"Glaucon"},{"t":"And if they were able to converse with one another, would they not suppose that they were naming what was actually before them?","p":8,"s":"Socrates"},{"t":"Very true.","p":9,"s":"Glaucon"},{"t":"And suppose further that the prison had an echo which came from the other side, would they not be sure to fancy when one of the passers-by spoke that the voice which they heard came from the passing shadow?","p":10,"s":"Socrates"},{"t":"No question, he replied.","p":11,"s":"Glaucon"},{"t":"To them, I said, the truth would be literally nothing but the shadows of the images.","p":12,"s":"Socrates"},{"t":"That is certain.","p":13,"s":"Glaucon"},{"t":"And now look again, and see what will naturally follow if the prisoners are released and disabused of their error.","p":14,"s":"Socrates"},{"t":"At first, when any of them is liberated and compelled suddenly to stand up and turn his neck round and walk and look towards the light, he will suffer sharp pains; the glare will distress him, and he will be unable to see the realities of which in his former state he had seen the shadows;","p":14,"s":"Socrates"},{"t":"and then conceive some one saying to him, that what he saw before was an illusion, but that now, when he is approaching nearer to being and his eye is turned towards more real existence, he has a clearer vision,&mdash;what will be his reply?","p":14,"s":"Socrates"},{"t":"And you may further imagine that his instructor is pointing to the objects as they pass and requiring him to name them,&mdash;will he not be perplexed?","p":14,"s":"Socrates"},{"t":"Will he not fancy that the shadows which he formerly saw are truer than the objects which are now shown to him?","p":14,"s":"Socrates"},{"t":"Far truer.","p":15,"s":"Glaucon"},{"t":"And if he is compelled to look straight at the light, will he not have a pain in his eyes which will make him turn away to take refuge in the objects of vision which he can see, and which he will conceive to be in reality clearer than the things which are now being shown to him?","p":16,"s":"Socrates"}];
+const BP='<dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1497</span>, The Republic, translated by Benjamin Jowett. Performed from &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo; Jowett\'s introduction and the rest of the Republic are not performed.</dd><dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Jowett\'s translation was published in <span class="num">1871</span>, and he died in <span class="num">1893</span>.</dd><dt>Voices</dt><dd>Socrates, George. Glaucon, Lewis. The voice is Kokoro-82M, an open speech model. AI-voiced; the words are Jowett\'s, exactly as printed.</dd><dt>Corrections</dt><dd>&ldquo;a underground&rdquo; is spoken &ldquo;an underground&rdquo;; Glaucon is spoken GLAW-kon. The page keeps what Jowett printed.</dd><dt>Direction</dt><dd>Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone.</dd><dt>Also</dt><dd>Prefer a human reader? <a href="https://librivox.org/platos_republic/" rel="noopener">LibriVox has a volunteer reading</a>.</dd>';
+document.querySelectorAll("[data-bp-sheet],[data-bp-inline]").forEach(e=>e.innerHTML=BP);
+// full script from the same lines, grouped by paragraph
+{let h="",p=-1;LINES.forEach((l,i)=>{if(l.p!==p){if(p>=0)h+="</p>";h+="<p>";p=l.p;}h+=`<span class="${i===8?"live":""}">${l.t.replace(/\b(I said|I replied|he said|he replied)\b/g,'<span class="tag">$1</span>')}</span> `;});document.querySelector("[data-script]").innerHTML=h+"</p>";}
+const ST=[{no:"001",a:-44},{no:"002",a:-8},{no:"003",a:26},{no:"004",a:48,prep:true,label:"Coming"},{no:"005",a:60,prep:true,label:""}];
+const dev=DialDevice.mount(document.querySelector("[data-device]"),{stations:ST,start:0,lines:LINES,line:8,playing:true});
+document.documentElement.style.setProperty("--reg","var(--color-glass-reg-speaking)");
+const DL='<svg class="glyph" aria-hidden="true"><use href="#g-down"/></svg>';
+const SAVE={idle:['<h3>Save for offline</h3><p>Keeps this work playable in Dial with no connection. It stays inside Dial on this device. <span class="num">7.3</span> MB: the recording Dial made in advance, with no voice download.</p><button class="btn quiet" type="button">'+DL+'Save for offline</button>','<button class="btn quiet" type="button">'+DL+'Save for offline</button>'],
+ saving:['<h3>Save for offline</h3><p class="ok">Saving&hellip; <span class="num">3.1</span> of <span class="num">7.3</span> MB</p><span class="bar"><i style="width:42%"></i></span><button class="btn text" type="button">Cancel</button>','<span class="state">Saving&hellip; <span class="num">42</span>%</span>'],
+ saved:['<h3>Save for offline</h3><p class="ok"><span class="pip eye" aria-hidden="true"></span>Saved for offline</p><p>Plays in Dial with no connection. <span class="num">7.3</span> MB on this device.</p><button class="btn text" type="button">Remove</button>','<span class="state"><span class="pip eye" aria-hidden="true"></span>Saved for offline</span>']};
+const A=(p,s)=>`<button class="btn${p?"":" quiet"}" type="button">${s}</button>`;
+// Each state: what the instruments read, what the note says, what the listener can do.
+const M={
+ "first-run":{air:0,play:0,eng:"valve",valve:1,vl:"Voice ready",line:0,el:"00:00",rem:"-20:12",status:"Tuned to 514 · 001, the Cave. Press Tune in: it plays at once, from a recording Dial made in advance.",act:'<button class="btn text" type="button" style="min-height:36px;font-size:.84rem">Or make it on this device (downloads the voice once, 115 MB)</button>'},
+ playing:{air:1,play:1,eng:"valve",valve:1,vl:"Voice ready",status:"<b>On air.</b> Playing a recording Dial made in advance from Jowett's words. Nothing is made or sent while you listen."},
+ "device-test":{air:0,play:0,eng:"gauge",speed:4.1,gl:"Testing · GPU",line:0,el:"00:00",rem:"-20:12",status:"Testing this device before it makes the recording.",note:"<span><b>Testing this device:</b> one short sentence, about <span class=\"num\">3</span> s. It tries the graphics chip first, then the processor.</span>"},
+ warming:{air:0,play:0,eng:"valve",valve:.42,power:.45,vl:"48 of 115 MB",line:0,el:"00:00",rem:"-20:12",status:"Getting the voice ready.",note:"<span><b>Getting the voice ready:</b> <span class=\"num\">48.2</span> of <span class=\"num\">114.6</span> MB. It downloads once from dial.voidvision.org, then stays on this device.</span>",act:A(0,"Stop, and play Dial's recording instead")},
+ countdown:{air:0,play:0,eng:"both",valve:.35,vl:"Starting in 5:03",speed:1.0,gl:"1.0× · CPU",line:0,el:"00:00",rem:"-20:12",status:"Making the start of the recording first, so it won't pause.",note:"<span><span class=\"big\">Starting in <span class=\"num\">5:03</span>, so it won't pause</span><br>This device makes speech at <span class=\"num\">1.0×</span> on its processor. Dial plans on <span class=\"num\">0.8×</span> to be safe, makes the first <span class=\"num\">5:03</span>, then stays ahead to the end.</span>",act:A(1,"Play Dial's recording now")+A(0,"Download to listen later")},
+ rendering:{air:1,play:1,eng:"gauge",speed:2.6,gl:"2.6× · GPU",status:"<b>On air.</b> Made on this device as you listen: <span class=\"num\">41</span> s ahead of you and gaining, line <span class=\"num\">64</span> of <span class=\"num\">118</span>.",ren:560},
+ holding:{air:0,play:0,eng:"both",valve:.6,vl:"Resuming 0:12",speed:.9,gl:"0.9× · CPU",silence:1,status:"Holding at the paragraph so the voice keeps up.",note:"<span><b>Holding at the paragraph so the voice keeps up.</b> The device slowed down (another app is busy). Playback resumes in <span class=\"num\">0:12</span>, at the start of the next line, never mid-word.</span>",act:A(0,"Play Dial's recording instead"),ren:120},
+ "no-webgpu":{air:0,play:0,eng:"both",valve:.5,vl:"Starting in 2:45",speed:1.1,gl:"1.1× · CPU",line:0,el:"00:00",rem:"-20:12",status:"Making the start of the recording first, so it won't pause.",note:"<span><b>No WebGPU in this browser</b>, so the processor makes the speech: <span class=\"num\">1.1×</span> on <span class=\"num\">8</span> threads. Dial plans on <span class=\"num\">0.88×</span>, so it starts in <span class=\"num\">2:45</span>, and won't pause after that.</span>",act:A(1,"Play Dial's recording now")},
+ slow:{air:0,play:0,eng:"both",valve:.1,vl:"Would wait 21:53",speed:.6,gl:"0.6× · CPU",line:0,el:"00:00",rem:"-20:12",status:"This device makes speech slower than it plays.",note:"<span><b>This device makes speech at <span class=\"num\">0.6×</span> the speed it plays.</b> To play without pausing, it would make the first <span class=\"num\">21:53</span> before starting. Dial's own recording plays now.</span>",act:A(1,"Play Dial's recording now")+A(0,"Download to listen later")+A(0,"Wait 21:53 and play here")},
+ paused:{air:0,play:0,eng:"valve",valve:1,vl:"Voice ready",status:"Paused at <span class=\"num\">01:27</span>. Line <span class=\"num\">9</span> of <span class=\"num\">118</span>."},
+ rendered:{air:0,play:0,eng:"gauge",speed:2.6,gl:"Done · GPU",status:"<span class=\"pip eye\" aria-hidden=\"true\" style=\"margin-top:5px\"></span><span><b>Made on this device.</b> All <span class=\"num\">118</span> lines, <span class=\"num\">20:12</span>. Nothing was sent anywhere.</span>",line:23,el:"20:12",rem:"-00:00"},
+ offline:{air:0,play:0,eng:"valve",valve:0,power:.15,vl:"No voice",line:0,el:"00:00",rem:"-20:12",status:"You are offline.",note:"<span><b>You are offline, and the voice is not on this device yet.</b> It downloads once (about <span class=\"num\">115</span> MB). Connect once to fetch it; after that, this work plays with no connection. Dial's recording plays offline once saved.</span>",act:A(0,"Try again")},
+ error:{air:0,play:0,eng:"gauge",speed:0,gl:"Stopped",status:"Making the recording stopped at line 64.",note:"<span><b>Making the recording stopped at line <span class=\"num\">64</span>.</b> Your browser stopped the graphics chip that runs the voice. Lines 1 to 63 are kept. Resume, and Dial carries on in a slower mode, about three times slower on this device.</span>",act:A(1,"Resume from line 64")+A(0,"Play Dial's recording"),ren:560}};
+M.saving=Object.assign({},M.playing);M.saved=Object.assign({},M.playing);M.bookplate=Object.assign({},M.playing);M.script=Object.assign({},M.playing);
+const $=s=>document.querySelector(s);
+const play=$("[data-play]");
+function paint(s){const m=M[s]||M.playing;
+  document.body.dataset.onair=m.air?"true":"false";dev.setPlaying(!!m.play);dev.setSilence(!!m.silence);
+  dev.setPower(m.power??1);dev.setEngine(m.eng);dev.setValve(m.valve??1);dev.setSpeed(m.speed??0);
+  $("[data-valve-label]").textContent=m.vl||"Voice ready";$("[data-gauge-label]").textContent=m.gl||"";
+  const lamp=m.air?'<span class="lamp" aria-hidden="true"></span>':'<span class="lamp off" aria-hidden="true"></span>';
+  $("[data-status]").innerHTML=(m.status||"").startsWith("<span class=\"pip")?m.status:lamp+"<span>"+m.status+"</span>";
+  $("[data-devnote]").innerHTML=m.note||"";$("[data-devnote]").hidden=!m.note;
+  $("[data-devactions]").innerHTML=m.act||"";$("[data-devactions]").hidden=!m.act;
+  dev.setLine(m.line??8);$("[data-t-el]").textContent=m.el||"01:27";$("[data-t-rem]").textContent=m.rem||"-18:45";
+  const r=$("[data-ribbon]");r.dataset.played=m.el==="00:00"?"0":m.el==="20:12"?"99999":"87";r.dataset.rendered=m.ren??99999;if(window.drawRibbons)drawRibbons();
+  play.setAttribute("aria-pressed",String(!!m.play));play.querySelector("use").setAttribute("href",m.play?"#g-pause":"#g-play");$("[data-play-label]").textContent=m.play?"Pause":(s==="first-run"?"Tune in":"Play");
+  const k=s==="saving"?"saving":s==="saved"?"saved":"idle";$("[data-save-slot]").innerHTML=SAVE[k][0];$("[data-save-slot-phone]").innerHTML=SAVE[k][1];}
+window.onMockState=paint;
+window.onMockSpace=()=>setMockState(document.body.dataset.state==="paused"?"playing":"paused");
+play.addEventListener("click",()=>setMockState(play.getAttribute("aria-pressed")==="true"?"paused":"playing"));
+document.querySelectorAll("[data-open-bp]").forEach(b=>b.addEventListener("click",()=>{$("#bp").hidden=false;}));
+document.querySelectorAll("[data-open-script],[data-open-script-2]").forEach(b=>b.addEventListener("click",()=>{$("#script-sheet").hidden=false;}));
+document.querySelectorAll(".sheet").forEach(sh=>sh.addEventListener("click",e=>{if(e.target===sh||e.target.closest("[data-close]"))sh.hidden=true;}));
+// the read-along advances while playing (a line every few seconds in the mock)
+setInterval(()=>{if(DialDevice.reduce||!["playing","rendering","saving","saved"].includes(document.body.dataset.state))return;const n=dev.line()+1;dev.setLine(n>=LINES.length?8:n);},4200);
 })();
 </script>
 <script>
