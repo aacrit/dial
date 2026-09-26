@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Dial's Repertory as a radio: tune the needle between public-domain works performed as radio theatre.">
-<title>The Repertory · Dial mock</title>
+<meta name="description" content="Interactive prototype of Dial's device physics: the needle, knobs, valve, tuning eye, living wave, speed gauge and the start-up countdown.">
+<title>Device motion · Dial mock</title>
 <link rel="stylesheet" href="../tokens.css">
 <style>
 /* ---- Shared shell for the G2 mocks. Colours only through tokens. ---------- */
@@ -286,60 +286,38 @@ body[data-onair="true"] .dw-needle .nd-cap{stroke:var(--color-glass-tally)}
   .kn-dial::before{-webkit-mask:radial-gradient(circle,transparent 37px,black 38px 42px,transparent 43px);mask:radial-gradient(circle,transparent 37px,black 38px 42px,transparent 43px)}
 }
 
-/* Repertory (round 2): the device is the hero; the works are stations on its dial. */
-.rep2{padding:0 0 24px}
-.rep-head{display:none}
-.station-card{padding:12px 16px 14px;display:grid;gap:8px}
-.station-card .desc{font-family:var(--font-display);font-weight:300;font-size:1.05rem;line-height:1.45;color:var(--color-glass-ink);max-width:var(--measure-reading)}
-.station-card .meta{display:flex;flex-wrap:wrap;gap:4px 14px;font:400 .72rem/1.4 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-glass-ink-muted)}
-.station-card .meta .pd{color:var(--color-glass-eye)}
-.fp{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:center}
-.fp svg{min-width:0;width:100%;height:26px;display:block;grid-row:span 2}
-.fp .who{font:500 .58rem/1 var(--font-data);letter-spacing:.08em;text-transform:uppercase;color:var(--color-glass-ink-muted)}
-.fp rect{fill:var(--color-glass-ink);opacity:.45}
-.fp line{stroke:var(--color-glass-ink-faint)}
-.devnote{display:flex;gap:8px;align-items:flex-start;padding:10px 16px 0;font-size:.82rem;color:var(--color-glass-ink-muted)}
+/* The motion demo: the device on the left, the controls that drive it on the right. */
+body{background:var(--color-bg)}
+.dm{display:grid;gap:28px;max-width:1560px;margin:0 auto;padding:24px 16px 48px}
+.dm-head{display:grid;gap:6px;max-width:72ch}
+.dm-head h1{font-size:2rem}
+.dm-head p{color:var(--color-cream-muted)}
+.stage{display:grid;gap:24px;align-items:start}
+.panel{display:grid;gap:18px;align-content:start}
+.grp{display:grid;gap:10px;padding:16px 18px;border:1px solid var(--color-border);border-radius:var(--radius-card);background:var(--color-surface)}
+.grp h2{font:600 .72rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
+.grp p{font-size:.86rem;color:var(--color-cream-muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row .btn{min-height:40px;padding:0 14px;font-size:.86rem}
+.row .btn[aria-pressed="true"]{border-color:var(--color-filament);color:var(--color-filament)}
+.sl{display:grid;grid-template-columns:7.5em minmax(0,1fr) 4.5em;gap:10px;align-items:center;font-size:.84rem}
+.sl input{width:100%;accent-color:var(--color-filament)}
+.sl output{font-family:var(--font-data);font-variant-numeric:tabular-nums;text-align:right}
+.readout{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.readout div{display:grid;gap:2px;padding:8px 10px;border-radius:var(--radius-control);background:var(--color-bg)}
+.readout span{font:500 .6rem/1 var(--font-data);letter-spacing:.08em;text-transform:uppercase;color:var(--color-cream-muted)}
+.readout b{font:400 .95rem/1.2 var(--font-data);font-variant-numeric:tabular-nums}
+.trace{width:100%;height:70px;display:block;border-radius:var(--radius-control);background:var(--color-bg)}
+.trace .tgt{stroke:var(--color-cream-muted);stroke-dasharray:3 3;stroke-width:1}
+.trace .pos{fill:none;stroke:var(--color-filament);stroke-width:1.6}
+label.chk{display:flex;gap:10px;align-items:center;font-size:.9rem;min-height:40px}
+label.chk input{width:18px;height:18px;accent-color:var(--color-filament)}
+.devnote{display:flex;gap:8px;align-items:flex-start;padding:12px 16px 2px;font-size:.86rem;color:var(--color-glass-ink-muted)}
 .devnote b{color:var(--color-glass-ink);font-weight:500}
-.tunein{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;padding:0 4px}
-.tunein .btn{min-height:48px;padding:0 22px;font-size:1rem}
-.tunein .avail{font-size:.84rem;color:var(--color-cream-muted)}
-.below{display:grid;gap:14px;max-width:560px;margin:0 auto;padding:12px 16px 0}
-.save{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;align-items:center;padding:12px 0;border-top:1px solid var(--color-border);border-bottom:1px solid var(--color-border)}
-.save .btn{min-height:44px;padding:0 14px;font-size:.9rem}
-.save .sz{font-size:.8rem;color:var(--color-cream-muted);line-height:1.35}
-.save .ok{display:inline-flex;align-items:center;gap:8px;font-weight:500;font-size:.9rem}
-.save .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--color-cream-faint);overflow:hidden}
-.save .bar i{display:block;height:100%;background:var(--color-filament)}
-.bookplate dl{display:grid;gap:2px;margin:0;font-size:.88rem}
-.bookplate dt{font:500 .64rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);padding-top:10px}
-.bookplate dd{margin:0}
-.pd{color:var(--color-magic-eye)}
-.dial-key{font-size:.8rem;color:var(--color-cream-muted);padding:0 4px;max-width:60ch}
-.own{font-size:.9rem;color:var(--color-cream-muted);padding:12px 0;border-top:1px solid var(--color-border)}
-@media (max-width:767px){.device>.dial-key{order:2}}
-.coming{display:grid;gap:6px;font-size:.88rem;color:var(--color-cream-muted);padding-top:4px}
-.coming b{font-family:var(--font-display);font-weight:400;font-size:1.05rem;color:var(--color-cream)}
-.notice{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--color-border);border-radius:var(--radius-card);background:var(--color-surface);font-size:.9rem}
-.card.install{display:grid;gap:10px}
-.card.install h2{font-size:1.25rem}
-.steps{margin:0;padding-left:1.3em;display:grid;gap:6px;font-size:.95rem}
-.steps li::marker{font-family:var(--font-data);color:var(--color-cream-muted)}
-.search{display:flex;align-items:center;gap:10px;height:44px;padding:0 10px 0 12px;border:1px solid var(--color-border);border-radius:var(--radius-control);background:var(--color-surface);color:var(--color-cream-muted)}
-.search input{flex:1;min-width:0;background:transparent;border:0;color:var(--color-cream);font:400 .95rem var(--font-structure);outline:none}
-.search:focus-within{outline:2px solid var(--color-filament);outline-offset:2px}
-@media (max-width:767px){.station-card .fp{display:none}.devnote{padding-bottom:4px}}
-@media (min-width:1024px){.device{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
-@media (min-width:768px){
-  .rep2{padding:28px 24px 40px}
-  .rep-head{display:flex;align-items:baseline;justify-content:space-between;gap:20px;max-width:1080px;margin:0 auto 18px}
-  .rep-head h1{font-size:1.5rem}
-  .below{max-width:640px;padding-top:24px}
-}
-@media (min-width:1024px){
-  .below{max-width:1080px;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);column-gap:26px;align-items:start}
-  .below>.wide{grid-column:1/-1}
-}
-@media (min-width:1920px){.rep-head,.below{max-width:1420px}}
+.devnote .big{font:400 1.25rem/1.2 var(--font-display);color:var(--color-glass-ink)}
+.keys .key{min-width:60px}
+@media (min-width:1280px){.stage{grid-template-columns:minmax(0,1fr) 380px}.device{max-width:none}}
+@media (min-width:1920px){.stage{grid-template-columns:minmax(0,1fr) 440px}}
 </style>
 </head>
 <body class="faceplate-page" data-onair="false">
@@ -366,95 +344,75 @@ body[data-onair="true"] .dw-needle .nd-cap{stroke:var(--color-glass-tally)}
 <symbol id="g-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
 <symbol id="x-wordmark" viewBox="0 -72.2 261.5 72.8"><path d="M8.6 -69.1L29.0 -69.1Q43.2 -69.1 49.8 -67.1Q57.4 -64.7 61.5 -61.1Q65.6 -57.4 68.0 -53.5Q72.8 -45.6 72.8 -35.4Q72.8 -19.5 61.3 -9.7Q53.2 -2.6 42.2 -0.9Q36.1 0.0 25.1 0.0L8.6 0.0L8.6 -69.1ZM33.5 -4.1Q34.3 -4.0 35.0 -4.0L36.1 -4.0Q49.3 -4.0 58.7 -12.3Q68.6 -20.9 68.6 -35.4Q68.6 -44.4 64.3 -51.7Q58.0 -62.3 44.3 -64.6Q39.9 -65.3 33.5 -65.4L33.5 -4.1ZM92.9 -69.1L117.8 -69.1L117.8 0.0L92.9 0.0L92.9 -69.1ZM154.4 -8.7Q145.4 -8.7 142.2 -8.8L140.8 -5.5Q140.1 -4.1 139.6 -2.5Q138.5 0.5 136.5 0.5Q135.5 0.5 134.9 -0.0Q134.4 -0.6 134.4 -1.3Q134.4 -2.3 135.3 -3.7Q136.8 -5.7 138.2 -9.0Q134.0 -9.4 134.0 -11.5Q134.0 -13.5 136.4 -13.5Q137.8 -13.5 139.8 -13.0L164.1 -72.2L197.5 0.0L172.1 0.0L168.1 -8.7L154.4 -8.7ZM143.7 -12.6Q148.4 -12.3 152.1 -12.3L166.4 -12.3L154.2 -38.6L143.7 -12.6ZM258.2 -4.4Q260.8 -4.4 260.8 -2.2Q260.8 -1.4 259.7 -0.7Q258.7 0.0 256.0 0.0L216.3 0.0L216.3 -69.1L241.2 -69.1L241.2 -3.2L250.4 -3.2Q253.4 -3.2 255.7 -3.8Q257.9 -4.4 258.2 -4.4Z"/></symbol>
 </defs></svg>
-<header class="station">
-  <a class="brand" href="repertory.html" aria-label="Dial, AM 514 kHz"><svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z"/><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145"/><path class="live" d="M20 94 L100 94"/></svg><svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark"/></svg><span class="freq">AM <span class="num">514</span> kHz</span></a>
-  <nav class="tabs" aria-label="Rooms"><a href="repertory.html" aria-current="page">Repertory<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html">Broadcast<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html">Studio<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html">Seal<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
-  <div class="right"><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a><button class="keycap" type="button" data-open-shortcuts aria-label="Keyboard shortcuts">?</button></div>
-</header>
-<div class="phone-head"><svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z"/><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145"/><path class="live" d="M20 94 L100 94"/></svg><svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark"/></svg><span class="freq">AM <span class="num">514</span> kHz</span><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a></div>
-<main class="room rep2" id="main">
-  <header class="rep-head"><h1>The Repertory</h1><p class="eyebrow">First shelf · Philosophy · <span class="num">3</span> stations</p></header>
-  <section class="device" data-device aria-label="The Repertory, as a radio: each work is a station on the dial">
-    <div class="dialwin" data-dialwin role="slider" tabindex="0" aria-label="Tuning dial. Drag the needle, or use the arrow keys to move between stations." aria-valuetext="514, No. 001, The Allegory of the Cave">
+<main class="dm">
+  <header class="dm-head">
+    <p class="eyebrow">Dial · G2 round 2 · motion prototype</p>
+    <h1>The device, in motion</h1>
+    <p>Every movement here is a spring integrated in the browser (stiffness, damping, mass), not a keyframe. Drag the needle, turn the knobs, press the keys. With reduced motion on, everything snaps to where it would settle.</p>
+  </header>
+  <div class="stage">
+    <section class="device" data-device aria-label="Dial, the radio">
+      <div class="dialwin" data-dialwin role="slider" tabindex="0" aria-label="Tuning dial. Drag the needle, or use the arrow keys to move between stations." aria-valuetext="514, No. 001, The Allegory of the Cave">
   <svg viewBox="0 0 400 250" aria-hidden="true"><g class="dw-wave"><path class="w2"/><path class="w1"/><path class="w0"/></g><g class="dw-scale"></g><g class="dw-needle"></g><text class="dw-am" x="24" y="240">514 · 001</text></svg>
   <span class="dw-sheen" aria-hidden="true"></span>
 </div>
-    <p class="dial-key">Each station on the dial is one work: <span class="num">514 · 001</span> is the Cave, <span class="num">002</span> is Crito, <span class="num">003</span> is the Meditations. The dashed marks are works coming soon.</p>
-    <div class="station-line">
-      <p class="eyebrow num" data-st-eyebrow>514 · No. 001 · about 20 min</p>
-      <h2 data-st-title>The Allegory of the Cave</h2>
-      <p class="by" data-st-by>Plato, Republic, Book VII. Translated by Benjamin Jowett.</p>
-    </div>
-    <div class="glasspanel display">
-      <div class="instruments">
+      <div class="station-line"><p class="eyebrow num" data-st-eyebrow>514 · No. 001 · about 20 min</p><h2 data-st-title>The Allegory of the Cave</h2><p class="by" data-st-by>Plato, Republic, Book VII. Translated by Benjamin Jowett.</p></div>
+      <div class="glasspanel display">
+        <div class="instruments">
   <div class="inst" title="Tuning eye: closes when a station is tuned"><svg class="mini-eye" viewBox="0 0 64 64" aria-hidden="true"><circle class="me-glass" cx="32" cy="32" r="28"/><path class="me-fan" data-eye d=""/><circle class="me-cap" cx="32" cy="32" r="10"/></svg><span class="il" data-eye-label>On station</span></div>
   <div class="inst" data-engine-view="valve"><svg class="valve" viewBox="0 0 64 64" aria-hidden="true"><circle class="v-glow" cx="32" cy="40" r="20"/><path class="v-env" d="M22 56 V26 a10 10 0 0 1 20 0 V56"/><rect class="v-base" x="18" y="56" width="28" height="5" rx="2"/><path class="v-fil" d="M27 50 V37 l5 -7 l5 7 V50"/></svg><span class="il" data-valve-label>Voice ready</span></div>
   <div class="inst" data-engine-view="gauge" hidden><svg class="gauge" viewBox="0 0 120 64" aria-hidden="true"><path class="g-arc" d="M21.9 34 A44 44 0 0 1 98.1 34"/><path class="g-slow" d="M21.9 34 A44 44 0 0 1 38 17.9"/><line class="g-tk" x1="21.9" y1="34" x2="27.1" y2="37"/><line class="g-tk rt" x1="38" y1="17.9" x2="41" y2="23.1"/><line class="g-tk" x1="60" y1="12" x2="60" y2="18"/><line class="g-tk" x1="82" y1="17.9" x2="79" y2="23.1"/><line class="g-tk" x1="98.1" y1="34" x2="92.9" y2="37"/><text class="g-lb" x="15" y="44">0</text><text class="g-lb" x="33" y="13">1×</text><text class="g-lb" x="60" y="8">2</text><text class="g-lb" x="87" y="13">3</text><text class="g-lb" x="105" y="44">4</text><line class="g-nd" x1="60" y1="56" x2="60" y2="18"/><circle class="g-cap" cx="60" cy="56" r="3.5"/></svg><span class="il" data-gauge-label>2.6× · GPU</span></div>
   <div class="meters" aria-label="Loudness"><div class="mrow"><span>Voice</span><span class="mbar"><b></b><i data-m="voice"></i></span></div><div class="mrow"><span>Music</span><span class="mbar"><i data-m="music"></i></span></div><span class="il" data-meter-label><span class="pip eye" aria-hidden="true"></span>Loudness: voice steady</span></div>
 </div>
-      <p class="devnote" data-when="loading" role="status"><span><b>Warming up.</b> Reading the list of stations from dial.voidvision.org.</span></p>
-      <div class="station-card" data-not="loading error">
-        <p class="desc" data-st-desc>Prisoners in the dark take shadows for the world. One of them is turned toward the light.</p>
-        <div class="fp" data-st-fp-wrap><span class="who" data-fp-a>Socrates</span><svg data-fp preserveAspectRatio="none" aria-hidden="true"></svg><span class="who" data-fp-b>Glaucon</span></div>
-        <p class="meta"><span data-st-words>2,990 words</span><span data-st-voices>2 voices</span><span class="pd">Public domain worldwide</span></p>
+        <div class="devnote" data-devnote hidden></div>
+        <div class="readalong" data-readalong>
+          <p class="ra-who"><span data-ra-who>Socrates</span><span class="num" data-clock>00:00 / 20:12</span></p>
+          <div class="ra-lines"><p class="ra prev"></p><p class="ra live"></p><p class="ra next"></p></div>
+        </div>
       </div>
-      <p class="devnote" data-when="error" role="alert" style="padding-bottom:14px"><span><b>The stations did not load.</b> The list of works could not be fetched from dial.voidvision.org. Check your connection, then try again.</span></p>
-    </div>
-    <div class="tunein" data-not="loading error">
-      <a class="btn" href="broadcast.html?state=playing" data-tunein><svg class="glyph" aria-hidden="true"><use href="#g-play"/></svg>Tune in</a>
-      <span class="avail" data-st-avail>Plays at once: Dial made this recording in advance.</span>
-    </div>
-    <div class="tunein" data-when="error"><button class="btn" type="button">Try again</button></div>
-    <div class="controls">
-      <div class="knob" data-knob="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Volume</span></div>
-      <div class="keys" role="group" aria-label="Stations">
-        <button class="key station" type="button" data-preset="0" aria-pressed="true">001<span class="t">The Cave</span></button>
-        <button class="key station" type="button" data-preset="1" aria-pressed="false">002<span class="t">Crito</span></button>
-        <button class="key station" type="button" data-preset="2" aria-pressed="false">003<span class="t">Meditations</span></button>
+      <div class="controls">
+        <div class="knob" data-knob="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Volume</span></div>
+        <div class="keys" role="group" aria-label="Transport">
+          <button class="key" type="button" data-k="prev" aria-label="Previous line"><svg class="glyph" aria-hidden="true"><use href="#g-prev"/></svg><span>Line</span></button>
+          <button class="key big" type="button" data-k="play" aria-pressed="false"><svg class="glyph" aria-hidden="true"><use href="#g-play"/></svg><span data-play-label>Tune in</span></button>
+          <button class="key" type="button" data-k="next" aria-label="Next line"><svg class="glyph" aria-hidden="true"><use href="#g-next"/></svg><span>Line</span></button>
+        </div>
+        <div class="knob" data-knob="tune" role="slider" tabindex="0" aria-label="Tune" aria-valuetext="Turn to move between stations"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Tune</span></div>
       </div>
-      <div class="knob" data-knob="tune" role="slider" tabindex="0" aria-label="Tune" aria-valuetext="Turn to move between stations"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Tune</span></div>
-    </div>
-  </section>
+    </section>
 
-  <div class="below">
-    <div class="notice wide" data-when="offline" role="status"><svg class="glyph" aria-hidden="true"><use href="#g-offline"/></svg><p><b>Offline.</b> Stations saved on this device play as usual. The others need a connection for their first listen.</p></div>
-    <section class="card install wide" data-when="after-listen" aria-labelledby="inst-h">
-      <h2 id="inst-h">Keep Dial on this device</h2>
-      <p class="muted">Install it to open from your home screen, with lock-screen controls. Works you save for offline stay with it.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button">Install</button><button class="btn quiet" type="button">Not now</button></div>
-    </section>
-    <section class="card install wide" data-when="after-listen-ios" aria-labelledby="ios-h">
-      <h2 id="ios-h">Add Dial to your Home Screen</h2>
-      <ol class="steps"><li>In Safari, tap Share: the square with an arrow pointing up.</li><li>Scroll down and tap Add to Home Screen.</li><li>Tap Add.</li></ol>
-      <p class="muted" style="font-size:.88rem">From the Home Screen, Dial keeps your saved works and shows lock-screen controls. In a Safari tab, iPhone can clear saved works if you do not open Dial for a week.</p>
-      <div><button class="btn quiet" type="button">Not now</button></div>
-    </section>
-    <div>
-      <div class="save" data-save aria-live="polite"></div>
-      <details class="drill bookplate" style="border-top:0"><summary>Bookplate</summary><div class="drill-body"><dl data-bookplate></dl></div></details>
-    </div>
-    <p class="own wide">Have writing of your own? <a href="studio.html">Bring your own chapter to the Studio</a>. It is made on your device and never uploaded.</p>
-    <div class="coming">
-      <p class="eyebrow">In preparation</p>
-      <p><b>Apology</b> and <b>Phaedo</b>, Plato, translated by Benjamin Jowett. With Crito, they complete the trial and death of Socrates. They take their places on the dial (the dashed marks) when their performances pass the same checks as the rest.</p>
-      <label class="search desk-only" style="margin-top:8px"><svg class="glyph" aria-hidden="true"><use href="#g-search"/></svg><span class="sr">Search the Repertory</span><input data-search id="q" type="search" placeholder="Search the Repertory" autocomplete="off"><span class="keycap" aria-hidden="true">/</span></label>
-      <p data-when="search-empty" role="status">Nothing on the dial matches &ldquo;Seneca&rdquo;. The Repertory holds public-domain works only, and its first shelf is philosophy. <button class="btn text" type="button">Clear the search</button></p>
-    </div>
+    <aside class="panel" aria-label="Controls for the prototype">
+      <div class="grp">
+        <h2>Tune</h2>
+        <div class="row"><button class="btn quiet" type="button" data-st="0">001 The Cave</button><button class="btn quiet" type="button" data-st="1">002 Crito</button><button class="btn quiet" type="button" data-st="2">003 Meditations</button><button class="btn quiet" type="button" data-st="3">004 (in preparation)</button></div>
+        <p>Or drag the needle in the window and let go: it keeps its speed, snaps to the nearest station, overshoots and settles. The tuning eye closes as it lands; between stations the wave breaks into hiss and its lines drift apart.</p>
+        <svg class="trace" data-trace viewBox="0 0 360 70" preserveAspectRatio="none" aria-label="The needle's angle over the last three seconds"><line class="tgt" x1="0" x2="360" y1="35" y2="35" data-tgt/><path class="pos" data-pos/></svg>
+        <div class="readout"><div><span>Angle</span><b data-ro="a">0.0°</b></div><div><span>Speed</span><b data-ro="v">0°/s</b></div><div><span>Overshoot</span><b data-ro="o">0%</b></div><div><span>Damping ratio</span><b data-ro="z">0.35</b></div></div>
+      </div>
+      <div class="grp">
+        <h2>Needle spring</h2>
+        <div class="sl"><span>Stiffness</span><input type="range" min="60" max="1200" value="220" data-p="0"><output data-po="0">220</output></div>
+        <div class="sl"><span>Damping</span><input type="range" min="4" max="80" value="11" data-p="1"><output data-po="1">11</output></div>
+        <div class="sl"><span>Mass</span><input type="range" min="0.4" max="3" step="0.1" value="1.1" data-p="2"><output data-po="2">1.1</output></div>
+        <div class="row"><button class="btn text" type="button" data-reset>Back to needle-swing (220 / 11 / 1.1)</button></div>
+      </div>
+      <div class="grp">
+        <h2>Voice</h2>
+        <div class="sl"><span>Level</span><input type="range" min="0" max="100" value="0" data-level><output data-level-o>auto</output></div>
+        <div class="row"><button class="btn quiet" type="button" data-auto>Simulated voice</button><button class="btn quiet" type="button" data-silence>Silence cue</button></div>
+      </div>
+      <div class="grp">
+        <h2>Start-up: warm, test, count down</h2>
+        <p>Pick this device's speed, then press Tune in. The valve warms while the voice downloads, the gauge times one sentence, and the valve counts down the lead so playback never stops. The countdown runs 40 times faster here.</p>
+        <div class="row" role="group" aria-label="Device speed"><button class="btn quiet" type="button" data-r="4.1" aria-pressed="true">4.1× GPU</button><button class="btn quiet" type="button" data-r="1.0" aria-pressed="false">1.0× CPU</button><button class="btn quiet" type="button" data-r="0.6" aria-pressed="false">0.6× slow</button></div>
+        <div class="row"><button class="btn quiet" type="button" data-slowdown>Slow the device mid-play</button></div>
+      </div>
+      <div class="grp">
+        <label class="chk"><input type="checkbox" data-reduce> Reduced motion: everything snaps</label>
+      </div>
+    </aside>
   </div>
 </main>
-<nav class="tabbar" aria-label="Rooms"><a href="repertory.html" aria-current="page"><svg class="glyph" aria-hidden="true"><use href="#g-repertory"/></svg><span>Repertory</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html"><svg class="glyph" aria-hidden="true"><use href="#g-broadcast"/></svg><span>Broadcast</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html"><svg class="glyph" aria-hidden="true"><use href="#g-seal"/></svg><span>Seal</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
-<div class="dialog-scrim" id="shortcuts" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="kb-h">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 id="kb-h" style="font-size:1.4rem">Keyboard</h2><button class="btn icon" type="button" data-close aria-label="Close"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button></div>
-  <dl class="keys">
-    <dt><span class="keycap">Space</span></dt><dd>Play or pause</dd>
-    <dt><span class="keycap">J</span></dt><dd>Back 10 seconds. Press again to scrub faster.</dd>
-    <dt><span class="keycap">K</span></dt><dd>Stop scrubbing and pause</dd>
-    <dt><span class="keycap">L</span></dt><dd>Forward 10 seconds. Press again to scrub faster.</dd>
-    <dt><span class="keycap">[</span><span class="keycap">]</span></dt><dd>Previous or next line. In the Studio, previous or next cue.</dd>
-    <dt><span class="keycap">/</span></dt><dd>Search the Repertory, the script or the manuscript</dd>
-    <dt><span class="keycap">?</span></dt><dd>Show this list</dd>
-    <dt><span class="keycap">Esc</span></dt><dd>Close a sheet or dialog</dd>
-  </dl></div></div>
 <script>
 // Dial device: spring physics for the needle, knobs, eye, valve, gauge, meters
 // and read-along; the living AM wave in the dial window. Ported from sadhana:
@@ -677,41 +635,62 @@ body[data-onair="true"] .dw-needle .nd-cap{stroke:var(--color-glass-tally)}
 
 </script>
 <script>
-window.MOCK_STATES=[["first-run","First visit"],["tuned-002","Tuned to 002"],["between","Between stations"],["listening","Listening"],["saving","Saving for offline"],["saved","Saved for offline"],["after-listen","After a first listen: Install"],["after-listen-ios","After a first listen: iPhone"],["loading","Loading"],["offline","Offline"],["error","Did not load"],["search-empty","Search, no results"]];
+window.MOCK_STATES=[["idle","Idle"]];
 (()=>{
-const T={"cave":[[128,1],[2,0],[42,1],[12,0],[28,1],[20,0],[17,1],[3,0],[23,1],[2,0],[39,1],[4,0],[16,1],[3,0],[168,1],[2,0],[58,1],[3,0],[65,1],[7,0],[77,1],[1,0],[42,1],[1,0],[49,1],[14,0],[31,1],[3,0],[75,1],[10,0],[15,1],[22,0],[33,1],[5,0],[117,1],[4,0],[164,1],[13,0],[50,1],[3,0],[79,1],[5,0],[177,1],[8,0],[35,1],[6,0],[85,1],[2,0],[42,1],[9,0],[121,1],[4,0],[98,1],[2,0],[96,1],[4,0],[65,1],[4,0],[42,1],[21,0],[80,1],[6,0],[289,1],[4,0],[37,1],[46,0],[129,1],[4,0],[24,1],[6,0],[25,1],[2,0],[51,1],[11,0]],"crito":[[14,1],[3,0],[6,1],[5,0],[13,1],[16,0],[7,1],[7,0],[15,1],[75,0],[21,1],[19,0],[17,1],[34,0],[17,1],[42,0],[27,1],[6,0],[18,1],[8,0],[37,1],[9,0],[25,1],[12,1],[6,0],[12,1],[116,0],[36,1],[36,0],[63,1],[108,0],[17,1],[500,0],[364,1],[2,0],[11,1],[2,0],[17,1],[2,0],[44,1],[5,0],[21,1],[3,0],[37,1],[2,0],[30,1],[4,0],[16,1],[13,0],[109,1],[5,0],[41,1],[2,0],[10,1],[3,0],[49,1],[3,0],[6,1],[3,0],[73,1],[9,0],[45,1],[6,0],[15,1],[4,0],[177,1],[13,0],[81,1],[3,0],[142,1],[2,0],[7,1],[3,0],[22,1],[3,0],[7,1],[4,0],[21,1],[3,0],[12,1],[3,0],[173,1],[11,0],[37,1],[9,0],[54,1],[10,0],[167,1],[4,0],[513,1],[6,0],[265,1],[334,1],[6,0],[188,1],[497,1],[179,1],[64,1],[7,0],[17,1]],"meditations":[[170,1],[128,1],[144,1],[89,1],[138,1],[47,1],[70,1],[37,1],[69,1],[160,1],[261,1],[197,1],[144,1],[214,1],[43,1],[192,1],[244,1],[3,1]]};
-const V='plus the voice, once (<span class="num">115</span> MB)';
-const S=[
- {no:"001",a:-44,title:"The Allegory of the Cave",by:"Plato, Republic, Book VII. Translated by Benjamin Jowett.",eyebrow:"514 · No. 001 · about 20 min",desc:"Prisoners in the dark take shadows for the world. One of them is turned toward the light.",words:"2,990 words",voices:"2 voices",fa:"Socrates",fb:"Glaucon",turns:"cave",avail:"Plays at once: Dial made this recording in advance.",size:'<span class="num">7.3</span> MB: the recording Dial made. No voice download.',
-  bp:'<dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1497</span>, The Republic, translated by Benjamin Jowett. Performed from &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo; Jowett\'s introduction and the rest of the Republic are not performed.</dd><dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Published <span class="num">1871</span>; Jowett died in <span class="num">1893</span>.</dd><dt>Voices</dt><dd>Socrates, George. Glaucon, Lewis. The voice is Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are Jowett\'s, exactly as printed.</dd><dt>Corrections</dt><dd>&ldquo;a underground den&rdquo; is spoken &ldquo;an underground den&rdquo;; Glaucon is spoken GLAW-kon. The page keeps what Jowett printed.</dd><dt>Direction</dt><dd>Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone.</dd><dt>Also</dt><dd>Prefer a human reader? <a href="https://librivox.org/platos_republic/" rel="noopener">LibriVox has a volunteer reading</a>.</dd>'},
- {no:"002",a:-8,title:"Crito",by:"Plato. Translated by Benjamin Jowett.",eyebrow:"514 · No. 002 · about 36 min",desc:"Socrates in prison before dawn. His friend has a plan for escape. The Laws of Athens answer him.",words:"5,347 words",voices:"2 voices",fa:"Socrates",fb:"Crito",turns:"crito",avail:"Made on your device as you listen, after a short wait sized to its speed.",size:`<span class="num">29</span> kB of text, ${V}`,
-  bp:'<dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1657</span>, Crito, translated by Benjamin Jowett. From &ldquo;Why have you come at this hour, Crito?&rdquo; to &ldquo;whither he leads.&rdquo; The introduction is not performed.</dd><dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Published <span class="num">1871</span>; Jowett died in <span class="num">1893</span>.</dd><dt>Voices</dt><dd>Socrates, George. Crito, Lewis. Cast in order of first appearance.</dd><dt>Corrections</dt><dd>Phthia and Sunium, Greek place names, given their English pronunciations.</dd><dt>Direction</dt><dd>Nobody directed this performance.</dd>'},
- {no:"003",a:26,title:"Meditations, Book II",by:"Marcus Aurelius. Translated by George Long.",eyebrow:"514 · No. 003 · about 16 min",desc:"An emperor's notes to himself, written on campaign by the Danube. Seventeen short sections, each followed by a silence.",words:"2,350 words",voices:"1 voice",fa:"One voice",fb:"",turns:"meditations",avail:"Made on your device as you listen, after a short wait sized to its speed.",size:`<span class="num">13</span> kB of text, ${V}`,
-  bp:'<dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">15877</span>, Thoughts of Marcus Aurelius Antoninus, translated by George Long. Book II, from &ldquo;Begin the morning by saying to thyself&rdquo; to &ldquo;This in Carnuntum.&rdquo; Long\'s footnotes are not performed.</dd><dt>Public domain</dt><dd><span class="pd">Worldwide.</span> First published <span class="num">1862</span>; Long died in <span class="num">1879</span>.</dd><dt>Voice</dt><dd>George, as narrator. The text names no speakers, so there is one voice.</dd><dt>Direction</dt><dd>Nobody directed this performance.</dd>'},
- {no:"004",a:48,prep:true,label:"Coming"},{no:"005",a:60,prep:true,label:""}];
+const LINES=[{"t":"And now, I said, let me show in a figure how far our nature is enlightened or unenlightened:&mdash;Behold!","p":0,"s":"Socrates"},{"t":"human beings living in a underground den, which has a mouth open towards the light and reaching all along the den; here they have been from their childhood, and have their legs and necks chained so that they cannot move, and can only see before them, being prevented by the chains from turning round their heads.","p":0,"s":"Socrates"},{"t":"Above and behind them a fire is blazing at a distance, and between the fire and the prisoners there is a raised way; and you will see, if you look, a low wall built along the way, like the screen which marionette players have in front of them, over which they show the puppets.","p":0,"s":"Socrates"},{"t":"I see.","p":1,"s":"Glaucon"},{"t":"And do you see, I said, men passing along the wall carrying all sorts of vessels, and statues and figures of animals made of wood and stone and various materials, which appear over the wall?","p":2,"s":"Socrates"},{"t":"Some of them are talking, others silent.","p":2,"s":"Socrates"},{"t":"You have shown me a strange image, and they are strange prisoners.","p":3,"s":"Glaucon"},{"t":"Like ourselves, I replied; and they see only their own shadows, or the shadows of one another, which the fire throws on the opposite wall of the cave?","p":4,"s":"Socrates"},{"t":"True, he said; how could they see anything but the shadows if they were never allowed to move their heads?","p":5,"s":"Glaucon"},{"t":"And of the objects which are being carried in like manner they would only see the shadows?","p":6,"s":"Socrates"},{"t":"Yes, he said.","p":7,"s":"Glaucon"},{"t":"And if they were able to converse with one another, would they not suppose that they were naming what was actually before them?","p":8,"s":"Socrates"},{"t":"Very true.","p":9,"s":"Glaucon"},{"t":"And suppose further that the prison had an echo which came from the other side, would they not be sure to fancy when one of the passers-by spoke that the voice which they heard came from the passing shadow?","p":10,"s":"Socrates"},{"t":"No question, he replied.","p":11,"s":"Glaucon"},{"t":"To them, I said, the truth would be literally nothing but the shadows of the images.","p":12,"s":"Socrates"},{"t":"That is certain.","p":13,"s":"Glaucon"},{"t":"And now look again, and see what will naturally follow if the prisoners are released and disabused of their error.","p":14,"s":"Socrates"},{"t":"At first, when any of them is liberated and compelled suddenly to stand up and turn his neck round and walk and look towards the light, he will suffer sharp pains; the glare will distress him, and he will be unable to see the realities of which in his former state he had seen the shadows;","p":14,"s":"Socrates"},{"t":"and then conceive some one saying to him, that what he saw before was an illusion, but that now, when he is approaching nearer to being and his eye is turned towards more real existence, he has a clearer vision,&mdash;what will be his reply?","p":14,"s":"Socrates"},{"t":"And you may further imagine that his instructor is pointing to the objects as they pass and requiring him to name them,&mdash;will he not be perplexed?","p":14,"s":"Socrates"},{"t":"Will he not fancy that the shadows which he formerly saw are truer than the objects which are now shown to him?","p":14,"s":"Socrates"},{"t":"Far truer.","p":15,"s":"Glaucon"},{"t":"And if he is compelled to look straight at the light, will he not have a pain in his eyes which will make him turn away to take refuge in the objects of vision which he can see, and which he will conceive to be in reality clearer than the things which are now being shown to him?","p":16,"s":"Socrates"}];
+const S=[{no:"001",a:-44,t:"The Allegory of the Cave",e:"514 · No. 001 · about 20 min",b:"Plato, Republic, Book VII. Translated by Benjamin Jowett."},{no:"002",a:-8,t:"Crito",e:"514 · No. 002 · about 36 min",b:"Plato. Translated by Benjamin Jowett."},{no:"003",a:26,t:"Meditations, Book II",e:"514 · No. 003 · about 16 min",b:"Marcus Aurelius. Translated by George Long."},{no:"004",a:48,prep:true},{no:"005",a:60,prep:true}];
 const $=s=>document.querySelector(s);
-let saveMode="idle";
-function fp(key){const svg=$("[data-fp]");const turns=T[key];const sec=key==="meditations";let t=0;const parts=[];for(const [w,up] of turns){const d=w/2.58;parts.push([t,d,up]);t+=d+(sec?2.5:0.6);}
-  const W=1000,H=26,mid=H/2;svg.setAttribute("viewBox",`0 0 ${W} ${H}`);let o=`<line x1="0" x2="${W}" y1="${mid}" y2="${mid}" vector-effect="non-scaling-stroke"/>`;for(const [s,d,up] of parts){o+=`<rect x="${(s/t*W).toFixed(1)}" width="${Math.max(1.4,d/t*W-.8).toFixed(1)}" y="${up?3:mid+1.5}" height="${mid-4.5}" rx="1"/>`;}svg.innerHTML=o;}
-function paintSave(i){const s=S[i];const DL='<svg class="glyph" aria-hidden="true"><use href="#g-down"/></svg>';let h;
-  if(saveMode==="saving"&&i===1)h='<span class="ok">Saving&hellip;</span><span class="sz"><span class="num">48.2</span> of <span class="num">114.6</span> MB</span><span class="bar"><i style="width:42%"></i></span><button class="btn text" type="button" style="grid-column:1/-1;justify-self:start;min-height:36px">Cancel</button>';
-  else if((saveMode==="saved"||saveMode==="offline")&&i<2)h='<span class="ok"><span class="pip eye" aria-hidden="true"></span>Saved for offline</span><span class="sz">Plays with no connection. <button class="btn text" type="button" style="min-height:32px;font-size:.8rem">Remove</button></span>';
-  else if(saveMode==="offline")h='<span class="ok">Not saved</span><span class="sz">Needs a connection to save or play.</span>';
-  else h=`<button class="btn quiet" type="button">${DL}Save for offline</button><span class="sz">${saveMode==="saved"&&i===2?'<span class="num">13</span> kB of text. The voice is already saved.':s.size}</span>`;
-  $("[data-save]").innerHTML=h;}
-function show(i){const s=S[i];$("[data-st-eyebrow]").textContent=s.eyebrow;$("[data-st-title]").textContent=s.title;$("[data-st-by]").textContent=s.by;$("[data-st-desc]").textContent=s.desc;$("[data-st-words]").textContent=s.words;$("[data-st-voices]").textContent=s.voices;$("[data-fp-a]").textContent=s.fa;$("[data-fp-b]").innerHTML=s.fb||"&nbsp;";$("[data-st-avail]").textContent=s.avail;$("[data-bookplate]").innerHTML=s.bp;fp(s.turns);paintSave(i);
-  document.querySelectorAll("[data-preset]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.preset===i)));
-  $("[data-dialwin]").setAttribute("aria-valuetext",`514, No. ${s.no}, ${s.title}`);}
-const dev=DialDevice.mount(document.querySelector("[data-device]"),{stations:S,start:0,onTune:show,power:1});
-dev.setEngine("valve");dev.setValve(1);
-document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>dev.tune(+b.dataset.preset)));
-window.onMockState=(st)=>{saveMode={saving:"saving",saved:"saved",offline:"offline"}[st]||"idle";
-  const q=$("#q");if(q)q.value=st==="search-empty"?"Seneca":"";
-  document.body.dataset.onair=st==="listening"?"true":"false";dev.setPlaying(st==="listening");
-  dev.setPower(st==="loading"?0:1);dev.setValve(st==="loading"?0.25:1);
-  document.querySelector("[data-valve-label]").textContent=st==="loading"?"Warming":"Voice";
-  if(st==="between"){dev.needle.to(10);dev.needle.x=10;} else dev.tune(st==="tuned-002"?1:0);
-  show(dev.tuned());};
+const dev=DialDevice.mount($("[data-device]"),{stations:S,start:0,lines:LINES,line:0,playing:false,onTune:i=>{$("[data-st-title]").textContent=S[i].t;$("[data-st-eyebrow]").textContent=S[i].e;$("[data-st-by]").textContent=S[i].b;}});
+dev.setEngine("valve");dev.setValve(0);dev.setPower(0.35);
+document.documentElement.style.setProperty("--reg","var(--color-glass-reg-speaking)");
+// ---- tune buttons, physics sliders, trace
+document.querySelectorAll("[data-st]").forEach(b=>b.addEventListener("click",()=>dev.tune(+b.dataset.st)));
+const P=DialDevice.P.swing;
+document.querySelectorAll("[data-p]").forEach(inp=>inp.addEventListener("input",()=>{P[+inp.dataset.p]=+inp.value;$(`[data-po="${inp.dataset.p}"]`).textContent=inp.value;}));
+$("[data-reset]").addEventListener("click",()=>{[220,11,1.1].forEach((v,i)=>{P[i]=v;$(`[data-p="${i}"]`).value=v;$(`[data-po="${i}"]`).textContent=v;});});
+const hist=[];let start=null,peak=0;
+// ---- voice
+let auto=false;
+$("[data-level]").addEventListener("input",e=>{auto=false;dev.setLevel(+e.target.value/100);dev.setPlaying(true);$("[data-level-o]").textContent=e.target.value+"%";});
+$("[data-auto]").addEventListener("click",()=>{auto=!auto;dev.setLevel(null);dev.setPlaying(auto||playing);$("[data-auto]").setAttribute("aria-pressed",String(auto));$("[data-level-o]").textContent="auto";});
+$("[data-silence]").addEventListener("click",()=>{dev.setSilence(true);setTimeout(()=>dev.setSilence(false),2500);});
+$("[data-reduce]").addEventListener("change",e=>{DialDevice.reduce=e.target.checked;});
+// ---- start-up: warm the valve, test, count down the lead, then play
+let r=4.1,phase="idle",t0=0,lead=0,playing=false,clock=0,holdLeft=0;const D=1212,SPEEDUP=40;
+document.querySelectorAll("[data-r]").forEach(b=>b.addEventListener("click",()=>{r=+b.dataset.r;document.querySelectorAll("[data-r]").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));}));
+const fmt=s=>{s=Math.max(0,Math.round(s));return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;};
+const note=(h)=>{const n=$("[data-devnote]");n.innerHTML=h;n.hidden=!h;};
+const playKey=$('[data-k="play"]');
+function setPlay(b){playing=b;dev.setPlaying(b||auto);document.body.dataset.onair=b?"true":"false";playKey.setAttribute("aria-pressed",String(b));playKey.querySelector("use").setAttribute("href",b?"#g-pause":"#g-play");$("[data-play-label]").textContent=b?"Pause":"Play";}
+playKey.addEventListener("click",()=>{
+  if(phase==="idle"){phase="warm";t0=performance.now();dev.setEngine("valve");$("[data-valve-label]").textContent="Voice";return;}
+  if(phase==="play"||phase==="hold")setPlay(!playing);});
+$('[data-k="next"]').addEventListener("click",()=>dev.setLine(dev.line()+1));
+$('[data-k="prev"]').addEventListener("click",()=>dev.setLine(dev.line()-1));
+$("[data-slowdown]").addEventListener("click",()=>{if(phase!=="play")return;phase="hold";holdLeft=12;setPlay(false);dev.setSilence(true);dev.setEngine("both");dev.setSpeed(0.9);$("[data-gauge-label]").textContent="0.9× · CPU";});
+let lastLine=0;
+const prev=dev.onFrame;
+dev.onFrame=(dt,a)=>{prev&&prev(dt,a);
+  // trace and readouts
+  const n=dev.needle;hist.push([n.x,n.t]);if(hist.length>180)hist.shift();
+  if(Math.abs(n.v)>40&&start===null){start=n.x;peak=0;}
+  if(start!==null){const span=n.t-start;if(Math.abs(span)>8){const over=(n.x-n.t)/span*100;peak=Math.max(peak,over);}if(n.resting)start=null;}
+  const k=P[0],c=P[1],m=P[2];
+  $('[data-ro="a"]').textContent=n.x.toFixed(1)+"°";$('[data-ro="v"]').textContent=Math.round(n.v)+"°/s";$('[data-ro="o"]').textContent=Math.max(0,peak).toFixed(0)+"%";$('[data-ro="z"]').textContent=(c/(2*Math.sqrt(k*m))).toFixed(2);
+  const map=v=>(35-v*0.45).toFixed(1);let d="";hist.forEach(([x],i)=>{d+=(i?"L":"M")+(i*2)+" "+map(x);});$("[data-pos]").setAttribute("d",d);const tg=map(n.t);$("[data-tgt]").setAttribute("y1",tg);$("[data-tgt]").setAttribute("y2",tg);
+  // start-up phases
+  const el=(performance.now()-t0)/1000;
+  if(phase==="warm"){const p=Math.min(1,el/3.2);dev.setPower(0.35+0.65*p);dev.setValve(p);$("[data-valve-label]").textContent=`${Math.round(p*115)} of 115 MB`;note(`<span><b>Getting the voice ready:</b> <span class="num">${(p*114.6).toFixed(1)}</span> of <span class="num">114.6</span> MB, once.</span>`);if(p>=1){phase="test";t0=performance.now();dev.setEngine("gauge");}}
+  else if(phase==="test"){const p=Math.min(1,el/3);dev.setSpeed(r*p*(0.9+0.1*Math.sin(el*9)));$("[data-gauge-label]").textContent="Testing";note('<span><b>Testing this device:</b> one short sentence, about <span class="num">3</span> s.</span>');
+    if(p>=1){dev.setSpeed(r);const plan=r*0.8;lead=plan>=1?10:D*(1/plan-1);$("[data-gauge-label]").textContent=`${r.toFixed(1)}× · ${r>2?"GPU":"CPU"}`;phase="count";t0=performance.now();dev.setEngine("both");}}
+  else if(phase==="count"){const left=lead-el*SPEEDUP;dev.setValve(Math.max(0.05,1-left/lead));$("[data-valve-label]").textContent=`Starting in ${fmt(left)}`;
+    note(lead>120?`<span><span class="big">Starting in <span class="num">${fmt(left)}</span>, so it won't pause</span><br>This device makes speech at <span class="num">${r.toFixed(1)}×</span>; Dial plans on <span class="num">${(r*0.8).toFixed(2)}×</span>. Dial's recording can play now instead.</span>`:`<span><b>Starting in <span class="num">${fmt(left)}</span>.</b> A short lead, so the voice stays ahead.</span>`);
+    if(left<=0){phase="play";note("");setPlay(true);$("[data-valve-label]").textContent="Ready";dev.setValve(1);}}
+  else if(phase==="hold"){holdLeft-=dt*4;dev.setValve(1-holdLeft/12);$("[data-valve-label]").textContent=`Resuming ${fmt(holdLeft)}`;note('<span><b>Holding at the paragraph so the voice keeps up.</b> It resumes at the next line, never mid-word.</span>');
+    if(holdLeft<=0){phase="play";dev.setSilence(false);note("");setPlay(true);dev.setEngine("gauge");dev.setSpeed(r);$("[data-gauge-label]").textContent=`${r.toFixed(1)}× · ${r>2?"GPU":"CPU"}`;}}
+  if(playing){clock+=dt;if(clock-lastLine>3.6&&!DialDevice.reduce){lastLine=clock;dev.setLine(dev.line()+1>=LINES.length?0:dev.line()+1);}$("[data-clock]").textContent=`${fmt(clock)} / 20:12`;}
+};
+dev.setLine(0);
 })();
 </script>
 <script>

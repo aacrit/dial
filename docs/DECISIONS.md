@@ -20,3 +20,9 @@ release/2026.09.26-1 is live at https://dial.aacrit.workers.dev with the contrac
 
 ## 2026-09-26: G2 approved (Design sign-off: Dial, four rooms)
 Approved in chat with all seven defaults: Tune in plays at once; separate "Save for offline" and "Download as an audio file"; a finished listen counts as `chapter_rendered`, including the prepared recording; the meters are Voice and Music; Daylight follows the device; letter and verse get violet, not amber; daily counts are on by default and the Seal's switch turns them off. Packet: https://claude.ai/artifact/K6JtLsNFqVEPxqfrUfhXLt
+
+## 2026-09-26: Rendering stays Kokoro everywhere, no TTS API
+Free server TTS was researched (Cloudflare Workers AI MeloTTS and Aura, Gemini, Groq, Hugging Face, ElevenLabs). Prepared recordings for the Repertory are rendered once with Kokoro, the same voice the tab uses, and served as static files. The Studio renders on the device only, so Law 1 is unchanged. Gemini's and ElevenLabs' free tiers train on or review inputs; Workers AI publishes no log-retention window; MeloTTS is plainer than Kokoro.
+
+## 2026-09-26: G2 round 2 approved (Dial, the radio)
+The founder asked for a retro device with great motion physics, and for the device rather than the text to be the hero. The approved design puts the works as stations on a dial behind glass, with an inertial needle, a valve warm-up, a read-along strip, sadhana's wave, loader and springs, speed instruments, and a no-stall countdown. Founder answers: the device test runs at the first on-device render; plan on 80% of measured speed with a 2-minute cutoff; the Tune knob changes station. Packet: https://claude.ai/artifact/Jv1JuAgsxgzegGcE25j3gz
