@@ -24,12 +24,6 @@ export const NOT_KEPT = "The voice could not be kept on this device, so it will 
 
 const withKept = (line: string, kept: boolean) => (kept ? line : `${line} ${NOT_KEPT}`);
 
-/** While lines are being made and played on this device. */
-export function renderingLine(done: number, total: number, kept: boolean): string {
-  const line = done === 0 ? "Making the first line on this device." : `On air. Made on this device as you listen: line ${done} of ${total}.`;
-  return withKept(line, kept);
-}
-
 /** "20:12", "1:05:09": a running time for the status line. */
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -39,20 +33,80 @@ export function clock(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${String(m).padStart(2, "0")}:${ss}`;
 }
 
-/** Every line is made. `seconds` is the finished recording's length. */
-export function renderedLine(total: number, seconds: number, kept: boolean): string {
-  return withKept(`Made on this device. All ${total} lines, ${clock(seconds)}. Nothing was sent anywhere.`, kept);
+// ---- The announced status: one line per change of state ------------------
+// #broadcast-status is a polite live region, so it changes only when the
+// broadcast's state does (warming, the first line, paused, done, stopped).
+// The per-line count goes in the visual progress line below it.
+
+/** The voice is loaded; the first line is being made. */
+export function firstLineLine(title: string, kept: boolean): string {
+  return withKept(`Making the first line of ${title} on this device.`, kept);
 }
 
-/** Paused at a line; while the rest is still being made, it says so (the lamp stays lit for that). */
-export function pausedLine(atSeconds: number, line: number, total: number, stillMaking: boolean): string {
-  const base = `Paused at ${clock(atSeconds)}. Line ${line} of ${total}.`;
+/** The first line is playing. */
+export function onAirLine(title: string, kept: boolean): string {
+  return withKept(`On air: ${title}. Made on this device as you listen.`, kept);
+}
+
+/** Paused; while the rest is still being made, it says so (the lamp stays lit for that). */
+export function pausedLine(title: string, atSeconds: number, stillMaking: boolean): string {
+  const base = `Paused: ${title} at ${clock(atSeconds)}.`;
   return stillMaking ? `${base} The rest is still being made on this device.` : base;
 }
 
-/** Before Tune in: where the audio will come from. No work has a recording Dial made in advance yet. */
-export const MADE_HERE = "Made on your device as you listen. The voice downloads the first time, then is kept on this device.";
+/**
+ * Every line is made. True in every state it can show in: a count of the
+ * finished work is sent (chapter_rendered), but the words and the audio
+ * never leave the device.
+ */
+export function renderedLine(title: string, total: number, seconds: number, kept: boolean): string {
+  return withKept(`Made on this device: all ${total} lines of ${title}, ${clock(seconds)}. The words and the audio never left this device.`, kept);
+}
+
+// ---- The visual progress line (not announced) ----------------------------
+
+export interface Progress {
+  title: string;
+  /** The line playing (1-based; 0 before the first). */
+  heard: number;
+  /** Lines made so far. */
+  made: number;
+  total: number;
+  paused: boolean;
+  renderDone: boolean;
+}
+
+/** "On air: Crito, line 21 of 252. Made up to line 40." */
+export function progressLine(p: Progress): string {
+  const where = `${p.paused ? "Paused" : "On air"}: ${p.title}, line ${Math.max(1, p.heard)} of ${p.total}.`;
+  return p.renderDone ? `${where} All lines made.` : `${where} Made up to line ${p.made}.`;
+}
+
+// ---- Before Tune in, and the works themselves ------------------------------
+
+/**
+ * Where the audio will come from. No work has a recording Dial made in
+ * advance yet. The keeping clause is dropped once the voice could not be kept.
+ */
+export function madeHere(voiceKept: boolean): string {
+  return voiceKept
+    ? "Made on your device as you listen. The voice downloads the first time, then is kept on this device."
+    : "Made on your device as you listen. The voice downloads each time, because this device could not keep it.";
+}
+
+/** Asked in the page before a broadcast still being made is stopped for another. */
+export function switchQuestion(onAir: string, next: string): string {
+  const cap = onAir.charAt(0).toUpperCase() + onAir.slice(1);
+  const possessive = cap.endsWith("s") ? `${cap}'` : `${cap}'s`;
+  return `Stop ${onAir} and tune in to ${next}? ${possessive} recording so far will be lost.`;
+}
+
+export function loadingNote(host: string): string {
+  return `Warming up. Reading the works from ${host}.`;
+}
 
 /** The works' texts could not be fetched. */
-export const STATIONS_UNREACHED = "The stations did not load. The works could not be fetched from dial.voidvision.org. Check your connection, then try again.";
+export function stationsUnreached(host: string): string {
+  return `The stations did not load. The works could not be fetched from ${host}. Check your connection, then try again.`;
+}
 export const STATIONS_SERVER = "The stations did not load. Dial could not send the works. Try again later.";

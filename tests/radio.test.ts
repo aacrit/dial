@@ -15,7 +15,7 @@ import { PRESETS, Spring, parseSpring } from "../web/src/device/spring";
 import { segment } from "../web/src/engine/segment";
 import { bookplateHtml, esc, eyebrowHtml, metaHtml, presetKeysHtml, readAlongHtml, scaleSvg } from "../web/src/render";
 import { ACCOUNT_D1_WRITES_PER_DAY, ALLOWED_EVENTS, CLIENT_EVENTS, DEFAULT_EVENT_DAILY_CEILING, worstCaseDailyWrites } from "../worker/src/config";
-import { MADE_HERE } from "../web/src/status-copy";
+import { madeHere, progressLine, switchQuestion } from "../web/src/status-copy";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -58,8 +58,14 @@ describe("the catalogue: three stations, every printed claim true", () => {
 
   it("claims no prepared recording yet: every work is made on the device (T5 adds them)", () => {
     for (const w of WORKS) expect(w.preparedRecording, w.slug).toBe(false);
-    expect(MADE_HERE).toMatch(/^Made on your device as you listen/);
-    expect(MADE_HERE).not.toMatch(/in advance|at once/);
+    for (const kept of [true, false]) {
+      expect(madeHere(kept)).toMatch(/^Made on your device as you listen/);
+      expect(madeHere(kept)).not.toMatch(/in advance|at once/);
+    }
+    // Once the voice could not be kept, the page stops saying it is kept.
+    expect(madeHere(true)).toContain("then is kept on this device");
+    expect(madeHere(false)).not.toMatch(/is kept/);
+    expect(main).toMatch(/voiceKept = msg\.kept;\s*avail\.textContent = madeHere\(voiceKept\);/);
   });
 
   it("computes word counts from the text, never types them (they match the spec's checked counts)", () => {
@@ -229,11 +235,14 @@ describe("work_opened: once per station per page load, within the ceilings' shar
     expect([...opened]).toEqual(["crito", "cave"]);
   });
 
-  it("the page sends it only through firstOpen, on the listener's choice of station or on Tune in, never on the first landing", () => {
+  it("the page sends it only when Tune in starts a work, through firstOpen; tuning and browsing send nothing (founder, 2026-09-26)", () => {
     expect([...main.matchAll(/sendEvent\("work_opened"\)/g)].length).toBe(1);
-    expect(main).toMatch(/if \(firstOpen\(opened, w\.slug\)\) sendEvent\("work_opened"\);/);
-    expect(main).toMatch(/if \(cause === "user"\) open\(WORKS\[i\]!\);/);
-    expect(main).toMatch(/tune\.addEventListener\("click", \(\) => \{[\s\S]*?open\(work\);/);
+    const start = /const start = \(work: Work\) => \{([\s\S]*?)\n {2}\};/.exec(main)?.[1];
+    expect(start).toMatch(/^\s*const text = [^\n]*\n\s*\/\/[^\n]*\n\s*if \(firstOpen\(opened, work\.slug\)\) sendEvent\("work_opened"\);/);
+    const onTune = /onTune: \(\) => \{([\s\S]*?)\n {4}\},/.exec(main)?.[1];
+    expect(onTune).toBeDefined();
+    expect(onTune).not.toMatch(/sendEvent|firstOpen|start\(/);
+    expect(read("design/spec.md")).toContain("Events: `work_opened` fires when Tune in is pressed on a work, once per work per page load");
   });
 
   it("the ceiling math: three client events at 3,500 a day stay within 15% of the account, and budget.yaml says so", () => {
@@ -271,13 +280,17 @@ describe("the broadcast's rules", () => {
     expect(lampLit({ live: true, playing: false, renderDone: false })).toBe(true);
   });
 
-  it("the download is named for the station and the work, and labelled as the approved default", () => {
+  it("the download is named for the station and the work, and its label says which work it is", () => {
     expect(wavName("002", "Crito")).toBe("dial-514-002-crito.wav");
     expect(wavName("003", "Meditations, Book II")).toBe("dial-514-003-meditations-book-ii.wav");
     expect(read("web/index.html")).toContain(">Download as an audio file</a>");
+    expect(main).toContain("download.textContent = `Download ${work.called} as an audio file`;");
   });
 
-  it("one object URL at a time: the previous WAV is revoked before a new one is made", () => {
-    expect(main).toMatch(/if \(downloadUrl\) URL\.revokeObjectURL\(downloadUrl\);\s*downloadUrl = URL\.createObjectURL\(/);
+  it("one object URL at a time, and the previous finished file stays until the new one is made", () => {
+    expect(main).toMatch(/if \(downloadUrl\) URL\.revokeObjectURL\(downloadUrl\);\s*downloadUrl = own\.wav \? URL\.createObjectURL\(/);
+    const start = /const start = \(work: Work\) => \{([\s\S]*?)\n {2}\};/.exec(main)![1]!;
+    const beforeDone = start.slice(0, start.indexOf('msg.type === "done"'));
+    expect(beforeDone).not.toMatch(/revokeObjectURL|download\.hidden = true|removeAttribute\("href"\)/);
   });
 });

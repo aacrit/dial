@@ -13,7 +13,7 @@ import { ORT_FILES, ORT_WASM, STAGED_DIRS, VOICE_SHA256, stage } from "../script
 import { checkColorLine, checkEmDashLine, isVerbatimPath, shouldScan } from "../scripts/lint-design.mjs";
 import { walk } from "../scripts/lib/walk.mjs";
 import { aboutMegabytes, isStatableTotal, warmingLine } from "../web/src/download-size";
-import { NOT_KEPT, STOP_OFFLINE, STOP_SERVER, STOP_STORAGE, pausedLine, renderedLine, renderingLine, stopLine } from "../web/src/status-copy";
+import { NOT_KEPT, STOP_OFFLINE, STOP_SERVER, STOP_STORAGE, firstLineLine, onAirLine, pausedLine, renderedLine, stopLine } from "../web/src/status-copy";
 import { lampLit } from "../web/src/broadcast-state";
 import { runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName } from "../web/src/voice-cache";
 
@@ -86,9 +86,9 @@ describe("the meter never outlives the work", () => {
     const stopped = /const stopped = \(message: string\) => \{([\s\S]*?)\n {4}\};/.exec(main)?.[1];
     expect(stopped).toBeDefined();
     expect(stopped).toContain("meter.hidden = true");
-    expect(stopped).toContain('status.dataset.state = "error"');
-    // Plain words, never the raw engine text.
-    expect(stopped).toContain("status.textContent = stopLine(message)");
+    // Plain words, never the raw engine text, announced as an error.
+    expect(stopped).toContain("announce(stopLine(message), true)");
+    expect(main).toMatch(/const announce = \(line: string, error = false\) => \{\s*if \(error\) status\.dataset\.state = "error";/);
     // The worker's error message (a failed manifest fetch or parse lands
     // there) and a worker that fails outright both end in stopped().
     expect(main).toMatch(/\} else \{\s*stopped\(msg\.message\);/);
@@ -168,13 +168,17 @@ describe("a stopped render says what happened in plain words", () => {
   });
 
   it("says so when the voice could not be kept, while rendering and when done", () => {
-    expect(renderingLine(3, 118, true)).toBe("On air. Made on this device as you listen: line 3 of 118.");
-    expect(renderingLine(3, 118, false)).toBe(`On air. Made on this device as you listen: line 3 of 118. ${NOT_KEPT}`);
-    expect(renderingLine(0, 118, true)).toBe("Making the first line on this device.");
-    expect(renderedLine(118, 1212, false)).toContain(NOT_KEPT);
-    expect(renderedLine(118, 1212, true)).toBe("Made on this device. All 118 lines, 20:12. Nothing was sent anywhere.");
-    // Listener copy never says "render" (design/spec.md 1.8).
-    for (const line of [renderingLine(3, 118, true), renderedLine(118, 1212, true), pausedLine(87, 9, 118, true)]) expect(line).not.toMatch(/render/i);
+    expect(onAirLine("Crito", true)).toBe("On air: Crito. Made on this device as you listen.");
+    expect(onAirLine("Crito", false)).toBe(`On air: Crito. Made on this device as you listen. ${NOT_KEPT}`);
+    expect(firstLineLine("Crito", true)).toBe("Making the first line of Crito on this device.");
+    expect(renderedLine("Crito", 118, 1212, false)).toContain(NOT_KEPT);
+    // A count is sent when a work is made (chapter_rendered), so the line claims only what stays: the words and the audio.
+    expect(renderedLine("The Allegory of the Cave", 118, 1212, true)).toBe(
+      "Made on this device: all 118 lines of The Allegory of the Cave, 20:12. The words and the audio never left this device.",
+    );
+    // Listener copy never says "render" (design/spec.md 1.8), and no line claims nothing was sent.
+    const lines = [onAirLine("Crito", true), firstLineLine("Crito", true), renderedLine("Crito", 118, 1212, true), pausedLine("Crito", 87, true)];
+    for (const line of lines) expect(line).not.toMatch(/render|nothing was sent|sends nothing|sent nothing/i);
     expect(NOT_KEPT).toBe("The voice could not be kept on this device, so it will download again next time.");
     // The loader reports it: any failed write clears kept, and ready carries it.
     expect(voiceSrc).toMatch(/if \(!\(await keep\(c, key, response\)\)\) kept = false;/);

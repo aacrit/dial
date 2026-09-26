@@ -27,6 +27,8 @@ export interface Work {
   title: string;
   /** The preset key's short name. */
   short: string;
+  /** How a sentence names it: "the Cave", "Crito". */
+  called: string;
   author: string;
   translator: string;
   /** The credit line under the title. */
@@ -45,7 +47,7 @@ export interface Work {
   };
   pd: {
     published: number;
-    /** How the Bookplate introduces the year: "Published 1871", "First published 1862". */
+    /** How the Bookplate introduces the year: "First published 1871". */
     publishedAs: "Published" | "First published";
     translatorDied: number;
   };
@@ -62,6 +64,7 @@ export const WORKS: readonly Work[] = [
     angle: -44,
     title: "The Allegory of the Cave",
     short: "The Cave",
+    called: "the Cave",
     author: "Plato",
     translator: "Benjamin Jowett",
     credit: "Plato, Republic, Book VII, 514a to 521b. Translated by Benjamin Jowett.",
@@ -73,7 +76,7 @@ export const WORKS: readonly Work[] = [
       to: "I will choose them, he replied.",
       notPerformed: "Jowett's introduction and the rest of the Republic are not performed.",
     },
-    pd: { published: 1871, publishedAs: "Published", translatorDied: 1893 },
+    pd: { published: 1871, publishedAs: "First published", translatorDied: 1893 },
     preparedRecording: false,
     librivox: "https://librivox.org/platos_republic/",
   },
@@ -83,6 +86,7 @@ export const WORKS: readonly Work[] = [
     angle: -8,
     title: "Crito",
     short: "Crito",
+    called: "Crito",
     author: "Plato",
     translator: "Benjamin Jowett",
     credit: "Plato. Translated by Benjamin Jowett.",
@@ -94,7 +98,7 @@ export const WORKS: readonly Work[] = [
       to: "whither he leads.",
       notPerformed: "Jowett's introduction is not performed.",
     },
-    pd: { published: 1871, publishedAs: "Published", translatorDied: 1893 },
+    pd: { published: 1871, publishedAs: "First published", translatorDied: 1893 },
     preparedRecording: false,
   },
   {
@@ -103,6 +107,7 @@ export const WORKS: readonly Work[] = [
     angle: 26,
     title: "Meditations, Book II",
     short: "Meditations",
+    called: "the Meditations",
     author: "Marcus Aurelius",
     translator: "George Long",
     credit: "Marcus Aurelius. Translated by George Long.",
@@ -122,6 +127,11 @@ export const WORKS: readonly Work[] = [
 /** The rule the Repertory holds every work to (CLAUDE.md). */
 export function isPublicDomainWorldwide(w: Pick<Work, "pd">): boolean {
   return w.pd.published < 1930 && w.pd.translatorDied < 1956;
+}
+
+/** Whether the text names its speakers in labels ("SOCRATES:  Why have you come"), which the one voice reads aloud. */
+export function hasSpeakerLabels(text: string): boolean {
+  return /^[A-Z][A-Z .'-]+:\s/m.test(text);
 }
 
 /** Words as a reader counts them: runs of non-space characters. */

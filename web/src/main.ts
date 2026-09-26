@@ -5,15 +5,27 @@
 // needed (see web/privacy.html). Every POST is same-origin JSON: the Worker
 // refuses anything else (worker/src/guard.ts), so never use sendBeacon,
 // which sends text/plain.
-import { WORKS, aboutMinutes, countWords, type Work } from "./catalogue";
+import { WORKS, aboutMinutes, countWords, hasSpeakerLabels, type Work } from "./catalogue";
 import { firstOpen, lampLit, liveLine, wavName } from "./broadcast-state";
 import { mountRadio } from "./device/radio";
 import { watchReducedMotion } from "./device/reduced-motion";
 import { isStatableTotal, warmingLine } from "./download-size";
 import { segment, type Cue } from "./engine/segment";
-import { assemble, encodeWav } from "./engine/wav";
+import { WavChunks } from "./engine/wav";
 import { bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml } from "./render";
-import { MADE_HERE, STATIONS_UNREACHED, STATIONS_SERVER, pausedLine, renderedLine, renderingLine, stopLine } from "./status-copy";
+import {
+  STATIONS_SERVER,
+  firstLineLine,
+  loadingNote,
+  madeHere,
+  onAirLine,
+  pausedLine,
+  progressLine,
+  renderedLine,
+  stationsUnreached,
+  stopLine,
+  switchQuestion,
+} from "./status-copy";
 import type { FromWorker, ToWorker } from "./narrate.worker";
 
 function sendEvent(name: string): void {
@@ -44,6 +56,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 interface Text {
   source: string;
   cues: Cue[];
+  speakerLabels: boolean;
 }
 
 /** One broadcast: a work being made on this device and played as it is made. */
@@ -56,14 +69,15 @@ interface Session {
   frame: number;
   live: boolean;
   renderDone: boolean;
-  /** The first voice line has arrived: before that, the status shows the warming line. */
+  /** The voice has loaded: before that, the status shows the warming line. */
   ready: boolean;
-  warming: string;
   kept: boolean;
   made: number;
   starts: number[];
   seconds: number;
   line: number;
+  /** The 16-bit lines so far; released once the file is made or the broadcast stops. */
+  wav: WavChunks | null;
 }
 
 function setupRadio(): void {
@@ -72,6 +86,7 @@ function setupRadio(): void {
   const pause = $<HTMLButtonElement>("pause");
   const avail = $("tune-avail");
   const status = $("broadcast-status");
+  const progress = $("broadcast-progress");
   const meter = $<HTMLProgressElement>("render-meter");
   const download = $<HTMLAnchorElement>("download");
   const readAlong = $("readalong");
@@ -79,6 +94,10 @@ function setupRadio(): void {
   const raWho = $("ra-who");
   const note = $("devnote");
   const retry = $<HTMLButtonElement>("retry");
+  const ask = $("switch-ask");
+  const askQ = $("switch-q");
+  const askYes = $<HTMLButtonElement>("switch-yes");
+  const askNo = $<HTMLButtonElement>("switch-no");
   const valveLabel = $("valve-label");
   const eyebrow = $("st-eyebrow");
   const title = $("st-title");
@@ -86,17 +105,24 @@ function setupRadio(): void {
   const sentence = $("st-sentence");
   const meta = $("st-meta");
   const bookplate = $("bookplate");
-  if (!device || !tune || !pause || !avail || !status || !meter || !download || !readAlong || !raLines || !raWho || !note || !retry || !valveLabel) return;
+  if (!device || !tune || !pause || !avail || !status || !progress || !meter || !download || !readAlong || !raLines || !raWho) return;
+  if (!note || !retry || !ask || !askQ || !askYes || !askNo || !valveLabel) return;
   if (!eyebrow || !title || !credit || !sentence || !meta || !bookplate) return;
 
   const texts = new Map<string, Text>();
   const opened = new Set<string>();
+  let mounted = false;
   let volume = 0.7;
+  let voiceKept = true;
   let session: Session | null = null;
   let downloadUrl: string | null = null;
 
-  const open = (w: Work) => {
-    if (firstOpen(opened, w.slug)) sendEvent("work_opened");
+  // ---- focus: a control that is hidden or disabled never keeps it ----------
+  /** Moves focus to Tune in when it sat on a control about to be hidden. */
+  const rescueFocus = (...leaving: HTMLElement[]) => {
+    if (!leaving.includes(document.activeElement as HTMLElement)) return;
+    if (!tune.disabled) tune.focus();
+    else device.querySelector<HTMLElement>("[data-dialwin]")?.focus();
   };
 
   // ---- the station card follows the needle ---------------------------------
@@ -108,9 +134,9 @@ function setupRadio(): void {
     credit.textContent = w.credit;
     sentence.textContent = w.sentence;
     meta.innerHTML = metaHtml(w, text ? countWords(text.source) : undefined);
-    bookplate.innerHTML = bookplateHtml(w);
+    bookplate.innerHTML = bookplateHtml(w, text?.speakerLabels);
     device.dataset.realm = w.slug;
-    avail.textContent = MADE_HERE;
+    avail.textContent = madeHere(voiceKept);
     paintTuneIn();
   };
 
@@ -129,16 +155,28 @@ function setupRadio(): void {
     else delete document.body.dataset.onAir;
   };
 
-  const refreshStatus = () => {
+  /** The announced line: set only when the broadcast's state changes. */
+  const announce = (line: string, error = false) => {
+    if (error) status.dataset.state = "error";
+    else status.removeAttribute("data-state");
+    if (status.textContent !== line) status.textContent = line;
+  };
+
+  /** The visual per-line count, never announced. */
+  const paintProgress = () => {
     const s = session;
-    if (!s?.live) return;
-    status.removeAttribute("data-state");
-    if (!s.ready) status.textContent = s.warming;
-    else if (s.audio.state === "suspended") {
-      const at = s.starts[0] === undefined ? 0 : Math.max(0, s.audio.currentTime - s.starts[0]);
-      status.textContent = pausedLine(at, Math.max(1, s.line + 1), s.cues.length, !s.renderDone);
-    } else if (s.renderDone) status.textContent = renderedLine(s.cues.length, s.seconds, s.kept);
-    else status.textContent = renderingLine(s.made, s.cues.length, s.kept);
+    if (!s?.live || !s.ready) {
+      progress.textContent = "";
+      return;
+    }
+    progress.textContent = progressLine({
+      title: s.work.title,
+      heard: s.line + 1,
+      made: s.made,
+      total: s.cues.length,
+      paused: s.audio.state === "suspended",
+      renderDone: s.renderDone,
+    });
   };
 
   const setValve = (share: number, label: string) => {
@@ -146,21 +184,28 @@ function setupRadio(): void {
     valveLabel.innerHTML = label;
   };
 
-  // The broadcast is over (finished or stopped): lamp off, keys back.
+  // The broadcast is over (finished or stopped): lamp off, keys back, and
+  // everything it held is let go (its worker's handlers, its lines, its audio).
   const offAir = () => {
     const s = session;
     if (s) {
       s.live = false;
       cancelAnimationFrame(s.frame);
+      s.worker.onmessage = null;
+      s.worker.onerror = null;
       s.worker.terminate();
+      s.audio.onstatechange = null;
       void s.audio.close();
+      s.wav = null;
     }
     setLamp();
     readAlong.hidden = true;
+    progress.textContent = "";
+    paintTuneIn();
+    rescueFocus(pause);
     pause.hidden = true;
     pause.textContent = "Pause";
     setValve(0, "Voice");
-    paintTuneIn();
   };
 
   pause.addEventListener("click", () => {
@@ -168,7 +213,11 @@ function setupRadio(): void {
     if (!s?.live) return;
     const settle = () => {
       setLamp();
-      refreshStatus();
+      paintProgress();
+      if (s.audio.state === "suspended") {
+        const at = s.starts[0] === undefined ? 0 : Math.max(0, s.audio.currentTime - s.starts[0]);
+        announce(pausedLine(s.work.title, at, !s.renderDone));
+      } else announce(s.renderDone ? renderedLine(s.work.title, s.cues.length, s.seconds, s.kept) : onAirLine(s.work.title, s.kept));
     };
     if (s.audio.state === "running") {
       pause.textContent = "Resume";
@@ -180,37 +229,65 @@ function setupRadio(): void {
   });
 
   const radio = mountRadio(device, WORKS, {
-    onTune: (i, cause) => {
-      if (cause === "user") open(WORKS[i]!);
-      if (texts.size) showStation();
+    // Tuning only moves the needle and the card; nothing is counted until Tune in.
+    onTune: () => {
+      if (!mounted) return;
+      showStation();
+      hideAsk();
     },
     onVolume: (v) => {
       volume = v;
       if (session?.live) session.gain.gain.value = v;
     },
   });
+  mounted = true;
 
-  // ---- Tune in: make the chosen work on this device and play it as it is made
+  // ---- asking before a broadcast still being made is stopped ---------------
+  let pending: Work | null = null;
+  const hideAsk = () => {
+    if (ask.hidden) return;
+    pending = null;
+    rescueFocus(askYes, askNo);
+    ask.hidden = true;
+  };
+  askNo.addEventListener("click", hideAsk);
+  askYes.addEventListener("click", () => {
+    const next = pending;
+    hideAsk();
+    if (next) start(next);
+  });
+
   tune.addEventListener("click", () => {
     const work = WORKS[radio.tuned()]!;
-    const text = texts.get(work.slug);
-    if (!text) return;
-    open(work);
+    if (!texts.has(work.slug)) return;
+    const s = session;
+    if (s?.live && s.work !== work && !s.renderDone) {
+      pending = work;
+      askQ.textContent = switchQuestion(s.work.called, work.called);
+      ask.hidden = false;
+      askNo.focus();
+      return;
+    }
+    start(work);
+  });
+
+  // ---- Tune in: make the chosen work on this device and play it as it is made
+  const start = (work: Work) => {
+    const text = texts.get(work.slug)!;
+    // work_opened counts Tune in on a work, once per work per page load (founder, 2026-09-26).
+    if (firstOpen(opened, work.slug)) sendEvent("work_opened");
     if (session?.live) offAir();
-    meter.hidden = true;
-    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-    downloadUrl = null;
-    download.hidden = true;
-    download.removeAttribute("href");
+    // The previous finished file stays downloadable until this one is made.
 
     const audio = new AudioContext();
     const gain = audio.createGain();
     gain.gain.value = volume;
     gain.connect(audio.destination);
     const worker = new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
+    const cues = text.cues;
     const own: Session = {
       work,
-      cues: text.cues,
+      cues,
       audio,
       gain,
       worker,
@@ -218,43 +295,43 @@ function setupRadio(): void {
       live: true,
       renderDone: false,
       ready: false,
-      // The size and the meter's max arrive with the manifest (its totalBytes);
-      // until then the meter is indeterminate and the line states no size.
-      warming: "Warming the voice.",
       kept: true,
       made: 0,
       starts: [],
       seconds: 0,
       line: -1,
+      wav: null,
     };
     session = own;
-    const cues = text.cues;
     const lines = cues.map((c) => c.text);
-    const rendered: { audio: Float32Array; pauseAfterMs: number }[] = [];
-    let sampleRate = 24_000;
     let nextAt = audio.currentTime + 0.2;
     let warmingStated = false;
     // Playback is live until the last scheduled line has ended after the render is done.
     let playing = 0;
 
-    raWho.textContent = `514 · ${work.station} · ${work.title}`;
+    raWho.textContent = `On air: 514 · ${work.station} · ${work.title}`;
+    // The size and the meter's max arrive with the manifest (its totalBytes);
+    // until then the meter is indeterminate and the line states no size.
     meter.hidden = false;
     meter.removeAttribute("value");
     pause.hidden = false;
     pause.textContent = "Pause";
+    pause.focus();
     setValve(0.08, "Voice");
     audio.onstatechange = setLamp;
     setLamp();
     paintTuneIn();
-    refreshStatus();
+    announce("Warming the voice.");
+    paintProgress();
 
     const follow = () => {
       const current = liveLine(own.starts, audio.currentTime);
       if (current !== own.line && current >= 0) {
+        if (own.line < 0 && audio.state === "running") announce(onAirLine(work.title, own.kept));
         own.line = current;
         raLines.innerHTML = readAlongHtml(lines, current);
         readAlong.hidden = false;
-        if (audio.state === "running") refreshStatus();
+        paintProgress();
       }
       own.frame = requestAnimationFrame(follow);
     };
@@ -262,9 +339,9 @@ function setupRadio(): void {
 
     // Playback ended: the last line finished after every line was made.
     const ended = () => {
-      if (session === own && own.renderDone && playing === 0) {
+      if (session === own && own.live && own.renderDone && playing === 0) {
         offAir();
-        status.textContent = renderedLine(cues.length, own.seconds, own.kept);
+        announce(renderedLine(work.title, cues.length, own.seconds, own.kept));
       }
     };
 
@@ -274,8 +351,7 @@ function setupRadio(): void {
       if (session !== own) return;
       offAir();
       meter.hidden = true;
-      status.textContent = stopLine(message);
-      status.dataset.state = "error";
+      announce(stopLine(message), true);
     };
 
     worker.onmessage = (event: MessageEvent<FromWorker>) => {
@@ -284,8 +360,7 @@ function setupRadio(): void {
       if (msg.type === "loading") {
         if (!warmingStated) {
           warmingStated = true;
-          own.warming = warmingLine(msg.total, msg.fromDevice);
-          refreshStatus();
+          announce(warmingLine(msg.total, msg.fromDevice));
         }
         // Only a usable total sizes the meter and the valve; otherwise they stay as they are.
         if (isStatableTotal(msg.total)) {
@@ -298,14 +373,18 @@ function setupRadio(): void {
       } else if (msg.type === "ready") {
         own.ready = true;
         own.kept = msg.kept;
+        voiceKept = msg.kept;
+        avail.textContent = madeHere(voiceKept);
         meter.max = cues.length;
         meter.value = 0;
         setValve(1, "Voice ready");
-        refreshStatus();
+        announce(firstLineLine(work.title, own.kept));
+        paintProgress();
       } else if (msg.type === "cue") {
-        sampleRate = msg.sampleRate;
         const cue = cues[msg.index]!;
-        rendered.push({ audio: msg.audio, pauseAfterMs: cue.pauseAfterMs });
+        own.wav ??= new WavChunks(msg.sampleRate);
+        // The line is kept as 16-bit PCM and scheduled; its Float32 samples are not held after this.
+        own.wav.add(msg.audio, cue.pauseAfterMs);
         const buffer = audio.createBuffer(1, msg.audio.length, msg.sampleRate);
         buffer.copyToChannel(msg.audio, 0);
         const node = audio.createBufferSource();
@@ -323,21 +402,27 @@ function setupRadio(): void {
         own.seconds += buffer.duration + cue.pauseAfterMs / 1000;
         own.made = msg.index + 1;
         meter.value = own.made;
-        refreshStatus();
+        paintProgress();
       } else if (msg.type === "done") {
+        worker.onmessage = null;
+        worker.onerror = null;
         worker.terminate();
         own.renderDone = true;
-        const wav = encodeWav(assemble(rendered, sampleRate), sampleRate);
         // One object URL at a time: the previous file's is released first.
         if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-        downloadUrl = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
-        download.href = downloadUrl;
-        download.download = wavName(work.station, work.title);
-        download.hidden = false;
+        downloadUrl = own.wav ? URL.createObjectURL(new Blob(own.wav.parts(), { type: "audio/wav" })) : null;
+        own.wav = null;
+        if (downloadUrl) {
+          download.href = downloadUrl;
+          download.download = wavName(work.station, work.title);
+          download.textContent = `Download ${work.called} as an audio file`;
+          download.hidden = false;
+        }
         meter.hidden = true;
         // Paused with every line made: nothing is live any more, so the lamp goes out.
         setLamp();
-        refreshStatus();
+        paintProgress();
+        announce(renderedLine(work.title, cues.length, own.seconds, own.kept));
         reportCoreSuccess();
         ended();
       } else {
@@ -350,20 +435,21 @@ function setupRadio(): void {
       stopped(event.message || "");
     };
     worker.postMessage({ type: "render", cues } satisfies ToWorker);
-  });
+  };
 
   // ---- the works' texts: read once, then every station is ready ------------
   const load = () => {
     device.dataset.state = "loading";
     note.hidden = false;
-    note.textContent = "Warming up. Reading the works from dial.voidvision.org.";
+    note.textContent = loadingNote(location.host);
+    rescueFocus(retry);
     retry.hidden = true;
     radio.setPower(0);
     Promise.all(
       WORKS.map((w) =>
         fetch(`/works/${w.slug}.txt`).then((r) => {
           if (!r.ok) throw new Error(`status ${r.status}`);
-          return r.text().then((source) => [w.slug, { source, cues: segment(source) }] as const);
+          return r.text().then((source) => [w.slug, { source, cues: segment(source), speakerLabels: hasSpeakerLabels(source) }] as const);
         }),
       ),
     )
@@ -376,7 +462,7 @@ function setupRadio(): void {
       })
       .catch((err: unknown) => {
         device.dataset.state = "error";
-        note.textContent = err instanceof Error && err.message.startsWith("status ") ? STATIONS_SERVER : STATIONS_UNREACHED;
+        note.textContent = err instanceof Error && err.message.startsWith("status ") ? STATIONS_SERVER : stationsUnreached(location.host);
         retry.hidden = false;
       });
   };

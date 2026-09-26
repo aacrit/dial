@@ -43,6 +43,16 @@ export interface Radio {
   setValve(value: number): void;
 }
 
+/** Captures the pointer for a drag; false when the browser refuses (the pointer is already gone). */
+export function capture(el: Element, e: PointerEvent): boolean {
+  try {
+    el.setPointerCapture(e.pointerId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const SVG_W = 400;
 const SVG_H = 250;
 
@@ -138,7 +148,9 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
     keys.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.preset) === tuned)));
     win.setAttribute("aria-valuenow", String(tuned + 1));
     win.setAttribute("aria-valuetext", `514, No. ${w.station}, ${w.title}`);
-    root.querySelector('[data-knob="tune"]')?.setAttribute("aria-valuetext", `Station ${w.station}, ${w.title}`);
+    const tuneKnob = root.querySelector('[data-knob="tune"]');
+    tuneKnob?.setAttribute("aria-valuenow", String(tuned + 1));
+    tuneKnob?.setAttribute("aria-valuetext", `Station ${w.station}, ${w.title}`);
     options.onTune(tuned, cause);
     wake();
   };
@@ -156,8 +168,10 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
     return angleAt(((e.clientX - r.left) / r.width) * SVG_W, ((e.clientY - r.top) / r.height) * SVG_H);
   };
   win.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    // Drag only once the capture holds: a capture that throws leaves no half-started drag.
+    if (!capture(win, e)) return;
     dragging = true;
-    win.setPointerCapture(e.pointerId);
     needle.use(P.follow).to(pointerAngle(e));
     wake();
   });
@@ -173,6 +187,7 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
   };
   win.addEventListener("pointerup", release);
   win.addEventListener("pointercancel", release);
+  win.addEventListener("lostpointercapture", release);
 
   const step = (e: KeyboardEvent): number | null => {
     if (e.key === "ArrowRight" || e.key === "ArrowUp") return Math.min(works.length - 1, tuned + 1);
@@ -217,8 +232,8 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
       wake();
     };
     knob.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !capture(knob, e)) return;
       lastAngle = at(e);
-      knob.setPointerCapture(e.pointerId);
     });
     knob.addEventListener("pointermove", (e) => {
       if (lastAngle === null) return;
@@ -236,6 +251,7 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
     };
     knob.addEventListener("pointerup", up);
     knob.addEventListener("pointercancel", up);
+    knob.addEventListener("lostpointercapture", up);
     knob.addEventListener("keydown", (e) => {
       if (kind === "vol") {
         const d = { ArrowRight: 0.05, ArrowUp: 0.05, ArrowLeft: -0.05, ArrowDown: -0.05, PageUp: 0.2, PageDown: -0.2 }[e.key];

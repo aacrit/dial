@@ -83,9 +83,18 @@
           <span class="avail" id="tune-avail"></span>
         </div>
 
+        <div class="switch-ask" id="switch-ask" role="group" aria-labelledby="switch-q" hidden>
+          <p id="switch-q"></p>
+          <div class="switch-actions">
+            <button type="button" class="btn" id="switch-yes">Stop and tune in</button>
+            <button type="button" class="btn quiet" id="switch-no">Keep listening</button>
+          </div>
+        </div>
+
         <div class="onair-panel">
           <progress id="render-meter" hidden></progress>
           <p id="broadcast-status" role="status" aria-live="polite"></p>
+          <p id="broadcast-progress" aria-hidden="true"></p>
           <a id="download" class="btn quiet" hidden>Download as an audio file</a>
         </div>
 

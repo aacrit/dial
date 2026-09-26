@@ -31,7 +31,7 @@ export function metaHtml(work: Work, words?: number): string {
 }
 
 /** The Bookplate: source, public-domain basis, voice, direction, and a human reading where one is known. */
-export function bookplateHtml(work: Work): string {
+export function bookplateHtml(work: Work, speakerLabels = false): string {
   const s = work.source;
   const rows: [string, string][] = [
     [
@@ -49,7 +49,7 @@ export function bookplateHtml(work: Work): string {
   }
   rows.push([
     "Voice",
-    `One voice, George, reads every part. It is Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, exactly as printed.`,
+    `One voice, George, reads every part.${speakerLabels ? " Speaker names are read aloud until each part has its own voice." : ""} It is Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, exactly as printed.`,
   ]);
   rows.push(["Direction", "Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone."]);
   if (work.librivox) {
