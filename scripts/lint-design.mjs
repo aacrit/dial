@@ -18,6 +18,22 @@ const SCAN_DIRS = ["web", "worker", "design"];
 const SCAN_EXTENSIONS = [".css", ".ts", ".tsx", ".html"];
 const SKIP_DIR_NAMES = new Set(["node_modules", "dist", ".wrangler"]);
 
+// Author text is verbatim (Law 2: the words are the author's). Jowett prints
+// "unenlightened:—Behold!", and the no-em-dash rule governs Dial's own UI
+// copy, never an author's words. So web/public/works/ is never scanned,
+// whatever a file's extension; everything else in web/ still is.
+export const VERBATIM_DIRS = ["web/public/works/"];
+
+export function isVerbatimPath(relPath) {
+  return VERBATIM_DIRS.some((dir) => relPath.startsWith(dir));
+}
+
+/** Whether the lint reads this repo-relative path at all. */
+export function shouldScan(relPath) {
+  if (isVerbatimPath(relPath)) return false;
+  return SCAN_EXTENSIONS.includes(path.extname(relPath));
+}
+
 export function checkColorLine(relPath, line) {
   if (relPath === TOKENS_FILE) return null;
   if (HEX_COLOR.test(line) || FUNC_COLOR.test(line)) {
@@ -27,6 +43,7 @@ export function checkColorLine(relPath, line) {
 }
 
 export function checkEmDashLine(relPath, line) {
+  if (isVerbatimPath(relPath)) return null;
   const isUiCopyFile = relPath.endsWith(".html") || relPath.startsWith("web/src/");
   if (!isUiCopyFile) return null;
   if (EM_DASH.test(line)) {
@@ -42,8 +59,8 @@ function main() {
     const abs = path.join(repoRoot, dir);
     if (!existsSync(abs)) continue;
     for (const file of walk(abs, SKIP_DIR_NAMES)) {
-      if (!SCAN_EXTENSIONS.includes(path.extname(file))) continue;
       const relPath = path.relative(repoRoot, file).replace(/\\/g, "/");
+      if (!shouldScan(relPath)) continue;
       const text = readFileSync(file, "utf8");
       text.split("\n").forEach((line, i) => {
         const colorProblem = checkColorLine(relPath, line);
@@ -61,4 +78,4 @@ function main() {
   console.log("lint-design: no stray color literals or em dashes");
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

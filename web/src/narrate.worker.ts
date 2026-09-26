@@ -7,7 +7,7 @@ import type { Cue } from "./engine/segment";
 
 export type ToWorker = { type: "render"; cues: Cue[] };
 export type FromWorker =
-  | { type: "loading"; loaded: number }
+  | { type: "loading"; loaded: number; total: number }
   | { type: "ready" }
   | { type: "cue"; index: number; audio: Float32Array<ArrayBuffer>; sampleRate: number }
   | { type: "done" }
@@ -21,7 +21,7 @@ const ctx = self as unknown as {
 ctx.onmessage = async (event) => {
   if (event.data.type !== "render") return;
   try {
-    const { tts, manifest } = await loadVoice((loaded) => ctx.postMessage({ type: "loading", loaded }));
+    const { tts, manifest } = await loadVoice((loaded, total) => ctx.postMessage({ type: "loading", loaded, total }));
     ctx.postMessage({ type: "ready" });
     const cues = event.data.cues;
     for (let i = 0; i < cues.length; i++) {

@@ -7,6 +7,7 @@
 // which sends text/plain.
 import { segment, type Cue } from "./engine/segment";
 import { assemble, encodeWav } from "./engine/wav";
+import { warmingLine } from "./download-size";
 import type { FromWorker, ToWorker } from "./narrate.worker";
 
 function sendEvent(name: string): void {
@@ -33,7 +34,6 @@ export function reportCoreSuccess(): void {
 // ---- The broadcast: the Cave, rendered in this tab --------------------------
 
 const WORK_URL = "/works/cave.txt";
-const MODEL_BYTES = 92_361_116;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T | null;
 
@@ -89,10 +89,12 @@ function setupBroadcast(): void {
     tune.disabled = true;
     tune.textContent = "On air";
     document.body.dataset.onAir = "true";
-    status.textContent = "Warming the voice. It downloads once (about 90 MB) and then stays on this device.";
+    // The size and the meter's max arrive with the manifest (its totalBytes);
+    // until then the meter is indeterminate and the line states no size.
+    status.textContent = "Warming the voice.";
     meter.hidden = false;
-    meter.max = MODEL_BYTES;
-    meter.value = 0;
+    meter.removeAttribute("value");
+    let warmingTotal = 0;
 
     const audio = new AudioContext();
     let nextAt = audio.currentTime + 0.2;
@@ -130,6 +132,11 @@ function setupBroadcast(): void {
     worker.onmessage = (event: MessageEvent<FromWorker>) => {
       const msg = event.data;
       if (msg.type === "loading") {
+        if (msg.total !== warmingTotal) {
+          warmingTotal = msg.total;
+          meter.max = msg.total;
+          status.textContent = warmingLine(msg.total);
+        }
         meter.value = msg.loaded;
       } else if (msg.type === "ready") {
         meter.max = cues.length;

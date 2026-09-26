@@ -13,9 +13,10 @@
 // web/public/ort are gitignored, and this runs before every build and dev.
 
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { walk } from "./lib/walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cacheDir = path.join(repoRoot, ".cache", "kokoro");
@@ -35,7 +36,7 @@ export const MODEL_FILES = {
   "onnx/model_quantized.onnx": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 };
 export const VOICE_SHA256 = "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc";
-const ORT_FILES = ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"];
+export const ORT_FILES = ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"];
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 
@@ -59,6 +60,21 @@ function resolvePackageDir(name) {
   const dir = path.join(repoRoot, "node_modules", name);
   if (!existsSync(dir)) throw new Error(`fetch-voice: ${name} is not installed (npm ci)`);
   return dir;
+}
+
+/** Where the voice and the runtime are staged, for the build and the tests. */
+export const STAGED_DIRS = { voice: voiceOut, ort: ortOut };
+
+/** Sum of every staged file the tab downloads for the voice (the manifest itself excluded). */
+export function stagedBytes() {
+  let total = 0;
+  for (const dir of [voiceOut, ortOut]) {
+    for (const file of walk(dir)) {
+      if (path.resolve(file) === path.join(voiceOut, "manifest.json")) continue;
+      total += statSync(file).size;
+    }
+  }
+  return total;
 }
 
 export async function stage() {
@@ -95,6 +111,17 @@ export async function stage() {
   mkdirSync(ortOut, { recursive: true });
   const ortDist = path.join(resolvePackageDir("onnxruntime-web"), "dist");
   for (const f of ORT_FILES) copyFileSync(path.join(ortDist, f), path.join(ortOut, f));
+
+  // The manifest the page reads to stitch the model back together. It also
+  // carries totalBytes: every byte the tab downloads for the voice (model
+  // parts, tokenizer and config, the voice file, the runtime's .mjs and
+  // .wasm), summed from the staged files on disk, so the page's "about N MB"
+  // and its progress meter are computed, never guessed.
+  const totalBytes = stagedBytes();
+  writeFileSync(
+    path.join(voiceOut, "manifest.json"),
+    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR, totalBytes }, null, 2) + "\n",
+  );
 
   console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voice ${NARRATOR}, onnxruntime-web`);
 }
