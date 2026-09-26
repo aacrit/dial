@@ -111,8 +111,10 @@ button:hover {
   color: var(--color-magic-eye);
 }
 
+/* Errors earn no hue (design/spec.md 1.1): cream prose where the action
+   failed. Tally means live, so it never marks an error. */
 #feedback-status[data-state="error"] {
-  color: var(--color-tally);
+  color: var(--color-cream);
 }
 
 .page-footer a,
@@ -161,10 +163,26 @@ button.quiet {
   border: 1px solid var(--color-border);
 }
 
+/* On air: tally is a lamp, never a text ground (cream on tally is 3.73:1,
+   design/spec.md 1.1). The button keeps a cream label and lights a small
+   tally lamp beside it. */
 body[data-on-air="true"] #tune-in {
-  background: var(--color-tally);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
   color: var(--color-cream);
+  border: 1px solid var(--color-border);
   opacity: 1;
+}
+
+body[data-on-air="true"] #tune-in::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-tally);
+  box-shadow: var(--shadow-lamp);
 }
 
 .button-link {
@@ -193,6 +211,10 @@ progress {
   accent-color: var(--color-filament);
 }
 
+progress[hidden] {
+  display: none;
+}
+
 progress::-webkit-progress-bar {
   background: var(--color-border);
 }
@@ -205,12 +227,15 @@ progress::-moz-progress-bar {
   background: var(--color-filament);
 }
 
+/* The status line carries counts and sizes ("3 of 118 lines", "115 MB"). */
 #broadcast-status {
   font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
 }
 
+/* Errors earn no hue: cream prose, full strength rather than muted. */
 #broadcast-status[data-state="error"] {
-  color: var(--color-tally);
+  color: var(--color-cream);
 }
 
 .bookplate {
