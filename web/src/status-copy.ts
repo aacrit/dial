@@ -109,4 +109,7 @@ export function loadingNote(host: string): string {
 export function stationsUnreached(host: string): string {
   return `The stations did not load. The works could not be fetched from ${host}. Check your connection, then try again.`;
 }
+/** A station whose cast sheet the voices cannot honour: only that station is unavailable. */
+export const CAST_FAILED = "Dial could not cast this work's voices.";
+
 export const STATIONS_SERVER = "The stations did not load. Dial could not send the works. Try again later.";

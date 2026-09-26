@@ -27,7 +27,6 @@ const ortOut = path.join(repoRoot, "web", "public", "ort");
 export const REPO = "onnx-community/Kokoro-82M-v1.0-ONNX";
 export const REVISION = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 export const PART_BYTES = 20 * 1024 * 1024;
-export const NARRATOR = "bm_george";
 
 // SHA-256 of every staged file. A changed upstream byte fails the build.
 export const MODEL_FILES = {
@@ -89,16 +88,25 @@ function resolvePackageDir(name) {
 /** Where the voice and the runtime are staged, for the build and the tests. */
 export const STAGED_DIRS = { voice: voiceOut, ort: ortOut };
 
-/** Sum of every staged file the tab downloads for the voice (the manifest itself excluded). */
-export function stagedBytes() {
-  let total = 0;
-  for (const dir of [voiceOut, ortOut]) {
+/**
+ * Every staged file the tab may download, by the path it is served at
+ * ("/voice/...", "/ort/..."), with its size in bytes (the manifest itself
+ * excluded).
+ */
+export function stagedSizes() {
+  const sizes = {};
+  for (const [dir, prefix] of [[voiceOut, "/voice/"], [ortOut, "/ort/"]]) {
     for (const file of walk(dir)) {
       if (path.resolve(file) === path.join(voiceOut, "manifest.json")) continue;
-      total += statSync(file).size;
+      sizes[prefix + path.relative(dir, file).split(path.sep).join("/")] = statSync(file).size;
     }
   }
-  return total;
+  return Object.fromEntries(Object.entries(sizes).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** Sum of every staged file the tab may download (the manifest itself excluded). */
+export function stagedBytes() {
+  return Object.values(stagedSizes()).reduce((a, b) => a + b, 0);
 }
 
 /**
@@ -139,14 +147,18 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
   for (const [f, buf] of ortBufs) writeFileSync(path.join(ortOut, f), buf);
 
   // The manifest the page reads to stitch the model back together. It also
-  // carries totalBytes: every byte the tab downloads for the voice (model
-  // parts, tokenizer and config, every voice file, the runtime's .mjs and
-  // .wasm), summed from the staged files on disk, so the page's "about N MB"
-  // and its progress meter are computed, never guessed.
-  const totalBytes = stagedBytes();
+  // carries every staged file's size (sizes, by served path) and their sum
+  // (totalBytes: everything staged). No visit downloads all of it: the page
+  // sums only the files it still needs (web/src/voice-cache.ts neededBytes),
+  // so its "about N MB" and its meter are computed, never guessed. A first
+  // visit downloads the model, tokenizer and config, the runtime's .wasm and
+  // .mjs, and the voices that work's cast uses (the Cave and the Meditations:
+  // George; Crito: Fable and Lewis); a later work adds only its new voices.
+  const sizes = stagedSizes();
+  const totalBytes = Object.values(sizes).reduce((a, b) => a + b, 0);
   writeFileSync(
     path.join(voiceOut, "manifest.json"),
-    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR, voices: VOICES, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], totalBytes }, null, 2) + "\n",
+    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, voices: VOICES, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], sizes, totalBytes }, null, 2) + "\n",
   );
 
   console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voices ${Object.keys(VOICES).join(", ")}, onnxruntime-web`);

@@ -16,10 +16,13 @@ export function esc(value: unknown): string {
 
 const num = (value: unknown) => `<span data-numeral>${esc(value)}</span>`;
 
-/** "514 · No. 001 · about 20 min" (the minutes once the text is read). */
-export function eyebrowHtml(work: Work, minutes?: number): string {
-  const time = minutes ? ` · about ${num(minutes)} min` : "";
-  return `${num(`514 · No. ${work.station}`)}${time}`;
+/**
+ * The station line's eyebrow: "about 20 min", once the text is read. The
+ * catalogue number is not here: it appears only in the dial's readout and
+ * the Bookplate (founder, 2026-09-26).
+ */
+export function eyebrowHtml(minutes?: number): string {
+  return minutes ? `about ${num(minutes)} min` : "";
 }
 
 const COUNT_WORDS = ["", "One", "Two", "Three"];
@@ -113,13 +116,13 @@ export function scaleSvg(works: readonly Work[], step: number, tuned: number): s
   return out;
 }
 
-/** The station preset keys: 001, 002, 003, each with its short name. */
+/** The station preset keys: each work's short name, and its title for assistive tech (no catalogue number). */
 export function presetKeysHtml(works: readonly Work[], tuned: number): string {
   return works
     .map(
       (w, i) =>
-        `<button class="key station" type="button" data-preset="${i}" aria-pressed="${i === tuned}" aria-label="${esc(`Station ${w.station}, ${w.title}`)}">` +
-        `<span data-numeral>${esc(w.station)}</span><span class="t">${esc(w.short)}</span></button>`,
+        `<button class="key station" type="button" data-preset="${i}" aria-pressed="${i === tuned}" aria-label="${esc(w.title)}">` +
+        `<span class="t">${esc(w.short)}</span></button>`,
     )
     .join("");
 }

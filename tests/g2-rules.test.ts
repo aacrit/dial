@@ -126,7 +126,8 @@ describe("the lamp is lit only while a render or playback is live", () => {
     expect(offAir).toContain("pause.hidden = true");
     expect(offAir).toContain("paintTuneIn()");
     // Tune in is enabled again whenever the tuned work is not the one on air.
-    expect(block("paintTuneIn")).toMatch(/tune\.disabled = here \|\| !texts\.has\(w\.slug\)/);
+    // Tune in is enabled for a tuned work that is read and cast; a station that could not be cast stays off (T2b).
+    expect(block("paintTuneIn")).toMatch(/tune\.disabled = here \|\| !texts\.get\(w\.slug\)\?\.cast/);
   });
 
   it("the lamp is re-read when every line is made, and goes off when the last scheduled line ends", () => {
@@ -224,9 +225,8 @@ describe("true copy: the first voice download", () => {
   });
 
   it("the runtime and the voice file are pinned: the manifest carries their sha256", () => {
-    const manifest = JSON.parse(readFileSync(manifestPath(), "utf8")) as { runtime: string; runtimeSha256: string; narrator: string; voices: Record<string, string> };
+    const manifest = JSON.parse(readFileSync(manifestPath(), "utf8")) as { runtime: string; runtimeSha256: string; voices: Record<string, string> };
     expect(manifest.voices).toEqual(VOICES);
-    expect(Object.keys(manifest.voices)).toContain(manifest.narrator);
     for (const [id, pin] of Object.entries(VOICES)) {
       expect(sha256(readFileSync(path.join(STAGED_DIRS.voice, "voices", `${id}.bin`))), id).toBe(pin);
     }
@@ -247,15 +247,15 @@ describe("true copy: the first voice download", () => {
   it("states the size rounded from the total", () => {
     expect(aboutMegabytes(114_527_513)).toBe("about 115 MB");
     expect(aboutMegabytes(89_600_000)).toBe("about 90 MB");
-    expect(warmingLine(114_527_513, false)).toBe("Warming the voice. It downloads once (about 115 MB) and is kept on this device.");
-    expect(warmingLine(114_527_513, false)).not.toMatch(/—|!/);
+    expect(warmingLine(114_527_513, "all", "Crito")).toBe("Warming the voice. It downloads once (about 115 MB) and is kept on this device.");
+    expect(warmingLine(114_527_513, "all", "Crito")).not.toMatch(/—|!/);
   });
 
   it("claims no download on a repeat visit, and no size without a usable total", () => {
-    expect(warmingLine(114_527_513, true)).toBe("Warming the voice from this device.");
+    expect(warmingLine(0, "none", "Crito")).toBe("Warming the voice from this device.");
     for (const bad of [undefined, null, Number.NaN, Infinity, 0, -5, "115"]) {
       expect(isStatableTotal(bad)).toBe(false);
-      expect(warmingLine(bad, false)).toBe("Warming the voice.");
+      expect(warmingLine(bad, "all", "Crito")).toBe("Warming the voice.");
     }
     expect(isStatableTotal(114_527_513)).toBe(true);
   });
@@ -264,7 +264,7 @@ describe("true copy: the first voice download", () => {
     expect(main).not.toMatch(/\d+\s*MB/);
     expect(main).not.toMatch(/MODEL_BYTES/);
     expect(main).toMatch(/if \(isStatableTotal\(msg\.total\)\) \{\s*meter\.max = msg\.total;/);
-    expect(main).toMatch(/warmingLine\(msg\.total, msg\.fromDevice\)/);
+    expect(main).toMatch(/warmingLine\(msg\.total, msg\.need, work\.called, msg\.missingVoices\)/);
   });
 
   it("the page makes no offline claim before offline exists", () => {
@@ -301,7 +301,7 @@ describe("the voice caches are keyed to their pins", () => {
     expect(voiceSrc).toMatch(/staleVoiceCaches\(await caches\.keys\(\), current\)\) await caches\.delete/);
     // On read: a cached file that fails its pin is dropped, then fetched again.
     expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(hit\)\) !== pin\) \{\s*await cache\.delete\(key\);\s*return undefined;\s*\}\s*return hit;/);
-    expect(voiceSrc).toMatch(/for \(const \[id, pin\] of Object\.entries\(manifest\.voices\)\) \{\s*if \(!\(await dropIfUnpinned\(voices, voiceKey\(id\), pin\)\)\) voicesKept = false;/);
+    expect(voiceSrc).toMatch(/for \(const id of cast\) \{\s*if \(await dropIfUnpinned\(voices, voiceKey\(id\), manifest\.voices\[id\]!\)\) heldVoices\.add\(id\);/);
     // T1 review: the runtime's .wasm is read and hashed once per load; the checked bytes are the ones handed over.
     expect(voiceSrc).toContain("const cachedRuntime = await dropIfUnpinned(runtimeCache, runtimeKey, manifest.runtimeSha256);");
     expect(voiceSrc).toContain("let binary = cachedRuntime;");

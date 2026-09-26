@@ -157,7 +157,8 @@ describe("tuning away while a work is on air", () => {
   });
 
   it("the read-along and the download name the work they belong to", () => {
-    expect(main).toContain("raWho.textContent = `On air: 514 · ${work.station} · ${work.title}`;");
+    // The catalogue number is only in the dial's readout and the Bookplate (founder, 2026-09-26).
+    expect(main).toContain("raWho.textContent = `On air: ${work.title}`;");
     expect(main).toContain("download.textContent = `Download ${work.called} as an audio file`;");
   });
 });

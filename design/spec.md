@@ -46,7 +46,7 @@ One device, two rooms. The Repertory is the radio tuned but not yet playing; the
 | **Speed gauge** (instrument 2, alternate) | A 0 to 4× needle gauge; the band below 1× dashed | While the device makes speech: "2.6× · GPU", "1.1× · CPU". Shown beside the valve during a countdown, so the listener sees why they wait |
 | **Voice and Music meters** | Two slim bars on the glass, the Voice bar marked with the in-range band | `vu` spring (400 / 32 / 1, 99% in about 300 ms). Voice hue follows register; "Voice level in range" with a green pip |
 | **Read-along strip** | The previous line, the live line in amber, the next line (phone: live and next only) | A new line rises into place on `needle-drop` (1000 / 30). Speech tags in muted ink. "Script" and "Bookplate" at its head; "Open the full script" at its foot (desktop) opens the full verbatim script as a sheet |
-| **Keys** | Push keys with 3 px of travel and a hard shadow that closes when pressed | Broadcast: Previous line, Play/Pause (latches down while playing, amber rim), Next line. Repertory: station presets 001, 002, 003 (the tuned one latches). Release springs back on `needle-drop`. The press is felt in motion only; the app makes no sounds |
+| **Keys** | Push keys with 3 px of travel and a hard shadow that closes when pressed | Broadcast: Previous line, Play/Pause (latches down while playing, amber rim), Next line. Repertory: station presets labelled with the works' short names, "The Cave", "Crito", "Meditations" (the tuned one latches; each key's accessible name is the work's title; no catalogue numbers, founder 2026-09-26). Release springs back on `needle-drop`. The press is felt in motion only; the app makes no sounds |
 | **Knobs** | Knurled Bakelite knobs, 56 to 76 px | **Volume** (-135° to +135°, 0 to 100) and **Tune** (turning moves the needle; release snaps to the nearest station). Drag around the centre or use the arrow keys; both are ARIA sliders |
 | **Ribbon** (Broadcast) | The cue ribbon in the work's realm colour | Drag to scrub; J, K and L as before |
 
@@ -70,7 +70,7 @@ Definitions, for Forge:
 
 ### 0.3 Faceplate states and copy (R2)
 Repertory (`first-run` is the default): `first-run`, `tuned-002`, `between`, `listening`, `saving`, `saved`, `after-listen`, `after-listen-ios`, `loading`, `offline`, `error`, `search-empty`.
-- Station line: `514 · No. 001 · about 20 min` / title / credit. Display: the one-sentence description, the turn map (desktop and tablet), words, voices, "Public domain worldwide". Under it: **Tune in** and "Plays at once: Dial made this recording in advance." (the Cave) or "Made on your device as you listen, after a short wait sized to its speed." (the others). Then Save for offline with its size, the Bookplate drill, and "In preparation": "Apology and Phaedo … They take their places on the dial (the dashed marks) when their performances pass the same checks as the rest."
+- Station line: `about 20 min` / title / credit. Catalogue numbers (`514 · 001`) appear only in the dial's readout and the Bookplate (founder, 2026-09-26). Display: the one-sentence description, the turn map (desktop and tablet), words, voices, "Public domain worldwide". Under it: **Tune in** and "Plays at once: Dial made this recording in advance." (the Cave) or "Made on your device as you listen, after a short wait sized to its speed." (the others). Then Save for offline with its size, the Bookplate drill, and "In preparation": "Apology and Phaedo … They take their places on the dial (the dashed marks) when their performances pass the same checks as the rest."
 - `between`: the needle rests between stations; the eye is open, the wave hisses, no station is named.
 - `loading`: "Warming up. Reading the list of stations from dial.voidvision.org." The device is cold: dim eye, valve at a low flicker.
 - `error`: "The stations did not load. The list of works could not be fetched from dial.voidvision.org. Check your connection, then try again." Button: Try again.
@@ -227,7 +227,7 @@ In the Studio, "Keep" is a third thing: an encrypted copy of a production, on th
 **Layout.** Phone: header, then "The Repertory" and one column of listings. Tablet: listings as a compact list (catalogue number, title, credit) beside a detail pane with the selected listing in full, Bookplate open. Desktop: title and intro side by side, listings in three columns (a printed guide), "In preparation" as a quiet row beneath. 1920: the same guide, one type size up.
 
 **A listing** (card, one work):
-- Eyebrow: `514 · No. 001` left, `about 20 min` right.
+- Eyebrow: `about 20 min` (the catalogue number is in the dial's readout and the Bookplate only; founder, 2026-09-26).
 - Title (Fraunces), credit (Fraunces italic), one descriptive sentence.
 - **Turn map**, the listing's fingerprint: every turn of the text as a mark along the running time, the first speaker above the line and the second below, marks as long as the turn; one-voice works sit above the line with their section silences visible. It is drawn from the engine's script (form only, available before any render). Once a work is rendered, mark heights come from each turn's measured loudness. Speaker names label the two rows.
 - Meta (mono): words, voices, "Public domain worldwide" in magic-eye green (a checked basis).

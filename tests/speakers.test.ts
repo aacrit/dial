@@ -4,16 +4,20 @@
 // no labels are exactly as they were.
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { answerKey } from "../scripts/answer-key.mjs";
-import { VOICES } from "../scripts/fetch-voice.mjs";
+import { parse as parseYaml } from "yaml";
+import { STAGED_DIRS, VOICES, stage } from "../scripts/fetch-voice.mjs";
+import { warmingLine } from "../web/src/download-size";
+import { CAST_FAILED } from "../web/src/status-copy";
+import { neededBytes, type SizedManifest } from "../web/src/voice-cache";
 import { WORKS } from "../web/src/catalogue";
-import { ALL_VOICES, NARRATORS, PALETTE, PALETTE_VOICES, VOICE_NAMES, cast, castVoices, narratorVoice, speakerName, voiceCount } from "../web/src/engine/cast";
+import { ALL_VOICES, NARRATORS, PALETTE, PALETTE_VOICES, VOICE_NAMES, cast, castVoices, narratorVoice, speakerName, tryCast, voiceCount } from "../web/src/engine/cast";
 import { rebuild, segment, speakerLabel } from "../web/src/engine/segment";
-import { bookplateHtml, esc, metaHtml, readAlongHtml, readLines, scaleSvg } from "../web/src/render";
+import { bookplateHtml, esc, eyebrowHtml, metaHtml, presetKeysHtml, readAlongHtml, readLines, scaleSvg } from "../web/src/render";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -21,7 +25,8 @@ const text = (slug: string) => read(`web/public/works/${slug}.txt`);
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const crito = text("crito");
 const cues = segment(crito);
-const key = JSON.parse(read("tests/fixtures/crito-turns.json")) as { speaker: string; opens: string }[];
+// The answer key: made apart from the engine, from the names in Gutenberg eBook 1657's list of persons.
+const key = answerKey(crito, ["SOCRATES", "CRITO"]) as { speaker: string; opens: string }[];
 
 describe("Law 3 rule 1: speaker labels", () => {
   it("finds an ALL-CAPS name and a colon or full stop at a paragraph's start, and nothing else", () => {
@@ -55,9 +60,13 @@ describe("Law 3 rule 1: speaker labels", () => {
 });
 
 describe("Crito: every turn has its speaker", () => {
-  it("the answer key is made apart from the engine, and is the one committed", () => {
-    expect(answerKey(crito, ["SOCRATES", "CRITO"])).toEqual(key);
+  it("the answer key finds Crito's 95 turns, 48 by Socrates and 47 by Crito, alternating", () => {
     expect(key.length).toBe(95);
+    expect(key.filter((t) => t.speaker === "SOCRATES").length).toBe(48);
+    expect(key.filter((t) => t.speaker === "CRITO").length).toBe(47);
+    key.forEach((t, i) => expect(t.speaker).toBe(i % 2 === 0 ? "SOCRATES" : "CRITO"));
+    expect(key[0]).toEqual({ speaker: "SOCRATES", opens: "Why have you come at this" });
+    expect(key.at(-1)).toEqual({ speaker: "SOCRATES", opens: "Leave me then, Crito, to fulfil" });
   });
 
   it("the engine finds every labelled turn in the key, in order, with its speaker: 100% agreement", () => {
@@ -256,7 +265,7 @@ describe("the cast's voices are staged and pinned", () => {
     expect(worker).toMatch(/tts\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
     expect(worker).toMatch(/Object\.hasOwn\(manifest\.voices, voice\)/);
     expect(worker).not.toMatch(/manifest\.narrator/);
-    expect(read("web/src/main.ts")).toContain('worker.postMessage({ type: "render", cues, voices: text.cast.voices } satisfies ToWorker);');
+    expect(read("web/src/main.ts")).toContain('worker.postMessage({ type: "render", cues, voices: cast.voices } satisfies ToWorker);');
   });
 });
 
@@ -309,11 +318,11 @@ describe("castVoices: the replaceable casting rule, and the curator's cast sheet
         for (const s of names) expect(mixed.find((v) => v.id === got.get(s))!.sex, `${s} of ${n}`).toBe(sex);
       }
     }
-    // Only the declared speaker is constrained.
+    // Only the declared speaker is constrained; the next speaker takes the first voice not yet used.
     const got = castVoices(stats("A", "B"), { narrator: "m", speakers: { A: "f" } }, mixed);
     expect([...got]).toEqual([
       ["A", "f1"],
-      ["B", "f1"],
+      ["B", "m1"],
     ]);
   });
 
@@ -353,5 +362,136 @@ describe("castVoices: the replaceable casting rule, and the curator's cast sheet
     const withSheet = bookplateHtml(WORKS[1]!, cast(cues, WORKS[1]!.cast));
     expect(withSheet).toContain("The curator's cast sheet, from the edition's list of persons, asks only for voice sex: narrator male; Socrates male; Crito male.");
     expect(bookplateHtml(WORKS[0]!)).not.toContain("cast sheet");
+  });
+});
+
+describe("T2b review: labels are never headings or honorifics", () => {
+  it("refuses the reviewer's cases: headings, Roman numerals and honorifics with a full stop", () => {
+    const refused = [
+      "BOOK II. Of the soul",
+      "BOOK ONE: The beginning",
+      "CHAPTER THE FIRST. In which",
+      "SCENE: The Prison of Socrates.",
+      "LETTER IV. To my sister",
+      "ACT ONE. A room",
+      "PART TWO: The return",
+      "INTRODUCTION. The Crito",
+      "ARGUMENT: Socrates is in prison",
+      "NOTE. The text is corrupt",
+      "MR. Darcy bowed.",
+      "MRS. Bennet said nothing.",
+      "DR. Johnson laughed.",
+      "ST. Paul's was quiet.",
+      "NO. 7 was empty.",
+      "XIV. Of the soul",
+    ];
+    for (const para of refused) expect(speakerLabel(para), para).toBeNull();
+    for (const para of ["SOCRATES:  Why?", "CRITO. Yes.", "FIRST CITIZEN: Before we proceed", "MR SMITH: Good day."]) expect(speakerLabel(para), para).not.toBeNull();
+  });
+
+  it("every work's detected speakers are exactly its cast sheet's, and a work with no sheet detects none", () => {
+    for (const w of WORKS) {
+      const found = [...new Set(segment(text(w.slug)).flatMap((c) => (c.speaker ? [c.speaker] : [])))].sort();
+      expect(found, w.slug).toEqual(Object.keys(w.cast?.speakers ?? {}).sort());
+    }
+  });
+});
+
+describe("T2b review: a cast failure silences one station only", () => {
+  it("tryCast returns null where the sheet cannot be honoured, and the cast otherwise", () => {
+    expect(tryCast(cues, { narrator: "m", speakers: { SOCRATES: "f", CRITO: "m" } })).toBeNull();
+    expect(tryCast(cues, WORKS[1]!.cast)).toEqual(cast(cues, WORKS[1]!.cast));
+    expect(CAST_FAILED).toBe("Dial could not cast this work's voices.");
+  });
+
+  it("the page casts each work on its own, and only a cast work can be tuned in", () => {
+    const main = read("web/src/main.ts");
+    expect(main).toContain("cast: tryCast(cues, w.cast)");
+    expect(main).toMatch(/tune\.disabled = here \|\| !texts\.get\(w\.slug\)\?\.cast;/);
+    expect(main).not.toMatch(/\bcast\(cues/);
+  });
+});
+
+describe("T2b review: catalogue numbers only in the dial's readout and the Bookplate", () => {
+  it("the station line gives the minutes only", () => {
+    expect(eyebrowHtml(36)).toBe("about <span data-numeral>36</span> min");
+    expect(eyebrowHtml()).toBe("");
+  });
+
+  it("the preset keys show the name, and are named by the title", () => {
+    const keys = presetKeysHtml(WORKS, 1);
+    expect(keys).not.toMatch(/00\d|514|data-numeral/);
+    expect([...keys.matchAll(/aria-label="([^"]*)"/g)].map((m) => m[1])).toEqual(WORKS.map((w) => esc(w.title)));
+    expect([...keys.matchAll(/<span class="t">([^<]*)<\/span>/g)].map((m) => m[1])).toEqual(["The Cave", "Crito", "Meditations"]);
+  });
+
+  it("the Tune knob and the on-air line name the work, not its number; the dial's own slider keeps it", () => {
+    const radio = read("web/src/device/radio.ts");
+    expect(radio).toContain('tuneKnob?.setAttribute("aria-valuetext", w.title);');
+    expect(radio).toContain("win.setAttribute(\"aria-valuetext\", `514, No. ${w.station}, ${w.title}`);");
+    expect(read("web/src/main.ts")).not.toMatch(/514/);
+  });
+});
+
+describe("T2b review: the size shown is what actually downloads", () => {
+  beforeAll(async () => {
+    if (!existsSync(path.join(STAGED_DIRS.voice, "manifest.json"))) await stage();
+  }, 120_000);
+  const manifest = () => JSON.parse(readFileSync(path.join(STAGED_DIRS.voice, "manifest.json"), "utf8")) as SizedManifest & { totalBytes: number; voices: Record<string, string>; narrator?: string };
+  const tokenizerAndConfig = (m: SizedManifest) => new Set(Object.keys(m.sizes).filter((p) => p.startsWith(`/voice/models/${m.repo}/`) && !p.includes("/onnx/")));
+  const everything = (m: SizedManifest, voices: string[]) => ({ model: true, modelFiles: tokenizerAndConfig(m), runtime: true, voices: new Set(voices) });
+  const nothing = { model: false, modelFiles: new Set<string>(), runtime: false, voices: new Set<string>() };
+  const voiceSize = (m: SizedManifest, id: string) => m.sizes[`/voice/voices/${id}.bin`]!;
+
+  it("the manifest lists every staged file's size; they sum to totalBytes; there is no second narrator field", () => {
+    const m = manifest();
+    expect(Object.values(m.sizes).reduce((a, b) => a + b, 0)).toBe(m.totalBytes);
+    for (const id of ALL_VOICES) expect(voiceSize(m, id), id).toBeGreaterThan(0);
+    for (const part of m.parts) expect(m.sizes[`/voice/models/${m.repo}/onnx/${part}`]).toBeGreaterThan(0);
+    expect(Object.keys(m.sizes).filter((p) => p.startsWith("/ort/")).length).toBe(2);
+    expect(m.narrator).toBeUndefined();
+  });
+
+  it("a cache holding everything except Crito's new voices: only those voices are counted and named", () => {
+    const m = manifest();
+    const crito = [...new Set(cast(cues, WORKS[1]!.cast).voices)];
+    expect(crito).toEqual(["bm_fable", "bm_lewis"]);
+    const got = neededBytes(m, crito, everything(m, ["bm_george"]));
+    expect(got).toEqual({ bytes: voiceSize(m, "bm_fable") + voiceSize(m, "bm_lewis"), need: "voices", missingVoices: 2 });
+    expect(warmingLine(got.bytes, got.need, "Crito", got.missingVoices)).toBe("Adding the voices for Crito (about 1 MB) to this device.");
+    expect(warmingLine(voiceSize(m, "bm_george"), "voices", "the Cave", 1)).toBe("Adding the voice for the Cave (about 1 MB) to this device.");
+  });
+
+  it("everything held: nothing downloads, and no download is claimed", () => {
+    const m = manifest();
+    const got = neededBytes(m, ["bm_george"], everything(m, ["bm_george"]));
+    expect(got).toEqual({ bytes: 0, need: "none", missingVoices: 0 });
+    expect(warmingLine(got.bytes, got.need, "the Cave", 0)).toBe("Warming the voice from this device.");
+  });
+
+  it("a first visit downloads the model, tokenizer and config, the runtime, and only that work's voices", () => {
+    const m = manifest();
+    const shared = m.totalBytes - ALL_VOICES.reduce((n, id) => n + voiceSize(m, id), 0);
+    for (const w of WORKS) {
+      const voices = [...new Set(cast(segment(text(w.slug)), w.cast).voices)];
+      const got = neededBytes(m, voices, nothing);
+      expect(got.need, w.slug).toBe("all");
+      expect(got.bytes, w.slug).toBe(shared + voices.reduce((n, id) => n + voiceSize(m, id), 0));
+      expect(got.bytes).toBeLessThan(m.totalBytes);
+    }
+  });
+
+  it("the worker loads, and the loader fetches and keeps, only the voices the work's cast uses", () => {
+    expect(read("web/src/narrate.worker.ts")).toContain("await loadVoice([...new Set(voices)],");
+    const voice = read("web/src/voice.ts");
+    expect(voice).toMatch(/for \(const id of cast\) \{\s*const pin = manifest\.voices\[id\]!;\s*if \(heldVoices\.has\(id\)\) continue;/);
+    expect(voice).not.toMatch(/Object\.entries\(manifest\.voices\)/);
+  });
+
+  it("the contract checks every pinned voice file is served, and nothing names a second narrator", () => {
+    const contract = parseYaml(read("contract.yaml")) as { checks: { path?: string; field?: string }[] };
+    const served = contract.checks.flatMap((c) => (c.path?.startsWith("/voice/voices/") ? [c.path] : []));
+    expect(served).toEqual(Object.keys(VOICES).map((id) => `/voice/voices/${id}.bin`));
+    expect(contract.checks.some((c) => c.field === "narrator")).toBe(false);
   });
 });

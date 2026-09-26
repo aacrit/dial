@@ -61,8 +61,10 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
    `web/public/voice` and `web/public/ort` before every build.
 2. **The words are the author's.** Every cue's `text` is a byte-exact slice
    of its source and the cues rebuild it exactly (`tests/verbatim.test.ts`).
-   `spoken` may differ only by whitespace, and by leaving out a speaker
-   label, until the Corrections sheet exists.
+   `spoken` may differ only by whitespace, and by leaving out the speaker
+   label that opens a turn (`speakerLabel()` in
+   `web/src/engine/segment.ts`), until the Corrections sheet exists. The
+   read-along shows the name derived from that label.
    A translator's apparatus (footnotes, the markers that point at them, and
    marks of a doubtful reading) may be removed only by
    `scripts/extract-work.mjs`, which refuses unless the upstream Gutenberg

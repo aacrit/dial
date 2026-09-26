@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Makes the hand-labelled answer key for a dialogue's speaker turns, which
-// tests/speakers.test.ts checks the engine against. It is written apart from
-// the engine on purpose: it reads the text line by line (not by paragraph)
-// and knows the speakers' names from the edition's list of persons, so it
-// shares no rule with web/src/engine/segment.ts.
+// The answer key for a dialogue's speaker turns, which tests/speakers.test.ts
+// checks the engine against. It is written apart from the engine on purpose:
+// it reads the text line by line (not by paragraph), takes the speakers'
+// names from the edition's list of persons (given on the command line or by
+// the test), and matches only "NAME:" at the start of a line after a blank
+// line, so it shares no rule with web/src/engine/segment.ts. It is not a
+// committed oracle: the test runs it on the text each time.
 //
-//   node scripts/answer-key.mjs crito SOCRATES CRITO > tests/fixtures/crito-turns.json
+//   node scripts/answer-key.mjs crito SOCRATES CRITO
 //
-// Each turn is its speaker and the first six words after the label. Checked
-// when it was made (2026-09-26): Crito has 95 turns, 48 by SOCRATES and 47
-// by CRITO, alternating from first to last.
+// Each turn is its speaker and the first six words after the label.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";

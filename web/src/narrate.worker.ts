@@ -6,11 +6,13 @@
 import { loadVoice } from "./voice";
 import type { VoiceId } from "./engine/cast";
 import type { Cue } from "./engine/segment";
+import type { Need } from "./voice-cache";
 
 /** voices[i] is cue i's cast voice. */
 export type ToWorker = { type: "render"; cues: Cue[]; voices: VoiceId[] };
 export type FromWorker =
-  | { type: "loading"; loaded: number; total: number; fromDevice: boolean }
+  /** total: the bytes this visit needs; need: nothing, only this work's voices, or the model and runtime too. */
+  | { type: "loading"; loaded: number; total: number; need: Need; missingVoices: number }
   | { type: "ready"; kept: boolean }
   | { type: "cue"; index: number; audio: Float32Array<ArrayBuffer>; sampleRate: number }
   | { type: "done" }
@@ -24,9 +26,10 @@ const ctx = self as unknown as {
 ctx.onmessage = async (event) => {
   if (event.data.type !== "render") return;
   try {
-    const { tts, manifest, kept } = await loadVoice((loaded, total, fromDevice) => ctx.postMessage({ type: "loading", loaded, total, fromDevice }));
-    ctx.postMessage({ type: "ready", kept });
     const { cues, voices } = event.data;
+    // Only the voices this work's cast uses are fetched and kept.
+    const { tts, manifest, kept } = await loadVoice([...new Set(voices)], (loaded, total, need, missingVoices) => ctx.postMessage({ type: "loading", loaded, total, need, missingVoices }));
+    ctx.postMessage({ type: "ready", kept });
     for (let i = 0; i < cues.length; i++) {
       // Only a voice the manifest pins, and so the loader has checked, is ever used.
       const voice = voices[i];

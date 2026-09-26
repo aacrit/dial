@@ -80,17 +80,27 @@ function clauseBreak(span: string, from: number): number | null {
 /**
  * A speaker label at the start of a paragraph: an ALL-CAPS name of two or
  * more letters (words may be joined by one space), then ":" or ".", then
- * whitespace and a word. A bare Roman numeral ("II.") is a section number,
- * not a name.
+ * whitespace and a word. What is plainly not a speaker is refused, by its
+ * form alone:
+ * - a bare Roman numeral ("II.", "XIV."), a section number;
+ * - a heading word ("BOOK II.", "CHAPTER THE FIRST.", "INTRODUCTION."),
+ *   whatever follows it;
+ * - an honorific or abbreviation with its full stop ("MR. Darcy",
+ *   "ST. Paul", "NO. 7"), whatever follows it.
  */
-const LABEL = /^([A-Z][A-Z'-]*[A-Z](?: [A-Z][A-Z'-]*[A-Z])*)[:.]\s+(?=\S)/;
+const LABEL = /^([A-Z][A-Z'-]*[A-Z](?: [A-Z][A-Z'-]*[A-Z])*)([:.])\s+(?=\S)/;
 const ROMAN = /^M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/;
+const HEADINGS = new Set(["BOOK", "CHAPTER", "SCENE", "LETTER", "ACT", "PART", "INTRODUCTION", "ARGUMENT", "NOTE"]);
+const HONORIFICS = new Set(["MR", "MRS", "MS", "DR", "ST", "NO"]);
 
 /** The label that opens a paragraph: its name and its length (name, mark and the spaces after it). */
 export function speakerLabel(para: string): { name: string; length: number } | null {
   const m = LABEL.exec(para);
-  if (!m || ROMAN.test(m[1]!)) return null;
-  return { name: m[1]!, length: m[0].length };
+  if (!m) return null;
+  const name = m[1]!;
+  if (ROMAN.test(name) || HEADINGS.has(name.split(" ")[0]!)) return null;
+  if (m[2] === "." && HONORIFICS.has(name)) return null;
+  return { name, length: m[0].length };
 }
 
 function trimmed(source: string, start: number, end: number): [number, number] {

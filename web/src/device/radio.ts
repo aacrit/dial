@@ -150,7 +150,7 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
     win.setAttribute("aria-valuetext", `514, No. ${w.station}, ${w.title}`);
     const tuneKnob = root.querySelector('[data-knob="tune"]');
     tuneKnob?.setAttribute("aria-valuenow", String(tuned + 1));
-    tuneKnob?.setAttribute("aria-valuetext", `Station ${w.station}, ${w.title}`);
+    tuneKnob?.setAttribute("aria-valuetext", w.title);
     options.onTune(tuned, cause);
     wake();
   };

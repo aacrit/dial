@@ -14,8 +14,9 @@
 // names. Pure and deterministic.
 //
 // castVoices() is the casting rule, kept apart so it can be replaced: for
-// now each speaker, in order of first appearance, takes the next palette
-// voice, skipping voices of the wrong sex where the sheet declares one. T2c
+// now each speaker, in order of first appearance, takes the first palette
+// voice not yet used (of the declared sex, where the sheet declares one),
+// and only once every such voice is taken does it wrap around. T2c
 // replaces it with quality and contrast scoring; its inputs (speakers in
 // order with their word counts, the sheet, the palette) stay.
 
@@ -83,19 +84,28 @@ export function narratorVoice(sheet?: Pick<CastSheet, "narrator">): NarratorVoic
 /**
  * Assigns each speaker a character voice. `speakers` come in order of first
  * appearance. Narrator voices are never used, whatever the palette holds.
- * Speaker i prefers the i-th remaining voice (wrapping); where the sheet
- * declares a sex, it takes the first voice of that sex from there on. A
- * sheet no palette voice can honour is an error, never a silent wrong voice.
+ * Each speaker takes the first voice, in palette order, that is of the
+ * declared sex (if any) and not yet used; when every such voice is used, it
+ * wraps: speaker i takes the first fitting voice from palette position i on.
+ * A sheet no palette voice can honour is an error, never a silent wrong voice.
  */
 export function castVoices<Id extends string>(speakers: readonly SpeakerStats[], sheet: CastSheet | undefined, palette: readonly Voice<Id>[]): Map<string, Id> {
   const pool = palette.filter((v) => !NARRATOR_IDS.includes(v.id));
   const declared = sheet?.speakers ?? {};
   const out = new Map<string, Id>();
+  const used = new Set<Id>();
   speakers.forEach((s, i) => {
     const sex = Object.hasOwn(declared, s.speaker) ? declared[s.speaker] : undefined;
+    const fits = (v: Voice<Id>) => sex === undefined || v.sex === sex;
+    const fresh = pool.find((v) => fits(v) && !used.has(v.id));
+    if (fresh) {
+      out.set(s.speaker, fresh.id);
+      used.add(fresh.id);
+      return;
+    }
     for (let k = 0; k < pool.length; k++) {
       const v = pool[(i + k) % pool.length]!;
-      if (sex === undefined || v.sex === sex) {
+      if (fits(v)) {
         out.set(s.speaker, v.id);
         return;
       }
@@ -148,6 +158,15 @@ export function cast(cues: readonly Pick<Cue, "speaker" | "spoken">[], sheet?: C
   const narrated = cues.some((c) => c.speaker === undefined);
   const voices = cues.map((c) => (c.speaker === undefined ? narrator : byVoice.get(c.speaker)!));
   return { narrator, parts, narrated, voices };
+}
+
+/** The work's cast, or null when its sheet cannot be honoured: that station alone is then unavailable. */
+export function tryCast(cues: readonly Pick<Cue, "speaker" | "spoken">[], sheet?: CastSheet): Cast | null {
+  try {
+    return cast(cues, sheet);
+  } catch {
+    return null;
+  }
 }
 
 /** How many different voices the listener hears. */

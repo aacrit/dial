@@ -14,7 +14,7 @@ import { ALIGN_WIDTH_DEG, MAX_ANGLE, alignment, angleAt, eyeWedge, landing, near
 import { PRESETS, Spring, parseSpring } from "../web/src/device/spring";
 import { cast } from "../web/src/engine/cast";
 import { segment } from "../web/src/engine/segment";
-import { bookplateHtml, esc, eyebrowHtml, metaHtml, presetKeysHtml, readAlongHtml, scaleSvg } from "../web/src/render";
+import { bookplateHtml, esc, metaHtml, presetKeysHtml, readAlongHtml, scaleSvg } from "../web/src/render";
 import { ACCOUNT_D1_WRITES_PER_DAY, ALLOWED_EVENTS, CLIENT_EVENTS, DEFAULT_EVENT_DAILY_CEILING, worstCaseDailyWrites } from "../worker/src/config";
 import { madeHere, progressLine, switchQuestion } from "../web/src/status-copy";
 
@@ -66,7 +66,8 @@ describe("the catalogue: three stations, every printed claim true", () => {
     // Once the voice could not be kept, the page stops saying it is kept.
     expect(madeHere(true)).toContain("then is kept on this device");
     expect(madeHere(false)).not.toMatch(/is kept/);
-    expect(main).toMatch(/voiceKept = msg\.kept;\s*avail\.textContent = madeHere\(voiceKept\);/);
+    expect(main).toMatch(/voiceKept = msg\.kept;\s*paintAvail\(\);/);
+    expect(main).toMatch(/avail\.textContent = text && !text\.cast \? CAST_FAILED : madeHere\(voiceKept\);/);
   });
 
   it("computes word counts from the text, never types them (they match the spec's checked counts)", () => {
@@ -194,7 +195,6 @@ describe("every renderer escapes what it interpolates, attributes included", () 
   };
   const outputs = {
     esc: esc(XSS),
-    eyebrow: eyebrowHtml(hostile, 20),
     bookplate: bookplateHtml(hostile),
     scale: scaleSvg([hostile], 2, 0),
     keys: presetKeysHtml([hostile], 0),
@@ -212,7 +212,7 @@ describe("every renderer escapes what it interpolates, attributes included", () 
 
   it("a quote cannot end an attribute: the preset key's label stays one attribute", () => {
     const keys = presetKeysHtml([hostile], 0);
-    expect(keys).toContain('aria-label="Station &quot;&gt;&lt;img');
+    expect(keys).toContain('aria-label="&quot;&gt;&lt;img');
   });
 });
 
@@ -239,7 +239,8 @@ describe("work_opened: once per station per page load, within the ceilings' shar
   it("the page sends it only when Tune in starts a work, through firstOpen; tuning and browsing send nothing (founder, 2026-09-26)", () => {
     expect([...main.matchAll(/sendEvent\("work_opened"\)/g)].length).toBe(1);
     const start = /const start = \(work: Work\) => \{([\s\S]*?)\n {2}\};/.exec(main)?.[1];
-    expect(start).toMatch(/^\s*const text = [^\n]*\n\s*\/\/[^\n]*\n\s*if \(firstOpen\(opened, work\.slug\)\) sendEvent\("work_opened"\);/);
+    // A work that could not be cast cannot start, so it is never counted as opened.
+    expect(start).toMatch(/^\s*const text = [^\n]*\n\s*const cast = text\.cast;\n\s*if \(!cast\) return;\n\s*\/\/[^\n]*\n\s*if \(firstOpen\(opened, work\.slug\)\) sendEvent\("work_opened"\);/);
     const onTune = /onTune: \(\) => \{([\s\S]*?)\n {4}\},/.exec(main)?.[1];
     expect(onTune).toBeDefined();
     expect(onTune).not.toMatch(/sendEvent|firstOpen|start\(/);

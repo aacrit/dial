@@ -755,9 +755,10 @@ progress::-moz-progress-bar {
   border-color: var(--color-filament);
 }
 
+/* The key's label is the work's short name (no catalogue number: founder, 2026-09-26). */
 .key .t {
-  font: 500 0.56rem/1.2 var(--font-structure);
-  color: var(--color-cream-muted);
+  font: 500 0.7rem/1.2 var(--font-structure);
+  color: var(--color-cream);
   max-width: 8em;
   white-space: nowrap;
   overflow: hidden;
