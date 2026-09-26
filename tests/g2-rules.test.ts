@@ -13,7 +13,8 @@ import { ORT_FILES, ORT_WASM, STAGED_DIRS, VOICE_SHA256, stage } from "../script
 import { checkColorLine, checkEmDashLine, isVerbatimPath, shouldScan } from "../scripts/lint-design.mjs";
 import { walk } from "../scripts/lib/walk.mjs";
 import { aboutMegabytes, isStatableTotal, warmingLine } from "../web/src/download-size";
-import { NOT_KEPT, STOP_OFFLINE, STOP_STORAGE, renderedLine, renderingLine, stopLine } from "../web/src/status-copy";
+import { NOT_KEPT, STOP_OFFLINE, STOP_SERVER, STOP_STORAGE, pausedLine, renderedLine, renderingLine, stopLine } from "../web/src/status-copy";
+import { lampLit } from "../web/src/broadcast-state";
 import { runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName } from "../web/src/voice-cache";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,7 +45,7 @@ describe("tally is a lamp only", () => {
   });
 
   it("while on air the button lights a small tally lamp beside its label", () => {
-    const lamp = rules.find(([sel]) => /data-on-air/.test(sel) && /#tune-in::before/.test(sel));
+    const lamp = rules.find(([sel]) => /data-on-air/.test(sel) && /#tune-in[^\s]*::before/.test(sel));
     expect(lamp).toBeDefined();
     const body = lamp![1];
     expect(decl(body, "background")).toBe("var(--color-tally)");
@@ -98,32 +99,45 @@ describe("the meter never outlives the work", () => {
 describe("the lamp is lit only while a render or playback is live", () => {
   const block = (name: string) => new RegExp(`const ${name} = \\([^)]*\\) => \\{([\\s\\S]*?)\\n {2,4}\\};`).exec(main)?.[1];
 
-  it("only setLamp writes on-air, and only for a live, running session", () => {
-    expect([...main.matchAll(/dataset\.onAir = /g)].length).toBe(1);
-    const setLamp = block("setLamp");
-    expect(setLamp).toMatch(/if \(session\?\.live && session\.audio\.state === "running"\) document\.body\.dataset\.onAir = "true";\s*else delete document\.body\.dataset\.onAir;/);
+  it("tally means a render or playback is live: paused while lines are still being made keeps it lit", () => {
+    expect(lampLit(null)).toBe(false);
+    expect(lampLit({ live: true, playing: true, renderDone: false })).toBe(true);
+    // T1 review: pausing while the render still runs must not put the lamp out.
+    expect(lampLit({ live: true, playing: false, renderDone: false })).toBe(true);
+    expect(lampLit({ live: true, playing: true, renderDone: true })).toBe(true);
+    expect(lampLit({ live: true, playing: false, renderDone: true })).toBe(false);
+    expect(lampLit({ live: false, playing: true, renderDone: false })).toBe(false);
   });
 
-  it("a stop takes the broadcast off air: lamp off, Pause hidden, Tune in back and enabled for a retry", () => {
+  it("only setLamp writes on-air, from lampLit over the live session's state", () => {
+    expect([...main.matchAll(/dataset\.onAir = /g)].length).toBe(1);
+    const setLamp = block("setLamp");
+    expect(setLamp).toMatch(/lampLit\(session && \{ live: session\.live, playing: session\.audio\.state === "running", renderDone: session\.renderDone \}\)/);
+    expect(setLamp).toMatch(/if \(lit\) document\.body\.dataset\.onAir = "true";\s*else delete document\.body\.dataset\.onAir;/);
+  });
+
+  it("a stop takes the broadcast off air: lamp off, Pause hidden, Tune in back for a retry", () => {
     expect(block("stopped")).toContain("offAir()");
     const offAir = block("offAir");
     expect(offAir).toBeDefined();
-    expect(offAir).toContain("session.live = false");
+    expect(offAir).toContain("s.live = false");
     expect(offAir).toContain("setLamp()");
     expect(offAir).toContain("pause.hidden = true");
-    expect(offAir).toContain('tune.textContent = "Tune in"');
-    expect(offAir).toContain("tune.disabled = false");
+    expect(offAir).toContain("paintTuneIn()");
+    // Tune in is enabled again whenever the tuned work is not the one on air.
+    expect(block("paintTuneIn")).toMatch(/tune\.disabled = here \|\| !texts\.has\(w\.slug\)/);
   });
 
-  it("after the render is done, the lamp goes off when the last scheduled line ends", () => {
+  it("the lamp is re-read when every line is made, and goes off when the last scheduled line ends", () => {
     expect(main).toMatch(/node\.onended = \(\) => \{\s*playing--;\s*ended\(\);/);
-    expect(block("ended")).toMatch(/renderDone && playing === 0\) offAir\(\)/);
-    expect(main).toMatch(/msg\.type === "done"\) \{[\s\S]*?renderDone = true;[\s\S]*?ended\(\);/);
+    expect(block("ended")).toMatch(/own\.renderDone && playing === 0\) \{\s*offAir\(\);/);
+    expect(main).toMatch(/msg\.type === "done"\) \{[\s\S]*?own\.renderDone = true;[\s\S]*?setLamp\(\);[\s\S]*?ended\(\);/);
   });
 
-  it("pausing turns the lamp off and resuming turns it back on", () => {
-    expect(main).toMatch(/audio\.suspend\(\)\.then\(setLamp\)/);
-    expect(main).toMatch(/audio\.resume\(\)\.then\(setLamp\)/);
+  it("pausing and resuming re-read the lamp, and so does every audio state change", () => {
+    expect(main).toMatch(/s\.audio\.suspend\(\)\.then\(settle\)/);
+    expect(main).toMatch(/s\.audio\.resume\(\)\.then\(settle\)/);
+    expect(main).toMatch(/const settle = \(\) => \{\s*setLamp\(\);/);
     expect(main).toContain("audio.onstatechange = setLamp");
   });
 });
@@ -132,8 +146,11 @@ describe("a stopped render says what happened in plain words", () => {
   it("maps known failures to the real fix and everything else to one generic line", () => {
     expect(stopLine("TypeError: Failed to fetch")).toBe("Could not reach Dial. Check your connection, then press Tune in again.");
     expect(stopLine("TypeError: NetworkError when attempting to fetch resource.")).toBe(STOP_OFFLINE);
-    expect(stopLine("Error: voice part model_quantized.part2: 503")).toBe(STOP_OFFLINE);
-    expect(stopLine("Error: voice manifest: 404")).toBe(STOP_OFFLINE);
+    // An HTTP status from Dial is a server error, not a connection problem (T1 review).
+    expect(stopLine("Error: voice part model_quantized.part2: 503")).toBe("Dial could not send the voice. Try again later.");
+    expect(stopLine("Error: voice manifest: 404")).toBe(STOP_SERVER);
+    expect(stopLine("Error: voice runtime: 500")).toBe(STOP_SERVER);
+    expect(STOP_SERVER).not.toMatch(/connection/);
     expect(stopLine("QuotaExceededError: The quota has been exceeded.")).toBe(
       "This device is out of storage for the voice. Free some space, then press Tune in again.",
     );
@@ -151,14 +168,17 @@ describe("a stopped render says what happened in plain words", () => {
   });
 
   it("says so when the voice could not be kept, while rendering and when done", () => {
-    expect(renderingLine(3, 118, true)).toBe("Rendering on this device: 3 of 118 lines.");
-    expect(renderingLine(3, 118, false)).toBe(`Rendering on this device: 3 of 118 lines. ${NOT_KEPT}`);
-    expect(renderedLine(118, false)).toContain(NOT_KEPT);
-    expect(renderedLine(118, true)).not.toContain(NOT_KEPT);
+    expect(renderingLine(3, 118, true)).toBe("On air. Made on this device as you listen: line 3 of 118.");
+    expect(renderingLine(3, 118, false)).toBe(`On air. Made on this device as you listen: line 3 of 118. ${NOT_KEPT}`);
+    expect(renderingLine(0, 118, true)).toBe("Making the first line on this device.");
+    expect(renderedLine(118, 1212, false)).toContain(NOT_KEPT);
+    expect(renderedLine(118, 1212, true)).toBe("Made on this device. All 118 lines, 20:12. Nothing was sent anywhere.");
+    // Listener copy never says "render" (design/spec.md 1.8).
+    for (const line of [renderingLine(3, 118, true), renderedLine(118, 1212, true), pausedLine(87, 9, 118, true)]) expect(line).not.toMatch(/render/i);
     expect(NOT_KEPT).toBe("The voice could not be kept on this device, so it will download again next time.");
     // The loader reports it: any failed write clears kept, and ready carries it.
     expect(voiceSrc).toMatch(/if \(!\(await keep\(c, key, response\)\)\) kept = false;/);
-    expect(main).toMatch(/kept = msg\.kept;/);
+    expect(main).toMatch(/own\.kept = msg\.kept;/);
   });
 
   it("the status line's counts and sizes use tabular figures", () => {
@@ -270,9 +290,12 @@ describe("the voice caches are keyed to their pins", () => {
     expect(voiceSrc).toMatch(/const current = \[voiceCacheName\(manifest\), runtimeCacheName\(manifest\)\];/);
     expect(voiceSrc).toMatch(/staleVoiceCaches\(await caches\.keys\(\), current\)\) await caches\.delete/);
     // On read: a cached file that fails its pin is dropped, then fetched again.
-    expect(voiceSrc).toMatch(/if \(hit && \(await sha256Hex\(hit\)\) !== pin\) await cache\.delete\(key\);/);
+    expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(hit\)\) !== pin\) \{\s*await cache\.delete\(key\);\s*return undefined;\s*\}\s*return hit;/);
     expect(voiceSrc).toContain("await dropIfUnpinned(voices, voiceKey, manifest.voiceSha256);");
-    expect(voiceSrc).toContain("await dropIfUnpinned(runtimeCache, runtimeKey, manifest.runtimeSha256);");
+    // T1 review: the runtime's .wasm is read and hashed once per load; the checked bytes are the ones handed over.
+    expect(voiceSrc).toContain("const cachedRuntime = await dropIfUnpinned(runtimeCache, runtimeKey, manifest.runtimeSha256);");
+    expect(voiceSrc).toContain("let binary = cachedRuntime;");
+    expect([...voiceSrc.matchAll(/runtimeCache\.match\(/g)].length).toBe(0);
     // On fetch: a file that fails its pin is never used or kept.
     expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(binary\)\) !== manifest\.runtimeSha256\) throw/);
     expect(voiceSrc).toMatch(/if \(\(await sha256Hex\(buf\)\) !== manifest\.voiceSha256\) throw/);

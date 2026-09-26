@@ -66,10 +66,19 @@ async function stitchModel(m: VoiceManifest, count: (bytes: number) => void): Pr
   return new Response(blob, { headers: { "content-type": "application/octet-stream", "content-length": String(blob.size) } });
 }
 
-/** Drops a cached file that no longer matches its pin, so it is fetched again. */
-async function dropIfUnpinned(cache: Cache, key: string, pin: string): Promise<void> {
+/**
+ * Drops a cached file that no longer matches its pin, so it is fetched again.
+ * Returns the cached bytes when they match, so a caller that needs them
+ * (the runtime's .wasm) reads and hashes the file once per load, not twice.
+ */
+async function dropIfUnpinned(cache: Cache, key: string, pin: string): Promise<ArrayBuffer | undefined> {
   const hit = await (await cache.match(key))?.arrayBuffer();
-  if (hit && (await sha256Hex(hit)) !== pin) await cache.delete(key);
+  if (!hit) return undefined;
+  if ((await sha256Hex(hit)) !== pin) {
+    await cache.delete(key);
+    return undefined;
+  }
+  return hit;
 }
 
 export async function loadVoice(onProgress: VoiceProgress): Promise<LoadedVoice> {
@@ -92,10 +101,9 @@ export async function loadVoice(onProgress: VoiceProgress): Promise<LoadedVoice>
   const voices = await caches.open("kokoro-voices");
   const runtimeKey = runtimeCacheKey(manifest);
   await dropIfUnpinned(voices, voiceKey, manifest.voiceSha256);
-  await dropIfUnpinned(runtimeCache, runtimeKey, manifest.runtimeSha256);
+  const cachedRuntime = await dropIfUnpinned(runtimeCache, runtimeKey, manifest.runtimeSha256);
   const modelKey = `${MODELS}${manifest.repo}/${manifest.model}`;
-  const fromDevice =
-    !!(await cache.match(modelKey)) && !!(await runtimeCache.match(runtimeKey)) && !!(await voices.match(voiceKey));
+  const fromDevice = !!(await cache.match(modelKey)) && !!cachedRuntime && !!(await voices.match(voiceKey));
 
   let loaded = 0;
   const count = (bytes: number) => {
@@ -139,10 +147,10 @@ export async function loadVoice(onProgress: VoiceProgress): Promise<LoadedVoice>
   const wasm = env.backends.onnx.wasm;
   if (wasm) {
     wasm.wasmPaths = "/ort/";
-    // The runtime's WASM, from its own cache if it still matches its pin
-    // (checked above), else from this origin; handed to the runtime, which
-    // then does not fetch it again.
-    let binary = await (await runtimeCache.match(runtimeKey))?.arrayBuffer();
+    // The runtime's WASM: the cached bytes already read and checked against
+    // their pin above, else a fresh copy from this origin; handed to the
+    // runtime, which then does not fetch it again.
+    let binary = cachedRuntime;
     if (!binary) {
       const res = await fetch(`/ort/${manifest.runtime}`);
       if (!res.ok) throw new Error(`voice runtime: ${res.status}`);

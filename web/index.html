@@ -4,65 +4,121 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="build" content="__BUILD__" />
-    <meta name="description" content="Dial: radio theatre of the classics, rendered in your browser tab. Tonight, Plato's Allegory of the Cave." />
+    <meta name="description" content="Dial: public-domain philosophy performed as radio theatre, made on your device. Tune the dial between three works." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 21V11a8 8 0 0 1 16 0v10' fill='none' stroke='currentColor' stroke-width='1.6'/%3E%3Ccircle cx='12' cy='14' r='1.6' fill='currentColor'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="../design/tokens.css" />
     <link rel="stylesheet" href="./src/style.css" />
     <title>Dial</title>
   </head>
-  <body>
-    <main class="page">
-      <header class="page-header">
-        <p class="eyebrow"><span data-numeral>AM 514</span> kHz &middot; a voidvision production</p>
-        <h1 class="wordmark">Dial</h1>
-        <p class="value-line">Theatre of the mind. The classics, performed in your browser tab: nothing leaves it.</p>
+  <body class="faceplate-page">
+    <svg class="defs" width="0" height="0" aria-hidden="true">
+      <defs>
+        <symbol id="x-wordmark" viewBox="0 -72.2 261.5 72.8"><path d="M8.6 -69.1L29.0 -69.1Q43.2 -69.1 49.8 -67.1Q57.4 -64.7 61.5 -61.1Q65.6 -57.4 68.0 -53.5Q72.8 -45.6 72.8 -35.4Q72.8 -19.5 61.3 -9.7Q53.2 -2.6 42.2 -0.9Q36.1 0.0 25.1 0.0L8.6 0.0L8.6 -69.1ZM33.5 -4.1Q34.3 -4.0 35.0 -4.0L36.1 -4.0Q49.3 -4.0 58.7 -12.3Q68.6 -20.9 68.6 -35.4Q68.6 -44.4 64.3 -51.7Q58.0 -62.3 44.3 -64.6Q39.9 -65.3 33.5 -65.4L33.5 -4.1ZM92.9 -69.1L117.8 -69.1L117.8 0.0L92.9 0.0L92.9 -69.1ZM154.4 -8.7Q145.4 -8.7 142.2 -8.8L140.8 -5.5Q140.1 -4.1 139.6 -2.5Q138.5 0.5 136.5 0.5Q135.5 0.5 134.9 -0.0Q134.4 -0.6 134.4 -1.3Q134.4 -2.3 135.3 -3.7Q136.8 -5.7 138.2 -9.0Q134.0 -9.4 134.0 -11.5Q134.0 -13.5 136.4 -13.5Q137.8 -13.5 139.8 -13.0L164.1 -72.2L197.5 0.0L172.1 0.0L168.1 -8.7L154.4 -8.7ZM143.7 -12.6Q148.4 -12.3 152.1 -12.3L166.4 -12.3L154.2 -38.6L143.7 -12.6ZM258.2 -4.4Q260.8 -4.4 260.8 -2.2Q260.8 -1.4 259.7 -0.7Q258.7 0.0 256.0 0.0L216.3 0.0L216.3 -69.1L241.2 -69.1L241.2 -3.2L250.4 -3.2Q253.4 -3.2 255.7 -3.8Q257.9 -4.4 258.2 -4.4Z" /></symbol>
+      </defs>
+    </svg>
+
+    <header class="masthead">
+      <span class="brand" aria-label="Dial, AM 514 kHz">
+        <svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z" /><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145" /><path class="arch-live" d="M20 94 L100 94" /></svg>
+        <svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark" /></svg>
+        <span class="freq">AM <span data-numeral>514</span> kHz</span>
+      </span>
+    </header>
+
+    <main class="room" id="main">
+      <header class="rep-head">
+        <h1>The Repertory</h1>
+        <p class="eyebrow">First shelf &middot; Philosophy &middot; <span data-numeral>3</span> stations</p>
       </header>
 
-      <section class="card listing" aria-labelledby="work-title">
-        <p class="eyebrow"><span data-numeral>514 &middot; No. 001</span></p>
-        <h2 id="work-title">The Allegory of the Cave</h2>
-        <p class="byline">Plato, <cite>Republic</cite>, Book VII, <span data-numeral>514a&ndash;521b</span>. Translated by Benjamin Jowett.</p>
+      <section class="device" data-device aria-label="The Repertory, as a radio: each work is a station on the dial">
+        <div class="dialwin" data-dialwin role="slider" tabindex="0" aria-label="Tuning dial. Drag the needle, or use the arrow keys to move between stations." aria-valuemin="1" aria-valuemax="3" aria-valuenow="1">
+          <svg viewBox="0 0 400 250" aria-hidden="true">
+            <g class="dw-scale"></g>
+            <g class="dw-needle">
+              <line class="nd-tail" x1="200" y1="238" x2="200" y2="247" />
+              <line class="nd" x1="200" y1="236" x2="200" y2="52" />
+              <circle class="nd-cap" cx="200" cy="236" r="10" />
+              <circle class="nd-hub" cx="200" cy="236" r="3" />
+            </g>
+            <text class="dw-am" x="24" y="240">514 &middot; 001</text>
+          </svg>
+          <span class="dw-sheen" aria-hidden="true"></span>
+        </div>
+
+        <p class="dial-key">Each station on the dial is one work: <span data-numeral>514 &middot; 001</span> is the Cave, <span data-numeral>002</span> is Crito, <span data-numeral>003</span> is the Meditations.</p>
+
+        <div class="station-line">
+          <p class="eyebrow" id="st-eyebrow"></p>
+          <h2 id="st-title"></h2>
+          <p class="by" id="st-credit"></p>
+        </div>
+
+        <div class="glasspanel display">
+          <div class="instruments">
+            <div class="inst">
+              <svg class="mini-eye" viewBox="0 0 64 64" aria-hidden="true"><circle class="me-glass" cx="32" cy="32" r="28" /><path class="me-fan" data-eye d="" /><circle class="me-cap" cx="32" cy="32" r="10" /></svg>
+              <span class="il">On station</span>
+            </div>
+            <div class="inst">
+              <svg class="valve" viewBox="0 0 64 64" aria-hidden="true"><circle class="v-glow" cx="32" cy="40" r="20" /><path class="v-env" d="M22 56 V26 a10 10 0 0 1 20 0 V56" /><rect class="v-base" x="18" y="56" width="28" height="5" rx="2" /><path class="v-fil" d="M27 50 V37 l5 -7 l5 7 V50" /></svg>
+              <span class="il" id="valve-label">Voice</span>
+            </div>
+          </div>
+          <p class="devnote" id="devnote" role="status"></p>
+          <div class="station-card">
+            <p class="desc" id="st-sentence"></p>
+            <p class="meta" id="st-meta"></p>
+          </div>
+          <section class="readalong" id="readalong" aria-label="Read along" hidden>
+            <p class="ra-who" id="ra-who"></p>
+            <div class="ra-lines" id="ra-lines" lang="en"></div>
+          </section>
+        </div>
+
+        <div class="tunein">
+          <button type="button" class="btn" id="tune-in" disabled>Tune in</button>
+          <button type="button" class="btn quiet" id="pause" hidden>Pause</button>
+          <button type="button" class="btn" id="retry" hidden>Try again</button>
+          <span class="avail" id="tune-avail"></span>
+        </div>
+
+        <div class="onair-panel">
+          <progress id="render-meter" hidden></progress>
+          <p id="broadcast-status" role="status" aria-live="polite"></p>
+          <a id="download" class="btn quiet" hidden>Download as an audio file</a>
+        </div>
 
         <div class="controls">
-          <button type="button" id="tune-in" disabled>Tune in</button>
-          <button type="button" id="pause" class="quiet" hidden>Pause</button>
-          <a id="download" class="button-link" download="dial-514-001-the-allegory-of-the-cave.wav" hidden>Download the recording</a>
+          <div class="knob" data-knob="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70 percent"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Volume</span></div>
+          <div class="keys" role="group" aria-label="Stations" data-presets></div>
+          <div class="knob" data-knob="tune" role="slider" tabindex="0" aria-label="Tune" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Tune</span></div>
         </div>
-        <progress id="render-meter" hidden></progress>
-        <p id="broadcast-status" class="muted" role="status" aria-live="polite">
-          A plain narration, rendered on your device as you listen. The voice downloads once and is kept on this device.
-        </p>
-
-        <dl class="bookplate">
-          <dt>Source</dt>
-          <dd>Project Gutenberg eBook No. <span data-numeral>1497</span>, <cite>The Republic</cite>, translated by Benjamin Jowett. Performed from &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo; Jowett's introduction and the rest of the <cite>Republic</cite> are not performed.</dd>
-          <dt>Public domain</dt>
-          <dd>Worldwide: the translation was published before <span data-numeral>1930</span> and its translator died in <span data-numeral>1893</span>.</dd>
-          <dt>Voice</dt>
-          <dd>Kokoro-82M, running in this tab. AI-voiced; the words are Jowett's, verbatim.</dd>
-          <dt>Also</dt>
-          <dd>Prefer a human reader? <a href="https://librivox.org/platos_republic/" rel="noopener">LibriVox has a volunteer reading of the same translation</a>.</dd>
-        </dl>
       </section>
 
-      <section class="card script-card" aria-label="The script">
-        <div id="script" class="script" lang="en"></div>
-      </section>
+      <div class="below">
+        <details class="drill bookplate">
+          <summary>Bookplate</summary>
+          <div class="drill-body"><dl id="bookplate"></dl></div>
+        </details>
 
-      <section class="card" id="feedback-card">
-        <h2>Tell us what is missing</h2>
-        <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
-        <form id="feedback-form" novalidate>
-          <label for="feedback-text">Feedback</label>
-          <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
-          <button type="submit">Send</button>
-          <p id="feedback-status" role="status" aria-live="polite"></p>
-        </form>
-      </section>
+        <p class="own">Have writing of your own? Bringing your own chapter needs the Studio, which is not open yet.</p>
 
-      <footer class="page-footer">
-        <a href="./privacy.html">Privacy</a>
-      </footer>
+        <section class="card" id="feedback-card">
+          <h2>Tell us what is missing</h2>
+          <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
+          <form id="feedback-form" novalidate>
+            <label for="feedback-text">Feedback</label>
+            <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
+            <button type="submit" class="btn">Send</button>
+            <p id="feedback-status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <footer class="page-footer">
+          <a href="./privacy.html">Privacy</a>
+        </footer>
+      </div>
     </main>
 
     <script type="module" src="./src/main.ts"></script>
