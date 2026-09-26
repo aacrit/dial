@@ -26,3 +26,12 @@ Free server TTS was researched (Cloudflare Workers AI MeloTTS and Aura, Gemini, 
 
 ## 2026-09-26: G2 round 2 approved (Dial, the radio)
 The founder asked for a retro device with great motion physics, and for the device rather than the text to be the hero. The approved design puts the works as stations on a dial behind glass, with an inertial needle, a valve warm-up, a read-along strip, sadhana's wave, loader and springs, speed instruments, and a no-stall countdown. Founder answers: the device test runs at the first on-device render; plan on 80% of measured speed with a 2-minute cutoff; the Tune knob changes station. Packet: https://claude.ai/artifact/Jv1JuAgsxgzegGcE25j3gz
+
+## 2026-09-26: Law 2 allows removing a translator's apparatus, by the pinned script only
+Founder decision in chat, from the T2 review. A translator's apparatus (footnotes, note markers, editorial marks) may be removed only by `scripts/extract-work.mjs`, which checks the upstream Gutenberg file's SHA-256 before it cuts and refuses unless the note markers match the notes one for one; the Bookplate says what was removed, and every word of the text itself stays verbatim. First use: George Long's Meditations Book II (eBook 15877), without his footnotes, their markers and his + marks, his bracketed words kept.
+
+## 2026-09-26: work_opened counts Tune in on a work
+Founder decision in chat, from the T2 review. `work_opened` is sent when Tune in is pressed on a work, once per work per page load; tuning and browsing the dial send nothing. It counts a choice to listen, not a needle passing a station, so the Repertory's kill-criteria reading is not inflated by browsing. design/spec.md section 2's event line says the same.
+
+## 2026-09-26: Copy amendment: no line says nothing was sent
+G2 approved "Made on this device. All 118 lines, 20:12. Nothing was sent anywhere.", but the page sends `chapter_rendered` at that moment, so the line was false; truth wins over the approved words. It becomes "Made on this device: all 118 lines, 20:12. The words and the audio never left this device." The same check corrected the spec's other absolute claims: the prepared-recording line, the Seal's first visit (a page view count is sent on load) and its switch (feedback can still be sent), the Studio's "Nothing is sent", and the privacy page.

@@ -81,7 +81,7 @@ Broadcast (`first-run` is the default): `first-run`, `playing`, `saving`, `saved
 | State | Status line / glass note / instruments | Actions |
 |---|---|---|
 | `first-run` | "Tuned to 514 · 001, the Cave. Press Tune in: it plays at once, from a recording Dial made in advance." Valve "Voice ready"; the Play key reads "Tune in" and is the only Tune in | Small link: "Or make it on this device (downloads the voice once, 115 MB)" |
-| `playing` | Lamp. "On air. Playing a recording Dial made in advance from Jowett's words. Nothing is made or sent while you listen." | |
+| `playing` | Lamp. "On air. Playing a recording Dial made in advance from Jowett's words. Nothing is made while you listen, and the words and the audio never leave this device." | |
 | `device-test` | Gauge climbing, "Testing · GPU". "Testing this device: one short sentence, about 3 s. It tries the graphics chip first, then the processor." | |
 | `warming` | Valve warming, "48 of 115 MB". "Getting the voice ready: 48.2 of 114.6 MB. It downloads once from dial.voidvision.org, then stays on this device." | Stop, and play Dial's recording instead |
 | `countdown` | Valve "Starting in 5:03" beside the gauge "1.0× · CPU". Big line "Starting in 5:03, so it won't pause", then "This device makes speech at 1.0× on its processor. Dial plans on 0.8× to be safe, makes the first 5:03, then stays ahead to the end." | Play Dial's recording now; Download to listen later |
@@ -90,7 +90,7 @@ Broadcast (`first-run` is the default): `first-run`, `playing`, `saving`, `saved
 | `no-webgpu` | Gauge "1.1× · CPU". "No WebGPU in this browser, so the processor makes the speech: 1.1× on 8 threads. Dial plans on 0.88×, so it starts in 2:45, and won't pause after that." | Play Dial's recording now |
 | `slow` | Gauge "0.6× · CPU", valve "Would wait 21:53". "This device makes speech at 0.6× the speed it plays. To play without pausing, it would make the first 21:53 before starting. Dial's own recording plays now." | Play Dial's recording now; Download to listen later; Wait 21:53 and play here |
 | `paused` | Unlit lamp. "Paused at 01:27. Line 9 of 118." | |
-| `rendered` | Green pip. "Made on this device. All 118 lines, 20:12. Nothing was sent anywhere." Home Screen card below | |
+| `rendered` | Green pip. "Made on this device: all 118 lines, 20:12. The words and the audio never left this device." Home Screen card below | |
 | `offline` | Cold device. "You are offline, and the voice is not on this device yet. It downloads once (about 115 MB). Connect once to fetch it; after that, this work plays with no connection." | Try again |
 | `error` | Gauge "Stopped". "Making the recording stopped at line 64. Your browser stopped the graphics chip that runs the voice. Lines 1 to 63 are kept. Resume, and Dial carries on in a slower mode, about three times slower on this device." | Resume from line 64; Play Dial's recording |
 | `bookplate`, `script` | The Bookplate sheet; the full script sheet ("Jowett's words, exactly as printed. Tap a line to play from it.") | Close |
@@ -269,7 +269,7 @@ Times are words at 155 per minute plus the pause table; the real running time re
 | Did not load | "The Repertory did not load" / "The list of works could not be fetched from dial.voidvision.org. Check your connection, then try again. Works you have saved still play from the Broadcast tab." Button: Try again. |
 | Search, no results | "Nothing on the shelf matches "Seneca"" / "The Repertory holds public-domain works only, and its first shelf is philosophy. Search looks at titles, authors and translators." Button: Clear the search. Search placeholder: "Search the Repertory"; `/` focuses it. |
 
-Events: `work_opened` fires when a Broadcast opens from a listing.
+Events: `work_opened` fires when Tune in is pressed on a work, once per work per page load; tuning and browsing the dial send nothing (founder, 2026-09-26).
 
 ---
 
@@ -294,13 +294,13 @@ Events: `work_opened` fires when a Broadcast opens from a listing.
 | State | Status line or panel |
 |---|---|
 | First visit (default) | Panel "Tune in" / "Plays at once: Dial made this recording in advance, from Jowett's words and nothing else. Or your device can make its own copy as you listen." Buttons: Tune in, Make it on this device. Note: "Making it here downloads the voice once, about 115 MB. Tune in needs no download." Works without a prepared recording show only "Tune in" (which makes it on the device) and "The voice downloads once, about 115 MB." Save for offline and Download the file are visible from here. |
-| Playing Dial's recording | Lamp. "On air. Playing a recording Dial made in advance from Jowett's words. Nothing is made or sent while you listen." |
+| Playing Dial's recording | Lamp. "On air. Playing a recording Dial made in advance from Jowett's words. Nothing is made while you listen, and the words and the audio never leave this device." |
 | Saving, Saved | As Keep this work above. |
 | Made on this device, ahead | Lamp. "On air. Your device is making the recording just ahead of you: line 64 of 118." Ribbon shows the render head. |
 | Getting the voice ready | Standing wave, "Getting the voice ready", a progress line, "48.2 of 114.6 MB. It downloads once, from dial.voidvision.org, and then stays on this device. The first line plays as soon as it is ready." Button: Stop, and play Dial's recording instead (only where one exists). |
 | Device too slow | "This device makes the recording slower than it plays" / "It makes 0.6 seconds of audio each second, so listening now would stop and start. Making the whole work first takes about 34 min; leave this page open while it does." Buttons: Play Dial's recording (where one exists), Make it first, then play. The rate is measured on the first 20 s of audio, never guessed. |
 | Paused | Unlit lamp. "Paused at 01:27. Line 11 of 118." |
-| Made on this device, finished (`rendered`) | Green pip. "Made on this device. All 118 lines, 20:12. Nothing was sent anywhere." Download the file enabled. On a phone, after the first completed listen, the install card: on iPhone Safari the Add to Home Screen steps (as in the Repertory); where the browser offers the prompt, "Keep Dial on this phone" with Install. |
+| Made on this device, finished (`rendered`) | Green pip. "Made on this device: all 118 lines, 20:12. The words and the audio never left this device." Download the file enabled. On a phone, after the first completed listen, the install card: on iPhone Safari the Add to Home Screen steps (as in the Repertory); where the browser offers the prompt, "Keep Dial on this phone" with Install. |
 | Offline, no voice | "You are offline, and the voice is not on this device yet" / "The voice downloads once (about 115 MB). Connect once to fetch it; after that, this work plays with no connection. The words below are saved and readable now." Button: Try again. |
 | Making it stopped | "Making the recording stopped at line 64" / "Your browser stopped the graphics chip that runs the voice. Lines 1 to 63 are kept. Resume, and Dial carries on in a slower mode, about three times slower on this device." Buttons: Resume from line 64, Play Dial's recording. Other causes use the same shape: what stopped, what is kept, the one action. |
 | Bookplate open (`bookplate`) | The phone Bookplate sheet over the player. |
@@ -358,7 +358,7 @@ At 1920 the manuscript column caps at the reading measure plus padding, the insp
 **States and copy**
 | State | What shows |
 |---|---|
-| First visit, import (default) | Drop zone "Bring a chapter" / "Paste it, or drop a .txt or .docx file here. It is read in this tab and never uploaded." Buttons: Paste text, Choose a file. One line of terms: "Free: one chapter, up to 8,000 words, and any public-domain text. Your whole book: $15 once, not on sale yet. Nothing is sent: check it on the Seal." (Seal is a link.) No player bar. |
+| First visit, import (default) | Drop zone "Bring a chapter" / "Paste it, or drop a .txt or .docx file here. It is read in this tab and never uploaded." Buttons: Paste text, Choose a file. One line of terms: "Free: one chapter, up to 8,000 words, and any public-domain text. Your whole book: $15 once, not on sale yet. Your writing is never sent: check it on the Seal." (Seal is a link.) No player bar. |
 | Reading the structure | "Reading the structure" / "pride-and-prejudice-ch1.txt: 34 paragraphs, 28 with quotations, 847 words. Dial reads the form of the text, never its meaning." |
 | Import error | "This file could not be read" / "manuscript.pages is a Pages document. Dial reads .txt and .docx. In Pages, choose File, Export To, Word, then drop the .docx here." Buttons: Choose another file, Paste text instead. |
 | Warming the voices | In the dial: "Warming the voices: 61.0 of 115.6 MB" / "The voice model, its runtime and the three voices this chapter casts download once from dial.voidvision.org, then stay on this device. You can read the Direction report and set overrides meanwhile." |
@@ -388,13 +388,13 @@ Event: `production_exported` when the file is written.
 **Copy and states**
 | State | Headline and sentence |
 |---|---|
-| First visit (default) | "Sealed" / "This tab has sent nothing. It has fetched 4 files from dial.voidvision.org to show you this page, and they stay on this device." The log lists the page, its code and two typefaces; "Sent: nothing". No mini-player. |
+| First visit (default) | "Sealed" / "This tab has sent one count, a page view, with no identifier and no content. It has fetched 4 files from dial.voidvision.org to show you this page, and they stay on this device." The log lists the page, its code and two typefaces; "Sent: 1 count". No mini-player. |
 | After a listen, counts on (`sealed`) | "Sealed" / "Since you opened Dial at 21:04, this tab has sent one count: 27 bytes, with no identifier and no content. Everything else was fetched from dial.voidvision.org and stays on this device." |
 | Counts off | "Counts are off. This tab has sent nothing since 21:26. The one count sent before then is still listed below, because the log shows everything." |
 | Browser blocked a request | "Still sealed. The browser blocked 1 request to another site before it left. Dial loads nothing from other sites, so it came from code Dial did not ship, most likely a browser extension." The row shows struck through with an ochre ✕, size "none"; the limits drill opens. The eye stays closed: nothing left. |
 | Opening | Headline "Reading this tab" / "Collecting the browser's record of every request this page has made." Eye open and dim. |
 
-Switch: "Send daily counts" / "Totals per day of listens, exports and checks, and nothing more. Turn this off and Dial sends nothing at all. The setting stays on this device." (Stored in `localStorage`; the `/e` sender checks it before every send.) **This needs a privacy-page amendment at Forge:** it is the first thing Dial keeps in local storage, and `/privacy.html` currently describes only counts, feedback and the rate limit. The same amendment covers works saved for offline (Cache Storage) and Keep (encrypted, in the origin's private file system), all on the device, none sent.
+Switch: "Send daily counts" / "Totals per day of listens, exports and checks, and nothing more. Turn this off and Dial sends no counts at all; only a feedback message you choose to send leaves this device. The setting stays on this device." (Stored in `localStorage`; the `/e` sender checks it before every send.) **This needs a privacy-page amendment at Forge:** it is the first thing Dial keeps in local storage, and `/privacy.html` currently describes only counts, feedback and the rate limit. The same amendment covers works saved for offline (Cache Storage) and Keep (encrypted, in the origin's private file system), all on the device, none sent.
 
 Limits drill, "What this can and cannot show": "The log lists every request this page made, and every request its offline helper (the service worker) made, read from the browser's own record as it happens." / "The page's rules allow requests to dial.voidvision.org only. The browser enforces them and blocks anything else before it leaves." / "Browser extensions and the browser's own services run outside the page, so they cannot appear here. Fetching a file tells the server which file, as every web request does; Dial stores none of it." / "**Check it yourself:** open your browser's developer tools, choose the Network tab, and reload this page. You will see the same list, from the browser rather than from Dial."
 

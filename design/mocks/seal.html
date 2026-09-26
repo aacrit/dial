@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="The Seal: proof that nothing leaves the tab, the live request log, and the on-device provenance checker.">
+<meta name="description" content="The Seal: proof that nothing but aggregate counts leaves the tab, the live request log, and the on-device provenance checker.">
 <title>Seal · Dial mock</title>
 <link rel="stylesheet" href="../tokens.css">
 <style>
@@ -303,7 +303,7 @@ body[data-state="warming"] .meye .fan{opacity:.35;filter:none}
         <h1 id="seal-h" data-not="warming">Sealed</h1>
         <h1 data-when="warming">Reading this tab</h1>
       </div>
-      <p class="say" data-when="first-visit" role="status">This tab has sent nothing. It has fetched <span class="num">4</span> files from dial.voidvision.org to show you this page, and they stay on this device.</p>
+      <p class="say" data-when="first-visit" role="status">This tab has sent one count, a page view, with no identifier and no content. It has fetched <span class="num">4</span> files from dial.voidvision.org to show you this page, and they stay on this device.</p>
       <p class="say" data-when="sealed bench-running bench-results bench-no-webgpu" role="status">Since you opened Dial at <span class="num">21:04</span>, this tab has sent one count: <span class="num">27</span> bytes, with no identifier and no content. Everything else was fetched from dial.voidvision.org and stays on this device.</p>
       <p class="say" data-when="counts-off" role="status">Counts are off. This tab has sent nothing since <span class="num">21:26</span>. The one count sent before then is still listed below, because the log shows everything.</p>
       <p class="say" data-when="blocked" role="status">Still sealed. The browser blocked <span class="num">1</span> request to another site before it left. Dial loads nothing from other sites, so it came from code Dial did not ship, most likely a browser extension.</p>
@@ -311,7 +311,7 @@ body[data-state="warming"] .meye .fan{opacity:.35;filter:none}
       <div class="switch-row">
         <span class="lab" id="sw-l">Send daily counts</span>
         <button class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="sw-l" id="sw"></button>
-        <p>Totals per day of listens, exports and checks, and nothing more. Turn this off and Dial sends nothing at all. The setting stays on this device.</p>
+        <p>Totals per day of listens, exports and checks, and nothing more. Turn this off and Dial sends no counts at all; only a feedback message you choose to send leaves this device. The setting stays on this device.</p>
       </div>
       <details class="drill limits"><summary>What this can and cannot show</summary><div class="drill-body">
         <p>The log lists every request this page made, and every request its offline helper (the service worker) made, read from the browser's own record as it happens.</p>
