@@ -3,6 +3,14 @@
   "name": "dial",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-09-01",
+  // Served at its own subdomain of voidvision.org. The zone's WAF rate-limit
+  // rule (contract.yaml zone_waf_rule) was confirmed live on 2026-09-26.
+  "routes": [
+    { "pattern": "dial.voidvision.org", "custom_domain": true }
+  ],
+  // workers.dev stays on: preview versions (/ship) are served there.
+  "workers_dev": true,
+  "preview_urls": true,
   // Worker logs are kept (errors, and anything the Worker itself writes,
   // which is never a request body, IP or key), but invocation logs, one
   // record per request with its URL, headers and client details, are off,
