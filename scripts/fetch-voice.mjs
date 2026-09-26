@@ -13,7 +13,7 @@
 // web/public/ort are gitignored, and this runs before every build and dev.
 
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { walk } from "./lib/walk.mjs";
@@ -36,9 +36,23 @@ export const MODEL_FILES = {
   "onnx/model_quantized.onnx": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 };
 export const VOICE_SHA256 = "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc";
-export const ORT_FILES = ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"];
+// onnxruntime-web's runtime, pinned like the model: a changed byte fails the
+// build. The .wasm's pin also goes into manifest.json (runtimeSha256), where
+// the page keys its cached copy to it and checks it on every read.
+export const ORT_WASM = "ort-wasm-simd-threaded.jsep.wasm";
+export const ORT_FILES = {
+  "ort-wasm-simd-threaded.jsep.mjs": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9",
+  [ORT_WASM]: "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39",
+};
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
+
+/** Throws unless buf matches its SHA-256 pin. */
+export function checkPin(file, buf, expected) {
+  const got = sha256(buf);
+  if (got !== expected) throw new Error(`fetch-voice: ${file} sha256 ${got}, pinned ${expected}`);
+  return buf;
+}
 
 async function cached(file, expected) {
   const target = path.join(cacheDir, REVISION, file);
@@ -48,8 +62,7 @@ async function cached(file, expected) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`fetch-voice: ${url} answered ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
-  const got = sha256(buf);
-  if (got !== expected) throw new Error(`fetch-voice: ${file} sha256 ${got}, pinned ${expected}`);
+  checkPin(file, buf, expected);
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(target, buf);
   return buf;
@@ -77,7 +90,15 @@ export function stagedBytes() {
   return total;
 }
 
-export async function stage() {
+/**
+ * Stages the voice and the runtime. The runtime is read and checked against
+ * its pins before anything on disk changes, so a mismatch fails the build
+ * and leaves the last good staging in place. `ortPins` exists for the tests.
+ */
+export async function stage({ ortPins = ORT_FILES } = {}) {
+  const ortDist = path.join(resolvePackageDir("onnxruntime-web"), "dist");
+  const ortBufs = Object.entries(ortPins).map(([f, pin]) => [f, checkPin(f, readFileSync(path.join(ortDist, f)), pin)]);
+
   rmSync(voiceOut, { recursive: true, force: true });
   const modelDir = path.join(voiceOut, "models", REPO);
   const parts = [];
@@ -95,11 +116,6 @@ export async function stage() {
       writeFileSync(path.join(modelDir, file), buf);
     }
   }
-  // The manifest the page reads to stitch the model back together.
-  writeFileSync(
-    path.join(voiceOut, "manifest.json"),
-    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR }, null, 2) + "\n",
-  );
 
   const voiceSrc = path.join(resolvePackageDir("kokoro-js"), "voices", `${NARRATOR}.bin`);
   const voiceBuf = readFileSync(voiceSrc);
@@ -109,8 +125,7 @@ export async function stage() {
 
   rmSync(ortOut, { recursive: true, force: true });
   mkdirSync(ortOut, { recursive: true });
-  const ortDist = path.join(resolvePackageDir("onnxruntime-web"), "dist");
-  for (const f of ORT_FILES) copyFileSync(path.join(ortDist, f), path.join(ortOut, f));
+  for (const [f, buf] of ortBufs) writeFileSync(path.join(ortOut, f), buf);
 
   // The manifest the page reads to stitch the model back together. It also
   // carries totalBytes: every byte the tab downloads for the voice (model
@@ -120,7 +135,7 @@ export async function stage() {
   const totalBytes = stagedBytes();
   writeFileSync(
     path.join(voiceOut, "manifest.json"),
-    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR, totalBytes }, null, 2) + "\n",
+    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], totalBytes }, null, 2) + "\n",
   );
 
   console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voice ${NARRATOR}, onnxruntime-web`);

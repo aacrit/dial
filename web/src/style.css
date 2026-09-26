@@ -211,6 +211,10 @@ progress {
   accent-color: var(--color-filament);
 }
 
+progress[hidden] {
+  display: none;
+}
+
 progress::-webkit-progress-bar {
   background: var(--color-border);
 }
@@ -223,8 +227,10 @@ progress::-moz-progress-bar {
   background: var(--color-filament);
 }
 
+/* The status line carries counts and sizes ("3 of 118 lines", "115 MB"). */
 #broadcast-status {
   font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Errors earn no hue: cream prose, full strength rather than muted. */

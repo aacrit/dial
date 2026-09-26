@@ -7,7 +7,7 @@
 // which sends text/plain.
 import { segment, type Cue } from "./engine/segment";
 import { assemble, encodeWav } from "./engine/wav";
-import { warmingLine } from "./download-size";
+import { isStatableTotal, warmingLine } from "./download-size";
 import type { FromWorker, ToWorker } from "./narrate.worker";
 
 function sendEvent(name: string): void {
@@ -94,7 +94,7 @@ function setupBroadcast(): void {
     status.textContent = "Warming the voice.";
     meter.hidden = false;
     meter.removeAttribute("value");
-    let warmingTotal = 0;
+    let warmingStated = false;
 
     const audio = new AudioContext();
     let nextAt = audio.currentTime + 0.2;
@@ -128,16 +128,26 @@ function setupBroadcast(): void {
       }
     });
 
+    // A failure ends the busy state: no meter is left running.
+    const stopped = (message: string) => {
+      worker.terminate();
+      meter.hidden = true;
+      status.textContent = `The render stopped: ${message}. Reload the page to try again.`;
+      status.dataset.state = "error";
+    };
     const worker = new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = (event: MessageEvent<FromWorker>) => {
       const msg = event.data;
       if (msg.type === "loading") {
-        if (msg.total !== warmingTotal) {
-          warmingTotal = msg.total;
-          meter.max = msg.total;
-          status.textContent = warmingLine(msg.total);
+        if (!warmingStated) {
+          warmingStated = true;
+          status.textContent = warmingLine(msg.total, msg.fromDevice);
         }
-        meter.value = msg.loaded;
+        // Only a usable total sizes the meter; otherwise it stays as it is.
+        if (isStatableTotal(msg.total)) {
+          meter.max = msg.total;
+          meter.value = Math.min(msg.loaded, msg.total);
+        }
       } else if (msg.type === "ready") {
         meter.max = cues.length;
         meter.value = 0;
@@ -166,10 +176,13 @@ function setupBroadcast(): void {
         status.textContent = `Rendered. All ${cues.length} lines, made on this device. Nothing was sent anywhere.`;
         reportCoreSuccess();
       } else {
-        worker.terminate();
-        status.textContent = `The render stopped: ${msg.message}. Reload the page to try again.`;
-        status.dataset.state = "error";
+        stopped(msg.message);
       }
+    };
+    // A worker that fails to start or throws outside its own handler.
+    worker.onerror = (event) => {
+      event.preventDefault();
+      stopped(event.message || "the voice could not start");
     };
     worker.postMessage({ type: "render", cues } satisfies ToWorker);
   });

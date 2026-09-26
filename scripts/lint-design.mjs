@@ -20,17 +20,19 @@ const SKIP_DIR_NAMES = new Set(["node_modules", "dist", ".wrangler"]);
 
 // Author text is verbatim (Law 2: the words are the author's). Jowett prints
 // "unenlightened:—Behold!", and the no-em-dash rule governs Dial's own UI
-// copy, never an author's words. So web/public/works/ is never scanned,
-// whatever a file's extension; everything else in web/ still is.
+// copy, never an author's words. So a text file (.txt) under
+// web/public/works/ is exempt from the em-dash check, and from nothing else:
+// the colour check still reads every scanned file, works/ included, and any
+// other file there (markup, script) is Dial's own and fully checked.
 export const VERBATIM_DIRS = ["web/public/works/"];
+export const VERBATIM_EXTENSIONS = [".txt"];
 
 export function isVerbatimPath(relPath) {
-  return VERBATIM_DIRS.some((dir) => relPath.startsWith(dir));
+  return VERBATIM_DIRS.some((dir) => relPath.startsWith(dir)) && VERBATIM_EXTENSIONS.includes(path.extname(relPath));
 }
 
-/** Whether the lint reads this repo-relative path at all. */
+/** Whether the lint reads this repo-relative path at all (the colour check applies to all of them). */
 export function shouldScan(relPath) {
-  if (isVerbatimPath(relPath)) return false;
   return SCAN_EXTENSIONS.includes(path.extname(relPath));
 }
 
