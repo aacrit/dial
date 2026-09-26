@@ -462,7 +462,7 @@ function setupRadio(): void {
           if (!r.ok) throw new Error(`status ${r.status}`);
           return r.text().then((source) => {
             const cues = segment(source);
-            return [w.slug, { source, cues, cast: cast(cues) }] as const;
+            return [w.slug, { source, cues, cast: cast(cues, w.cast) }] as const;
           });
         }),
       ),

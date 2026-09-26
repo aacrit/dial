@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { answerKey } from "../scripts/answer-key.mjs";
 import { VOICES } from "../scripts/fetch-voice.mjs";
 import { WORKS } from "../web/src/catalogue";
-import { NARRATOR_VOICE, PALETTE, VOICE_NAMES, cast, speakerName, voiceCount } from "../web/src/engine/cast";
+import { ALL_VOICES, NARRATORS, PALETTE, PALETTE_VOICES, VOICE_NAMES, cast, castVoices, narratorVoice, speakerName, voiceCount } from "../web/src/engine/cast";
 import { rebuild, segment, speakerLabel } from "../web/src/engine/segment";
 import { bookplateHtml, esc, metaHtml, readAlongHtml, readLines, scaleSvg } from "../web/src/render";
 
@@ -99,48 +99,81 @@ describe("Crito: every turn has its speaker", () => {
 });
 
 describe("casting without content", () => {
-  it("the palette in casting order: George, Lewis, Fable; the narrator is George", () => {
-    expect(PALETTE).toEqual(["bm_george", "bm_lewis", "bm_fable"]);
-    expect(NARRATOR_VOICE).toBe("bm_george");
-    expect(PALETTE.map((v) => VOICE_NAMES[v])).toEqual(["George", "Lewis", "Fable"]);
+  const sheet = WORKS[1]!.cast;
+
+  it("two fixed narrators (male placeholder George, female Heart) and a character palette without them", () => {
+    expect(NARRATORS).toEqual({ m: "bm_george", f: "af_heart" });
+    expect(PALETTE).toEqual(["bm_fable", "bm_lewis"]);
+    for (const n of Object.values(NARRATORS)) expect(PALETTE as readonly string[]).not.toContain(n);
+    expect(ALL_VOICES).toEqual(["bm_george", "af_heart", "bm_fable", "bm_lewis"]);
+    expect(ALL_VOICES.map((v) => VOICE_NAMES[v])).toEqual(["George", "Heart", "Fable", "Lewis"]);
   });
 
-  it("Crito: Socrates is George, Crito is Lewis, and the first two turns are in different voices", () => {
-    const c = cast(cues);
+  it("Crito: the sheet asks for a male narrator; Socrates is Fable, Crito is Lewis, neither a narrator voice", () => {
+    expect(sheet).toEqual({ narrator: "m", speakers: { SOCRATES: "m", CRITO: "m" } });
+    const c = cast(cues, sheet);
+    expect(c.narrator).toBe("bm_george");
     expect(c.parts.map((p) => [p.speaker, p.voice])).toEqual([
-      ["SOCRATES", "bm_george"],
+      ["SOCRATES", "bm_fable"],
       ["CRITO", "bm_lewis"],
     ]);
     expect(c.narrated).toBe(false);
     expect(c.voices.length).toBe(cues.length);
-    expect(c.voices[0]).toBe("bm_george");
+    // The first two turns are in different voices.
     const second = cues.findIndex((q) => q.speaker === "CRITO");
+    expect(c.voices[0]).toBe("bm_fable");
     expect(c.voices[second]).toBe("bm_lewis");
-    cues.forEach((q, i) => expect(c.voices[i]).toBe(q.speaker === "SOCRATES" ? "bm_george" : "bm_lewis"));
+    cues.forEach((q, i) => expect(c.voices[i]).toBe(q.speaker === "SOCRATES" ? "bm_fable" : "bm_lewis"));
+    expect(c.voices).not.toContain("bm_george");
     expect(voiceCount(c)).toBe(2);
   });
 
-  it("is deterministic, by order of first appearance, and wraps after the third speaker", () => {
-    expect(JSON.stringify(cast(segment(crito)))).toBe(JSON.stringify(cast(cues)));
-    const four = segment("BEN: One.\n\nAMY: Two.\n\nCAL: Three.\n\nDOT: Four.\n\nAMY: Five.");
+  it("is deterministic, by order of first appearance, and wraps after the palette", () => {
+    expect(JSON.stringify(cast(segment(crito), sheet))).toBe(JSON.stringify(cast(cues, sheet)));
+    const four = segment("BEN: One.\n\nAMY: Two.\n\nCAL: Three.\n\nAMY: Four.");
     expect(cast(four).parts.map((p) => [p.speaker, p.voice])).toEqual([
-      ["BEN", "bm_george"],
+      ["BEN", "bm_fable"],
       ["AMY", "bm_lewis"],
       ["CAL", "bm_fable"],
-      ["DOT", "bm_george"],
     ]);
-    expect(cast(four).voices).toEqual(["bm_george", "bm_lewis", "bm_fable", "bm_george", "bm_lewis"]);
+    expect(cast(four).voices).toEqual(["bm_fable", "bm_lewis", "bm_fable", "bm_lewis"]);
   });
 
   it("never reads a name: renaming the speakers leaves the cast's voices unchanged", () => {
     const renamed = crito.replace(/^SOCRATES:/gm, "XANTHIPPE:").replace(/^CRITO:/gm, "ZEUS:");
-    expect(cast(segment(renamed)).voices).toEqual(cast(cues).voices);
+    expect(cast(segment(renamed)).voices).toEqual(cast(cues, sheet).voices);
   });
 
-  it("a narrated line before the first label is the narrator's", () => {
-    const c = cast(segment("The prison, before dawn.\n\nSOCRATES:  Why?\n\nCRITO:  No reason."));
-    expect(c.voices).toEqual(["bm_george", "bm_george", "bm_lewis"]);
-    expect(c.narrated).toBe(true);
+  it("narration is the narrator's role, apart from the speakers: the male narrator by default, af_heart where the sheet says f", () => {
+    const src = segment("The prison, before dawn.\n\nSOCRATES:  Why?\n\nCRITO:  No reason.");
+    const byDefault = cast(src);
+    expect(byDefault.narrator).toBe("bm_george");
+    expect(byDefault.voices).toEqual(["bm_george", "bm_fable", "bm_lewis"]);
+    expect(byDefault.narrated).toBe(true);
+    const female = cast(src, { narrator: "f" });
+    expect(female.narrator).toBe("af_heart");
+    expect(female.voices).toEqual(["af_heart", "bm_fable", "bm_lewis"]);
+    expect(narratorVoice({ narrator: "f" })).toBe("af_heart");
+    // A work with no labels, declared f, is read entirely by af_heart.
+    expect(new Set(cast(segment(text("cave")), { narrator: "f" }).voices)).toEqual(new Set(["af_heart"]));
+  });
+
+  it("narrator voices never go to characters, even when a palette offers them", () => {
+    const withNarrators = [
+      { id: "bm_george", sex: "m" as const },
+      { id: "af_heart", sex: "f" as const },
+      { id: "m1", sex: "m" as const },
+      { id: "f1", sex: "f" as const },
+    ];
+    const names = Array.from({ length: 8 }, (_, i) => `S${String.fromCharCode(65 + i)}`);
+    for (const s of [undefined, { narrator: "m" as const }, { narrator: "f" as const }]) {
+      const got = castVoices(names.map((speaker) => ({ speaker, words: 1 })), s, withNarrators);
+      for (const v of got.values()) expect(Object.values(NARRATORS) as string[]).not.toContain(v);
+    }
+    for (const w of WORKS) {
+      const c = cast(segment(text(w.slug)), w.cast);
+      for (const p of c.parts) expect(Object.values(NARRATORS) as string[]).not.toContain(p.voice);
+    }
   });
 });
 
@@ -163,18 +196,18 @@ describe("the works without labels are unchanged", () => {
 });
 
 describe("the page tells the truth about the cast", () => {
-  const casts = Object.fromEntries(WORKS.map((w) => [w.slug, cast(segment(text(w.slug)))]));
+  const casts = Object.fromEntries(WORKS.map((w) => [w.slug, cast(segment(text(w.slug)), w.cast)]));
 
   it("Crito's Bookplate states the cast, and no longer promises voices to come", () => {
     const html = bookplateHtml(WORKS[1]!, casts.crito);
-    expect(html).toContain("Socrates: George. Crito: Lewis.");
-    expect(html).toContain("The voices come from Kokoro-82M");
+    expect(html).toContain("Socrates: Fable. Crito: Lewis.");
+    expect(html).toContain("The speech is made by Kokoro-82M");
     expect(html).not.toMatch(/read aloud|until each part/);
   });
 
   it("the works without labels say one voice, George", () => {
     for (const w of [WORKS[0]!, WORKS[2]!]) {
-      expect(bookplateHtml(w, casts[w.slug])).toContain("One voice, George, reads every part. It is Kokoro-82M");
+      expect(bookplateHtml(w, casts[w.slug])).toContain("One voice, George, reads every part. The speech is made by Kokoro-82M");
     }
   });
 
@@ -212,8 +245,9 @@ describe("the page tells the truth about the cast", () => {
 });
 
 describe("the cast's voices are staged and pinned", () => {
-  it("fetch-voice pins exactly the palette, George's pin unchanged", () => {
-    expect(Object.keys(VOICES)).toEqual([...PALETTE]);
+  it("fetch-voice pins exactly the cast's voices (both narrators and the palette), George's pin unchanged", () => {
+    expect(Object.keys(VOICES)).toEqual([...ALL_VOICES]);
+    expect(VOICES.af_heart).toBe("d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b");
     expect(VOICES.bm_george).toBe("c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc");
   });
 
@@ -244,5 +278,80 @@ describe("names on the dial", () => {
     const css = read("web/src/style.css");
     const rule = /\.dw-scale \.lb \{([^}]*)\}/.exec(css)![1]!;
     expect(rule).toMatch(/font: 500 13px var\(--font-structure\)/);
+  });
+});
+
+describe("castVoices: the replaceable casting rule, and the curator's cast sheet", () => {
+  const stats = (...names: string[]) => names.map((speaker) => ({ speaker, words: 10 }));
+  const mixed = [
+    { id: "m1", sex: "m" as const },
+    { id: "f1", sex: "f" as const },
+    { id: "m2", sex: "m" as const },
+    { id: "f2", sex: "f" as const },
+  ];
+
+  it("without a sheet: order of first appearance through the palette, wrapping", () => {
+    expect([...castVoices(stats("A", "B", "C", "D", "E"), undefined, mixed)]).toEqual([
+      ["A", "m1"],
+      ["B", "f1"],
+      ["C", "m2"],
+      ["D", "f2"],
+      ["E", "m1"],
+    ]);
+  });
+
+  it("a speaker the sheet declares f never receives a male voice, and m never a female one", () => {
+    for (let n = 1; n <= 6; n++) {
+      const names = Array.from({ length: n }, (_, i) => `S${String.fromCharCode(65 + i)}`);
+      for (const sex of ["f", "m"] as const) {
+        const sheet = { narrator: "m" as const, speakers: Object.fromEntries(names.map((s) => [s, sex])) };
+        const got = castVoices(stats(...names), sheet, mixed);
+        for (const s of names) expect(mixed.find((v) => v.id === got.get(s))!.sex, `${s} of ${n}`).toBe(sex);
+      }
+    }
+    // Only the declared speaker is constrained.
+    const got = castVoices(stats("A", "B"), { narrator: "m", speakers: { A: "f" } }, mixed);
+    expect([...got]).toEqual([
+      ["A", "f1"],
+      ["B", "f1"],
+    ]);
+  });
+
+  it("refuses a sheet the palette cannot honour, rather than casting the wrong voice", () => {
+    // Today's character palette is all male: a character declared f cannot be cast, so casting refuses.
+    expect(() => castVoices(stats("A"), { narrator: "f", speakers: { A: "f" } }, PALETTE_VOICES)).toThrow(/no character voice in the palette for A \(declared f\)/);
+  });
+
+  it("the palette's voices are the pinned ones, in casting order, and all male (Kokoro's bm_)", () => {
+    expect(PALETTE_VOICES.map((v) => v.id)).toEqual([...PALETTE]);
+    expect(PALETTE_VOICES.every((v) => v.sex === "m")).toBe(true);
+  });
+
+  it("Crito's sheet names exactly the labelled speakers, and the cast with it is the cast without it", () => {
+    const sheet = WORKS[1]!.cast!;
+    expect(Object.keys(sheet.speakers!).sort()).toEqual([...new Set(cues.map((c) => c.speaker!))].sort());
+    expect(cast(cues, sheet)).toEqual(cast(cues));
+    // No sheet ever carries anything but voice sex.
+    for (const w of WORKS) {
+      if (!w.cast) continue;
+      expect(Object.keys(w.cast).sort()).toEqual(["narrator", "speakers"]);
+      for (const v of [w.cast.narrator, ...Object.values(w.cast.speakers ?? {})]) expect(["m", "f"]).toContain(v);
+    }
+    expect(WORKS[0]!.cast).toBeUndefined();
+    expect(WORKS[2]!.cast).toBeUndefined();
+  });
+
+  it("the speakers reach castVoices in order of first appearance, with their word counts", () => {
+    const parts = cast(cues, WORKS[1]!.cast).parts;
+    expect(parts.map((p) => p.speaker)).toEqual(["SOCRATES", "CRITO"]);
+    const spoken = (who: string) => cues.filter((c) => c.speaker === who).reduce((n, c) => n + c.spoken.split(/\s+/).filter(Boolean).length, 0);
+    expect(parts.map((p) => p.words)).toEqual([spoken("SOCRATES"), spoken("CRITO")]);
+    expect(parts[0]!.words).toBeGreaterThan(parts[1]!.words);
+  });
+
+  it("the Bookplate shows Crito's cast sheet, and no sheet where there is none", () => {
+    const withSheet = bookplateHtml(WORKS[1]!, cast(cues, WORKS[1]!.cast));
+    expect(withSheet).toContain("The curator's cast sheet, from the edition's list of persons, asks only for voice sex: narrator male; Socrates male; Crito male.");
+    expect(bookplateHtml(WORKS[0]!)).not.toContain("cast sheet");
   });
 });

@@ -15,6 +15,7 @@
 // - No work has a recording Dial made in advance yet (prepared recordings
 //   come with T5), so every one is made on the listener's device.
 
+import type { CastSheet } from "./engine/cast";
 import type { Cue } from "./engine/segment";
 
 export interface Work {
@@ -57,6 +58,12 @@ export interface Work {
   preparedRecording: boolean;
   /** A volunteer human reading of the same translation, where one is known. */
   librivox?: string;
+  /**
+   * The curator's cast sheet (CLAUDE.md, Law 3): the narrator's voice sex and
+   * each labelled speaker's, as printed, and nothing else, written from the edition's
+   * list of persons and shown on the Bookplate. The engine never parses names.
+   */
+  cast?: CastSheet;
 }
 
 export const WORKS: readonly Work[] = [
@@ -104,6 +111,8 @@ export const WORKS: readonly Work[] = [
     },
     pd: { published: 1871, publishedAs: "First published", translatorDied: 1893 },
     preparedRecording: false,
+    // Gutenberg eBook 1657, line 167: "PERSONS OF THE DIALOGUE:  Socrates, Crito."
+    cast: { narrator: "m", speakers: { SOCRATES: "m", CRITO: "m" } },
   },
   {
     slug: "meditations",

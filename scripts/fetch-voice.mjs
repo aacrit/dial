@@ -36,14 +36,16 @@ export const MODEL_FILES = {
   "tokenizer_config.json": "be1cb066d6ef6b074b3f15e6a6dd21ac88ff3cdaedf325f0aaed686c70f75d20",
   "onnx/model_quantized.onnx": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 };
-// The casting palette's voice files, each pinned: the narrator and 1st
-// speaker, the 2nd, the 3rd (web/src/engine/cast.ts's PALETTE, same order).
+// The cast's voice files, each pinned (web/src/engine/cast.ts's ALL_VOICES,
+// same order): the male narrator (a placeholder until one is chosen by ear),
+// the female narrator, then the character palette.
 // The pins also go into manifest.json (voices), where the page checks each
 // file on fetch and on every read from its cache.
 export const VOICES = {
   bm_george: "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc",
-  bm_lewis: "b8f671cef828c30e66fdf0b0756a76bba58f6bb3398cbbf27058642acbcedb97",
+  af_heart: "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b",
   bm_fable: "f889083196807b4adb15e9204252165f503b8d33d3982e681c52443c49d798f1",
+  bm_lewis: "b8f671cef828c30e66fdf0b0756a76bba58f6bb3398cbbf27058642acbcedb97",
 };
 // onnxruntime-web's runtime, pinned like the model: a changed byte fails the
 // build. The .wasm's pin also goes into manifest.json (runtimeSha256), where

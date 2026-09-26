@@ -5,7 +5,7 @@
 
 import { grouped, isPublicDomainWorldwide, type Work } from "./catalogue";
 import { DIAL, MAX_ANGLE, polar } from "./device/needle";
-import { NARRATOR_VOICE, VOICE_NAMES, speakerName, voiceCount, type Cast } from "./engine/cast";
+import { VOICE_NAMES, speakerName, voiceCount, type Cast, type CastSheet } from "./engine/cast";
 
 const ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -40,16 +40,26 @@ export function metaHtml(work: Work, words?: number, cast?: Pick<Cast, "voices">
 }
 
 /**
- * The Voice row's first sentence, from the cast: "Socrates: George. Crito:
+ * The Voice row's first sentence, from the cast: "Socrates: Fable. Crito:
  * Lewis." for a work whose speakers are labelled, "One voice, George, reads
- * every part." for one without labels.
+ * every part." for one without labels. Nothing until the text is read.
  */
-export function castSentence(cast?: Pick<Cast, "parts" | "narrated">): string {
-  const narrator = VOICE_NAMES[NARRATOR_VOICE];
-  if (!cast || cast.parts.length === 0) return `One voice, ${narrator}, reads every part.`;
+export function castSentence(cast?: Pick<Cast, "narrator" | "parts" | "narrated">): string {
+  if (!cast) return "";
+  const narrator = VOICE_NAMES[cast.narrator];
+  if (cast.parts.length === 0) return `One voice, ${narrator}, reads every part. `;
   const lines = cast.parts.map((p) => `${esc(speakerName(p.speaker))}: ${VOICE_NAMES[p.voice]}.`);
   if (cast.narrated) lines.unshift(`The narration: ${narrator}.`);
-  return `${lines.join(" ")} Voices are cast in the order the speakers first speak, never from their names.`;
+  return `${lines.join(" ")} Voices are cast in the order the speakers first speak, never from their names. `;
+}
+
+const SEX_WORDS = { m: "male", f: "female" } as const;
+
+/** The curator's cast sheet, as the Bookplate shows it: "... asks only for voice sex: narrator male; Socrates male; Crito male." */
+export function castSheetSentence(sheet?: CastSheet): string {
+  if (!sheet) return "";
+  const asks = [`narrator ${SEX_WORDS[sheet.narrator]}`, ...Object.entries(sheet.speakers ?? {}).map(([speaker, sex]) => `${esc(speakerName(speaker))} ${SEX_WORDS[sex]}`)];
+  return `The curator's cast sheet, from the edition's list of persons, asks only for voice sex: ${asks.join("; ")}. `;
 }
 
 /** The Bookplate: station, source, public-domain basis, voice, direction, and a human reading where one is known. */
@@ -72,7 +82,7 @@ export function bookplateHtml(work: Work, cast?: Cast): string {
   }
   rows.push([
     "Voice",
-    `${castSentence(cast)} ${cast && voiceCount(cast) > 1 ? "The voices come from" : "It is"} Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, exactly as printed.`,
+    `${castSentence(cast)}${castSheetSentence(work.cast)}The speech is made by Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, exactly as printed.`,
   ]);
   rows.push(["Direction", "Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone."]);
   if (work.librivox) {

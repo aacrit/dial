@@ -71,9 +71,12 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
    and every word of the text itself stays verbatim.
 3. **One deterministic engine that never needs to understand the text.**
    `web/src/engine/` reads form only (paragraphs, sentence and clause marks,
-   speaker labels, later speech tags). Voices are cast in the order speakers
-   first speak, from a fixed palette, never from a name
-   (`web/src/engine/cast.ts`). No LLM, ever, in the render path.
+   speaker labels, later speech tags). Unlabelled text is read by one of two
+   fixed narrator voices; speakers are cast from a palette that never holds
+   a narrator voice, never from a name (`web/src/engine/cast.ts`). A Repertory work may carry a cast sheet,
+   written by the curator from the text's own list of persons and shown on
+   the Bookplate, that declares only voice sex; the engine never parses
+   names. No LLM, ever, in the render path.
 
 Texts are public domain worldwide only (published before 1930 and the
 author or translator died before 1956), each with its Bookplate: source,
