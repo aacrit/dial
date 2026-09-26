@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { MAX_CUE_CHARS, PAUSE_MS, rebuild, segment } from "../web/src/engine/segment";
 import { assemble, encodeWav } from "../web/src/engine/wav";
-import { UPSTREAM_SHA256, checkUpstream, dropNotes, sliceLines } from "../scripts/extract-work.mjs";
+import { PLUS_MARKS, UPSTREAM_SHA256, checkUpstream, dropNotes, extractWork, sliceLines } from "../scripts/extract-work.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const work = (slug: string) => readFileSync(path.join(root, `web/public/works/${slug}.txt`), "utf8");
@@ -69,6 +69,12 @@ describe("scripts/extract-work.mjs removes only Long's apparatus", () => {
     expect(() => checkUpstream(2680, Buffer.from("x"))).toThrow(/no upstream pin/);
   });
 
+  it("Law 2 clause: the extraction refuses when the upstream file does not match its pinned SHA-256", () => {
+    const tampered = Buffer.from("SOCRATES:  Why have you come at this hour, Crito?\r\n");
+    expect(() => extractWork(tampered, 1657, 1, 1)).toThrow(/pg1657\.txt is sha256 [0-9a-f]{64}, pinned 8f7e8c4c/);
+    expect(() => extractWork(tampered, 15877, 1, 1, true)).toThrow(/pinned 6584df7e/);
+  });
+
   it("slices lines, folds CRLF and ends in one newline", () => {
     expect(sliceLines("a\r\nb\r\nc\r\nd\r\n", 2, 3)).toBe("b\nc\n");
   });
@@ -76,10 +82,21 @@ describe("scripts/extract-work.mjs removes only Long's apparatus", () => {
   it("drops indented note blocks, their markers and + marks, and nothing else", () => {
     const src =
       "teeth.[A] To act,\nthen.\n\n    [A] Xenophon, Mem.\n\n6. Do wrong[A] to thyself,\nsufficient.+ But the same;+[B] and [only] this.\n\n    [A] Perhaps.\n    [Greek: x]\n\n    [B] Gataker.\n\nThis in Carnuntum.[A]\n\n    [A] A town of Pannonia.\n";
-    expect(dropNotes(src)).toBe("teeth. To act,\nthen.\n\n6. Do wrong to thyself,\nsufficient. But the same; and [only] this.\n\nThis in Carnuntum.\n");
+    expect(dropNotes(src, 2)).toBe("teeth. To act,\nthen.\n\n6. Do wrong to thyself,\nsufficient. But the same; and [only] this.\n\nThis in Carnuntum.\n");
   });
 
-  it("refuses when markers and notes do not match one for one, so a real bracketed capital never vanishes", () => {
+  it("removes + marks only for the eBooks listed, and only the pinned number of them", () => {
+    // Long's preface to #15877: "I have placed in some passages a +, which indicates
+    // corruption in the text or great uncertainty in the meaning." Book II has three:
+    // "sufficient.+", "disposed+" and "the same;+".
+    expect(PLUS_MARKS).toEqual({ 15877: 3 });
+    const src = "sufficient.+ But 2 + 2.\n";
+    expect(dropNotes(src)).toBe(src); // not listed: nothing removed
+    expect(dropNotes(src, 1)).toBe("sufficient. But 2 + 2.\n"); // a free-standing + is never a mark
+    expect(() => dropNotes(src, 3)).toThrow(/1 \+ marks in the text, expected 3/);
+  });
+
+  it("Law 2 clause: refuses when markers and notes do not match one for one, so a real bracketed capital never vanishes", () => {
     expect(() => dropNotes("And [I] said so.[A]\n\n    [A] A note.\n")).toThrow(/2 note markers in the text but 1 notes/);
     expect(() => dropNotes("This in Carnuntum.[A]\n")).toThrow(/1 note markers in the text but 0 notes/);
   });

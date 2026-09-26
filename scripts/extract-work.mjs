@@ -7,8 +7,9 @@
 //   3. only the performed lines, inclusive (the Gutenberg header, licence and
 //      the translator's introduction are outside them);
 //   4. with --drop-notes: the translator's apparatus is removed, and nothing
-//      else. For George Long's Meditations that is his footnotes, the markers
-//      that point at them and his "+" marks of a doubtful reading. Every word,
+//      else: footnotes and the markers that point at them, and, only for
+//      the eBooks in PLUS_MARKS, the "+" marks of a doubtful reading (George
+//      Long's Meditations). Every word,
 //      bracket and punctuation mark of the text itself stays, byte for byte.
 //      The markers must match the notes one for one, so a genuine bracketed
 //      capital ("[I]") can never vanish silently.
@@ -54,13 +55,21 @@ const MARKER = /\[[A-Z]\]/g;
 const NOTE_LINE = /^ {4}\[[A-Z]\] /;
 
 /**
- * Removes Long's apparatus: indented footnote blocks ("    [A] Xenophon, ..."),
- * their markers ("teeth.[A]"), and his "+" marks, which always follow a word
- * or a stop directly ("sufficient.+ But"). Paragraphs are otherwise untouched.
- * Throws when the markers in the text and the notes removed do not match one
- * for one.
+ * eBooks whose translator marks a doubtful reading with "+" (Long says so in
+ * his preface to #15877), and how many such marks the performed passage
+ * holds. Only these lose their "+", and only when the count matches.
  */
-export function dropNotes(text) {
+export const PLUS_MARKS = { 15877: 3 };
+
+/**
+ * Removes the apparatus: indented footnote blocks ("    [A] Xenophon, ..."),
+ * their markers ("teeth.[A]"), and, when `plusMarks` is a number, exactly that
+ * many "+" marks, which always follow a word or a stop directly
+ * ("sufficient.+ But"). Paragraphs are otherwise untouched. Throws when the
+ * markers and the notes do not match one for one, or when the "+" count is
+ * not the expected one.
+ */
+export function dropNotes(text, plusMarks = null) {
   const paras = text.replace(/\n+$/, "").split("\n\n");
   const isNoteBlock = (p) => p.split("\n").every((line) => /^ {4}\S/.test(line));
   const notes = paras.filter(isNoteBlock).flatMap((p) => p.split("\n").filter((line) => NOTE_LINE.test(line)));
@@ -69,14 +78,20 @@ export function dropNotes(text) {
   if (markers.length !== notes.length) {
     throw new Error(`extract-work: ${markers.length} note markers in the text but ${notes.length} notes; refusing to remove them`);
   }
-  return kept.replace(MARKER, "").replace(/(?<=\S)\+/g, "") + "\n";
+  let out = kept.replace(MARKER, "");
+  if (plusMarks !== null) {
+    const found = (out.match(/(?<=\S)\+/g) ?? []).length;
+    if (found !== plusMarks) throw new Error(`extract-work: ${found} + marks in the text, expected ${plusMarks}; refusing to remove them`);
+    out = out.replace(/(?<=\S)\+/g, "");
+  }
+  return out + "\n";
 }
 
 /** The whole extraction, from the upstream bytes. */
 export function extractWork(bytes, ebook, from, to, withoutNotes = false) {
   checkUpstream(ebook, bytes);
   const text = sliceLines(bytes.toString("utf8"), from, to);
-  return withoutNotes ? dropNotes(text) : text;
+  return withoutNotes ? dropNotes(text, PLUS_MARKS[ebook] ?? null) : text;
 }
 
 function main() {

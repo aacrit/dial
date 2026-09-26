@@ -35,3 +35,6 @@ Founder decision in chat, from the T2 review. `work_opened` is sent when Tune in
 
 ## 2026-09-26: Copy amendment: no line says nothing was sent
 G2 approved "Made on this device. All 118 lines, 20:12. Nothing was sent anywhere.", but the page sends `chapter_rendered` at that moment, so the line was false; truth wins over the approved words. It becomes "Made on this device: all 118 lines, 20:12. The words and the audio never left this device." The same check corrected the spec's other absolute claims: the prepared-recording line, the Seal's first visit (a page view count is sent on load) and its switch (feedback can still be sent), the Studio's "Nothing is sent", and the privacy page.
+
+## 2026-09-26: Law 2 apparatus wording, narrowed to what was approved
+Supersedes the scope words of the Law 2 entry above. The apparatus that may be removed is footnotes, the markers that point at them, and marks of a doubtful reading, nothing broader. `scripts/extract-work.mjs` refuses unless the upstream file matches its pinned SHA-256 and the markers match the notes one for one, and it removes "+" marks only for the eBooks in its PLUS_MARKS table, with their count pinned (#15877: 3). CLAUDE.md carries the founder's exact sentence.
