@@ -1,30 +1,29 @@
 // Loads Kokoro-82M from this origin only (Law 1). The model's weights are
 // served in parts (scripts/fetch-voice.mjs) and stitched here; the model,
-// its tokenizer, the voice file and the runtime's WASM are kept in the tab's
+// its tokenizer, the cast's voice files and the runtime's WASM are kept in the tab's
 // Cache Storage after the first load, so they are fetched once. Nothing is
 // ever sent anywhere.
 //
-// Progress is reported against the manifest's totalBytes: every byte the
-// tab downloads for the voice (model parts, tokenizer and config, the voice
-// file, the runtime's .wasm and .mjs). Only bytes that have actually arrived
-// are counted, so the meter never runs ahead of the download.
+// Progress is reported against the bytes this visit still needs: of the
+// manifest's per-file sizes, only the files not already held on this device
+// (and matching their pins), and only the voices this work's cast uses
+// (voice-cache.ts neededBytes). Only bytes that have actually arrived are
+// counted, so the meter never runs ahead of the download.
 
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-import { runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type VoicePins } from "./voice-cache";
+import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
-export interface VoiceManifest extends VoicePins {
-  repo: string;
-  model: string;
+export interface VoiceManifest extends VoicePins, SizedManifest {
   sha256: string;
-  parts: string[];
-  narrator: string;
-  voiceSha256: string;
+  /** Every voice file in the casting palette, by id, with its SHA-256 pin. */
+  voices: Record<string, string>;
+  /** Every staged byte; no single visit downloads all of it. */
   totalBytes: number;
 }
 
-/** fromDevice: the voice was already kept on this device, so nothing large downloads. */
-export type VoiceProgress = (loaded: number, total: number, fromDevice: boolean) => void;
+/** total: the bytes this visit needs; need: nothing, only voices, or the model and runtime too. */
+export type VoiceProgress = (loaded: number, total: number, need: Need, missingVoices: number) => void;
 
 /** kept: every file was stored on this device; false when a write failed (for example, no space). */
 export interface LoadedVoice {
@@ -81,7 +80,8 @@ async function dropIfUnpinned(cache: Cache, key: string, pin: string): Promise<A
   return hit;
 }
 
-export async function loadVoice(onProgress: VoiceProgress): Promise<LoadedVoice> {
+/** Loads the model, the runtime and exactly the voices in `wanted` (the work's cast), each checked against its pin. */
+export async function loadVoice(wanted: readonly string[], onProgress: VoiceProgress): Promise<LoadedVoice> {
   const manifestRes = await fetch("/voice/manifest.json");
   if (!manifestRes.ok) throw new Error(`voice manifest: ${manifestRes.status}`);
   const manifest = (await manifestRes.json()) as VoiceManifest;
@@ -97,20 +97,32 @@ export async function loadVoice(onProgress: VoiceProgress): Promise<LoadedVoice>
   // kokoro-js looks for a voice in the "kokoro-voices" cache under its
   // Hugging Face address before it would fetch one; put ours there first,
   // so that fetch never happens. A cached voice that fails its pin is dropped.
-  const voiceKey = `https://huggingface.co/${manifest.repo}/resolve/main/voices/${manifest.narrator}.bin`;
+  const voiceKey = (id: string) => `https://huggingface.co/${manifest.repo}/resolve/main/voices/${id}.bin`;
   const voices = await caches.open("kokoro-voices");
   const runtimeKey = runtimeCacheKey(manifest);
-  await dropIfUnpinned(voices, voiceKey, manifest.voiceSha256);
+  const cast = [...new Set(wanted)];
+  for (const id of cast) if (!Object.hasOwn(manifest.voices, id)) throw new Error(`voice: ${id} is not pinned`);
+  const heldVoices = new Set<string>();
+  for (const id of cast) {
+    if (await dropIfUnpinned(voices, voiceKey(id), manifest.voices[id]!)) heldVoices.add(id);
+  }
   const cachedRuntime = await dropIfUnpinned(runtimeCache, runtimeKey, manifest.runtimeSha256);
   const modelKey = `${MODELS}${manifest.repo}/${manifest.model}`;
-  const fromDevice = !!(await cache.match(modelKey)) && !!cachedRuntime && !!(await voices.match(voiceKey));
+  const modelFiles = new Set<string>();
+  for (const p of Object.keys(manifest.sizes)) if (p.startsWith(`${MODELS}${manifest.repo}/`) && (await cache.match(p))) modelFiles.add(p);
+  const { bytes: total, need, missingVoices } = neededBytes(manifest, cast, {
+    model: !!(await cache.match(modelKey)),
+    modelFiles,
+    runtime: !!cachedRuntime,
+    voices: heldVoices,
+  });
 
   let loaded = 0;
   const count = (bytes: number) => {
     loaded += bytes;
-    onProgress(loaded, manifest.totalBytes, fromDevice);
+    onProgress(Math.min(loaded, total), total, need, missingVoices);
   };
-  onProgress(0, manifest.totalBytes, fromDevice);
+  onProgress(0, total, need, missingVoices);
 
   // The runtime and the model come from /ort and /voice on this origin.
   env.allowRemoteModels = false;
@@ -162,25 +174,27 @@ export async function loadVoice(onProgress: VoiceProgress): Promise<LoadedVoice>
     wasm.wasmBinary = binary;
   }
 
-  if (!(await voices.match(voiceKey))) {
-    const res = await fetch(`/voice/voices/${manifest.narrator}.bin`);
-    if (!res.ok) throw new Error(`voice ${manifest.narrator}: ${res.status}`);
+  for (const id of cast) {
+    const pin = manifest.voices[id]!;
+    if (heldVoices.has(id)) continue;
+    const res = await fetch(`/voice/voices/${id}.bin`);
+    if (!res.ok) throw new Error(`voice ${id}: ${res.status}`);
     const buf = await res.arrayBuffer();
     count(buf.byteLength);
-    if ((await sha256Hex(buf)) !== manifest.voiceSha256) throw new Error("voice: the voice file did not match its pin");
+    if ((await sha256Hex(buf)) !== pin) throw new Error("voice: the voice file did not match its pin");
     try {
-      await voices.put(voiceKey, new Response(buf, { headers: res.headers }));
+      await voices.put(voiceKey(id), new Response(buf, { headers: res.headers }));
     } catch {
       kept = false;
     }
-    // kokoro-js reads the voice from this cache; if it could not be kept,
+    // kokoro-js reads each voice from this cache; if one could not be kept,
     // it must not fall back to fetching from another origin.
-    if (!(await voices.match(voiceKey))) throw new Error("QuotaExceededError: there is no room to keep the voice on this device");
+    if (!(await voices.match(voiceKey(id)))) throw new Error("QuotaExceededError: there is no room to keep the voice on this device");
   }
 
   const tts = await KokoroTTS.from_pretrained(manifest.repo, { dtype: "q8", device: "wasm" });
   // The runtime's .mjs is imported by the runtime itself while the model
   // loads; once the voice is ready, every byte in the total is in place.
-  onProgress(manifest.totalBytes, manifest.totalBytes, fromDevice);
+  onProgress(total, total, need, missingVoices);
   return { tts, manifest, kept };
 }

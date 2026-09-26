@@ -5,15 +5,17 @@
 // needed (see web/privacy.html). Every POST is same-origin JSON: the Worker
 // refuses anything else (worker/src/guard.ts), so never use sendBeacon,
 // which sends text/plain.
-import { WORKS, aboutMinutes, countWords, hasSpeakerLabels, type Work } from "./catalogue";
+import { WORKS, aboutMinutes, countWords, type Work } from "./catalogue";
 import { firstOpen, lampLit, liveLine, wavName } from "./broadcast-state";
 import { mountRadio } from "./device/radio";
 import { watchReducedMotion } from "./device/reduced-motion";
 import { isStatableTotal, warmingLine } from "./download-size";
+import { tryCast, type Cast } from "./engine/cast";
 import { segment, type Cue } from "./engine/segment";
 import { WavChunks } from "./engine/wav";
-import { bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml } from "./render";
+import { bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml, readLines } from "./render";
 import {
+  CAST_FAILED,
   STATIONS_SERVER,
   firstLineLine,
   loadingNote,
@@ -56,7 +58,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 interface Text {
   source: string;
   cues: Cue[];
-  speakerLabels: boolean;
+  /** Who speaks each cue, and in which voice (engine/cast.ts); null when the work could not be cast. */
+  cast: Cast | null;
 }
 
 /** One broadcast: a work being made on this device and played as it is made. */
@@ -129,15 +132,21 @@ function setupRadio(): void {
   const showStation = () => {
     const w = WORKS[radio.tuned()]!;
     const text = texts.get(w.slug);
-    eyebrow.innerHTML = eyebrowHtml(w, text ? aboutMinutes(text.source, text.cues) : undefined);
+    eyebrow.innerHTML = eyebrowHtml(text ? aboutMinutes(text.source, text.cues) : undefined);
     title.textContent = w.title;
     credit.textContent = w.credit;
     sentence.textContent = w.sentence;
-    meta.innerHTML = metaHtml(w, text ? countWords(text.source) : undefined);
-    bookplate.innerHTML = bookplateHtml(w, text?.speakerLabels);
+    meta.innerHTML = metaHtml(w, text ? countWords(text.source) : undefined, text?.cast ?? undefined);
+    bookplate.innerHTML = bookplateHtml(w, text?.cast ?? undefined);
     device.dataset.realm = w.slug;
-    avail.textContent = madeHere(voiceKept);
+    paintAvail();
     paintTuneIn();
+  };
+
+  /** The line under Tune in: a station whose voices could not be cast says so, and only that station. */
+  const paintAvail = () => {
+    const text = texts.get(WORKS[radio.tuned()]!.slug);
+    avail.textContent = text && !text.cast ? CAST_FAILED : madeHere(voiceKept);
   };
 
   const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone };
@@ -149,7 +158,8 @@ function setupRadio(): void {
     const lit = here && lampLit(lampState());
     tune.classList.toggle("is-on-air", lit);
     tune.textContent = here ? (lit ? "On air" : "Paused") : "Tune in";
-    tune.disabled = here || !texts.has(w.slug);
+    // A station is playable once its text is read and its voices are cast.
+    tune.disabled = here || !texts.get(w.slug)?.cast;
   };
 
   // ---- the lamp: tally means a render or playback is live ------------------
@@ -266,7 +276,7 @@ function setupRadio(): void {
 
   tune.addEventListener("click", () => {
     const work = WORKS[radio.tuned()]!;
-    if (!texts.has(work.slug)) return;
+    if (!texts.get(work.slug)?.cast) return;
     const s = session;
     if (s?.live && s.work !== work && !s.renderDone) {
       pending = work;
@@ -281,6 +291,8 @@ function setupRadio(): void {
   // ---- Tune in: make the chosen work on this device and play it as it is made
   const start = (work: Work) => {
     const text = texts.get(work.slug)!;
+    const cast = text.cast;
+    if (!cast) return;
     // work_opened counts Tune in on a work, once per work per page load (founder, 2026-09-26).
     if (firstOpen(opened, work.slug)) sendEvent("work_opened");
     if (session?.live) offAir();
@@ -310,13 +322,13 @@ function setupRadio(): void {
       wav: null,
     };
     session = own;
-    const lines = cues.map((c) => c.text);
+    const lines = readLines(cues);
     let nextAt = audio.currentTime + 0.2;
     let warmingStated = false;
     // Playback is live until the last scheduled line has ended after the render is done.
     let playing = 0;
 
-    raWho.textContent = `On air: 514 · ${work.station} · ${work.title}`;
+    raWho.textContent = `On air: ${work.title}`;
     // The size and the meter's max arrive with the manifest (its totalBytes);
     // until then the meter is indeterminate and the line states no size.
     meter.hidden = false;
@@ -367,7 +379,7 @@ function setupRadio(): void {
       if (msg.type === "loading") {
         if (!warmingStated) {
           warmingStated = true;
-          announce(warmingLine(msg.total, msg.fromDevice));
+          announce(warmingLine(msg.total, msg.need, work.called, msg.missingVoices));
         }
         // Only a usable total sizes the meter and the valve; otherwise they stay as they are.
         if (isStatableTotal(msg.total)) {
@@ -375,13 +387,13 @@ function setupRadio(): void {
           const loaded = Math.min(msg.loaded, msg.total);
           meter.value = loaded;
           const mb = (n: number) => `<span data-numeral>${(n / 1_000_000).toFixed(1)}</span>`;
-          setValve(0.08 + 0.92 * (loaded / msg.total), msg.fromDevice ? "Warming" : `${mb(loaded)} of ${mb(msg.total)} MB`);
+          setValve(0.08 + 0.92 * (loaded / msg.total), msg.need === "none" ? "Warming" : `${mb(loaded)} of ${mb(msg.total)} MB`);
         }
       } else if (msg.type === "ready") {
         own.ready = true;
         own.kept = msg.kept;
         voiceKept = msg.kept;
-        avail.textContent = madeHere(voiceKept);
+        paintAvail();
         meter.max = cues.length;
         meter.value = 0;
         setValve(1, "Voice ready");
@@ -443,7 +455,7 @@ function setupRadio(): void {
       event.preventDefault();
       stopped(event.message || "");
     };
-    worker.postMessage({ type: "render", cues } satisfies ToWorker);
+    worker.postMessage({ type: "render", cues, voices: cast.voices } satisfies ToWorker);
   };
 
   // ---- the works' texts: read once, then every station is ready ------------
@@ -458,7 +470,11 @@ function setupRadio(): void {
       WORKS.map((w) =>
         fetch(`/works/${w.slug}.txt`).then((r) => {
           if (!r.ok) throw new Error(`status ${r.status}`);
-          return r.text().then((source) => [w.slug, { source, cues: segment(source), speakerLabels: hasSpeakerLabels(source) }] as const);
+          return r.text().then((source) => {
+            const cues = segment(source);
+            // A cast that fails marks only this station unavailable; the others stay on air.
+            return [w.slug, { source, cues, cast: tryCast(cues, w.cast) }] as const;
+          });
         }),
       ),
     )

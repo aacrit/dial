@@ -7,7 +7,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { WORKS, hasSpeakerLabels } from "../web/src/catalogue";
+import { WORKS } from "../web/src/catalogue";
+import { cast } from "../web/src/engine/cast";
+import { segment } from "../web/src/engine/segment";
 import { capture } from "../web/src/device/radio";
 import { WavChunks, assemble, encodeWav, wavHeader } from "../web/src/engine/wav";
 import { bookplateHtml } from "../web/src/render";
@@ -155,7 +157,8 @@ describe("tuning away while a work is on air", () => {
   });
 
   it("the read-along and the download name the work they belong to", () => {
-    expect(main).toContain("raWho.textContent = `On air: 514 · ${work.station} · ${work.title}`;");
+    // The catalogue number is only in the dial's readout and the Bookplate (founder, 2026-09-26).
+    expect(main).toContain("raWho.textContent = `On air: ${work.title}`;");
     expect(main).toContain("download.textContent = `Download ${work.called} as an audio file`;");
   });
 });
@@ -186,10 +189,11 @@ describe("the small things", () => {
     for (const w of WORKS.slice(0, 2)) expect(bookplateHtml(w)).toContain("First published <span data-numeral>1871</span>");
   });
 
-  it("the Voice row says speaker names are read aloud only where the text has them", () => {
-    expect(WORKS.map((w) => hasSpeakerLabels(text(w.slug)))).toEqual([false, true, false]);
-    expect(bookplateHtml(WORKS[1]!, true)).toContain("Speaker names are read aloud until each part has its own voice.");
-    expect(bookplateHtml(WORKS[0]!, false)).not.toContain("Speaker names");
+  it("the Voice row names the cast only where the text labels its speakers", () => {
+    const casts = WORKS.map((w) => cast(segment(text(w.slug)), w.cast));
+    expect(casts.map((c) => c.parts.length)).toEqual([0, 2, 0]);
+    expect(bookplateHtml(WORKS[1]!, casts[1])).toContain("Socrates: Fable. Crito: Lewis.");
+    for (const i of [0, 2]) expect(bookplateHtml(WORKS[i]!, casts[i])).not.toMatch(/Socrates:|Speaker names/);
   });
 
   it("the Tune knob reports the station as its value", () => {

@@ -15,13 +15,16 @@
 // - No work has a recording Dial made in advance yet (prepared recordings
 //   come with T5), so every one is made on the listener's device.
 
+import type { CastSheet } from "./engine/cast";
 import type { Cue } from "./engine/segment";
 
 export interface Work {
   /** File name under /works/ and the realm colour's name. */
   slug: "cave" | "crito" | "meditations";
-  /** Station on the dial: "514 · <station>". */
+  /** Catalogue number: "514 · <station>" in the dial's readout and the Bookplate. */
   station: string;
+  /** The work's name on the dial scale, short enough to read at 375 px. */
+  dial: string;
   /** The needle's angle on the dial scale, in degrees (0 is straight up). */
   angle: number;
   title: string;
@@ -55,12 +58,19 @@ export interface Work {
   preparedRecording: boolean;
   /** A volunteer human reading of the same translation, where one is known. */
   librivox?: string;
+  /**
+   * The curator's cast sheet (CLAUDE.md, Law 3): the narrator's voice sex and
+   * each labelled speaker's, as printed, and nothing else, written from the edition's
+   * list of persons and shown on the Bookplate. The engine never parses names.
+   */
+  cast?: CastSheet;
 }
 
 export const WORKS: readonly Work[] = [
   {
     slug: "cave",
     station: "001",
+    dial: "Cave",
     angle: -44,
     title: "The Allegory of the Cave",
     short: "The Cave",
@@ -83,6 +93,7 @@ export const WORKS: readonly Work[] = [
   {
     slug: "crito",
     station: "002",
+    dial: "Crito",
     angle: -8,
     title: "Crito",
     short: "Crito",
@@ -100,10 +111,13 @@ export const WORKS: readonly Work[] = [
     },
     pd: { published: 1871, publishedAs: "First published", translatorDied: 1893 },
     preparedRecording: false,
+    // Gutenberg eBook 1657, line 167: "PERSONS OF THE DIALOGUE:  Socrates, Crito."
+    cast: { narrator: "m", speakers: { SOCRATES: "m", CRITO: "m" } },
   },
   {
     slug: "meditations",
     station: "003",
+    dial: "Meditations",
     angle: 26,
     title: "Meditations, Book II",
     short: "Meditations",
@@ -127,11 +141,6 @@ export const WORKS: readonly Work[] = [
 /** The rule the Repertory holds every work to (CLAUDE.md). */
 export function isPublicDomainWorldwide(w: Pick<Work, "pd">): boolean {
   return w.pd.published < 1930 && w.pd.translatorDied < 1956;
-}
-
-/** Whether the text names its speakers in labels ("SOCRATES:  Why have you come"), which the one voice reads aloud. */
-export function hasSpeakerLabels(text: string): boolean {
-  return /^[A-Z][A-Z .'-]+:\s/m.test(text);
 }
 
 /** Words as a reader counts them: runs of non-space characters. */

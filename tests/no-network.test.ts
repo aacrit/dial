@@ -48,6 +48,6 @@ describe("Law 1: no request leaves this origin", () => {
     const voice = sources.find(([f]) => f === "voice.ts")![1];
     expect(voice).toContain("env.allowRemoteModels = false");
     expect(voice).toContain('wasm.wasmPaths = "/ort/"');
-    expect(voice).toMatch(/voices\.put\(voiceKey/);
+    expect(voice).toMatch(/voices\.put\(voiceKey\(id\)/);
   });
 });

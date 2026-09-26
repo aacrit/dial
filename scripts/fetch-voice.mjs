@@ -6,7 +6,8 @@
 //   revision, downloaded once into .cache/ and checked against SHA-256 pins.
 //   The model is split into parts under 20 MiB, because Workers Static
 //   Assets serves at most 25 MiB per file; web/src/voice.ts stitches them.
-// - The narrator's voice file, from the kokoro-js package.
+// - The cast's voice files (the palette in web/src/engine/cast.ts), from
+//   the kokoro-js package.
 // - onnxruntime-web's WASM runtime, from its package.
 //
 // None of these are tracked in git (rule 8): web/public/voice and
@@ -26,7 +27,6 @@ const ortOut = path.join(repoRoot, "web", "public", "ort");
 export const REPO = "onnx-community/Kokoro-82M-v1.0-ONNX";
 export const REVISION = "1939ad2a8e416c0acfeecc08a694d14ef25f2231";
 export const PART_BYTES = 20 * 1024 * 1024;
-export const NARRATOR = "bm_george";
 
 // SHA-256 of every staged file. A changed upstream byte fails the build.
 export const MODEL_FILES = {
@@ -35,7 +35,17 @@ export const MODEL_FILES = {
   "tokenizer_config.json": "be1cb066d6ef6b074b3f15e6a6dd21ac88ff3cdaedf325f0aaed686c70f75d20",
   "onnx/model_quantized.onnx": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 };
-export const VOICE_SHA256 = "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc";
+// The cast's voice files, each pinned (web/src/engine/cast.ts's ALL_VOICES,
+// same order): the male narrator (a placeholder until one is chosen by ear),
+// the female narrator, then the character palette.
+// The pins also go into manifest.json (voices), where the page checks each
+// file on fetch and on every read from its cache.
+export const VOICES = {
+  bm_george: "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc",
+  af_heart: "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b",
+  bm_fable: "f889083196807b4adb15e9204252165f503b8d33d3982e681c52443c49d798f1",
+  bm_lewis: "b8f671cef828c30e66fdf0b0756a76bba58f6bb3398cbbf27058642acbcedb97",
+};
 // onnxruntime-web's runtime, pinned like the model: a changed byte fails the
 // build. The .wasm's pin also goes into manifest.json (runtimeSha256), where
 // the page keys its cached copy to it and checks it on every read.
@@ -78,16 +88,25 @@ function resolvePackageDir(name) {
 /** Where the voice and the runtime are staged, for the build and the tests. */
 export const STAGED_DIRS = { voice: voiceOut, ort: ortOut };
 
-/** Sum of every staged file the tab downloads for the voice (the manifest itself excluded). */
-export function stagedBytes() {
-  let total = 0;
-  for (const dir of [voiceOut, ortOut]) {
+/**
+ * Every staged file the tab may download, by the path it is served at
+ * ("/voice/...", "/ort/..."), with its size in bytes (the manifest itself
+ * excluded).
+ */
+export function stagedSizes() {
+  const sizes = {};
+  for (const [dir, prefix] of [[voiceOut, "/voice/"], [ortOut, "/ort/"]]) {
     for (const file of walk(dir)) {
       if (path.resolve(file) === path.join(voiceOut, "manifest.json")) continue;
-      total += statSync(file).size;
+      sizes[prefix + path.relative(dir, file).split(path.sep).join("/")] = statSync(file).size;
     }
   }
-  return total;
+  return Object.fromEntries(Object.entries(sizes).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/** Sum of every staged file the tab may download (the manifest itself excluded). */
+export function stagedBytes() {
+  return Object.values(stagedSizes()).reduce((a, b) => a + b, 0);
 }
 
 /**
@@ -117,28 +136,32 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
     }
   }
 
-  const voiceSrc = path.join(resolvePackageDir("kokoro-js"), "voices", `${NARRATOR}.bin`);
-  const voiceBuf = readFileSync(voiceSrc);
-  if (sha256(voiceBuf) !== VOICE_SHA256) throw new Error(`fetch-voice: ${NARRATOR}.bin does not match its pin`);
   mkdirSync(path.join(voiceOut, "voices"), { recursive: true });
-  writeFileSync(path.join(voiceOut, "voices", `${NARRATOR}.bin`), voiceBuf);
+  for (const [id, pin] of Object.entries(VOICES)) {
+    const buf = checkPin(`${id}.bin`, readFileSync(path.join(resolvePackageDir("kokoro-js"), "voices", `${id}.bin`)), pin);
+    writeFileSync(path.join(voiceOut, "voices", `${id}.bin`), buf);
+  }
 
   rmSync(ortOut, { recursive: true, force: true });
   mkdirSync(ortOut, { recursive: true });
   for (const [f, buf] of ortBufs) writeFileSync(path.join(ortOut, f), buf);
 
   // The manifest the page reads to stitch the model back together. It also
-  // carries totalBytes: every byte the tab downloads for the voice (model
-  // parts, tokenizer and config, the voice file, the runtime's .mjs and
-  // .wasm), summed from the staged files on disk, so the page's "about N MB"
-  // and its progress meter are computed, never guessed.
-  const totalBytes = stagedBytes();
+  // carries every staged file's size (sizes, by served path) and their sum
+  // (totalBytes: everything staged). No visit downloads all of it: the page
+  // sums only the files it still needs (web/src/voice-cache.ts neededBytes),
+  // so its "about N MB" and its meter are computed, never guessed. A first
+  // visit downloads the model, tokenizer and config, the runtime's .wasm and
+  // .mjs, and the voices that work's cast uses (the Cave and the Meditations:
+  // George; Crito: Fable and Lewis); a later work adds only its new voices.
+  const sizes = stagedSizes();
+  const totalBytes = Object.values(sizes).reduce((a, b) => a + b, 0);
   writeFileSync(
     path.join(voiceOut, "manifest.json"),
-    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR, voiceSha256: VOICE_SHA256, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], totalBytes }, null, 2) + "\n",
+    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, voices: VOICES, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], sizes, totalBytes }, null, 2) + "\n",
   );
 
-  console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voice ${NARRATOR}, onnxruntime-web`);
+  console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voices ${Object.keys(VOICES).join(", ")}, onnxruntime-web`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
