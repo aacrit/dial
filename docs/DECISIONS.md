@@ -38,3 +38,6 @@ G2 approved "Made on this device. All 118 lines, 20:12. Nothing was sent anywher
 
 ## 2026-09-26: Law 2 apparatus wording, narrowed to what was approved
 Supersedes the scope words of the Law 2 entry above. The apparatus that may be removed is footnotes, the markers that point at them, and marks of a doubtful reading, nothing broader. `scripts/extract-work.mjs` refuses unless the upstream file matches its pinned SHA-256 and the markers match the notes one for one, and it removes "+" marks only for the eBooks in its PLUS_MARKS table, with their count pinned (#15877: 3). CLAUDE.md carries the founder's exact sentence.
+
+## 2026-09-26: release/2026.09.26-2 put Dial on dial.voidvision.org (no rollback)
+The founder added the zone's WAF rate-limit rule. A burst test on rollbook.voidvision.org gave 33 answers of 200, then 429 (Cloudflare 1015), and 200 again after 10 s. On the custom domain the contract passed 27/28. Its Worker rate-limit burst saw only the WAF's 429s, because the zone rule blocks before Dial's own limiter is reached. The same version on dial.aacrit.workers.dev, outside the zone, passed 28/28, with 7 `rate_limited` answers from the Worker in an 80-request burst. Both layers work, so this is a check-design gap and not a regression, and the release was not rolled back. Follow-up: the deployed-only Worker burst runs against the workers.dev host.
