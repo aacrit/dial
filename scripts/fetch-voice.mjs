@@ -135,7 +135,7 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
   const totalBytes = stagedBytes();
   writeFileSync(
     path.join(voiceOut, "manifest.json"),
-    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], totalBytes }, null, 2) + "\n",
+    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, narrator: NARRATOR, voiceSha256: VOICE_SHA256, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], totalBytes }, null, 2) + "\n",
   );
 
   console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voice ${NARRATOR}, onnxruntime-web`);

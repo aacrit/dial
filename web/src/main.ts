@@ -8,6 +8,7 @@
 import { segment, type Cue } from "./engine/segment";
 import { assemble, encodeWav } from "./engine/wav";
 import { isStatableTotal, warmingLine } from "./download-size";
+import { renderedLine, renderingLine, stopLine } from "./status-copy";
 import type { FromWorker, ToWorker } from "./narrate.worker";
 
 function sendEvent(name: string): void {
@@ -84,17 +85,58 @@ function setupBroadcast(): void {
       status.textContent = "The text did not load. Reload the page to try again.";
     });
 
+  // One broadcast at a time. Its state lives here so Pause, a stop and a
+  // retry all act on the current one.
+  let session: { audio: AudioContext; worker: Worker; frame: number; live: boolean } | null = null;
+
+  // Tally means a render or playback is live (design/spec.md 1.1): the lamp
+  // is lit only while the session is live and its audio is running.
+  const setLamp = () => {
+    if (session?.live && session.audio.state === "running") document.body.dataset.onAir = "true";
+    else delete document.body.dataset.onAir;
+  };
+
+  // The broadcast is over (finished or stopped): lamp off, Tune in back.
+  const offAir = () => {
+    if (session) {
+      session.live = false;
+      cancelAnimationFrame(session.frame);
+      session.worker.terminate();
+      void session.audio.close();
+    }
+    setLamp();
+    for (const line of lines) line.classList.remove("is-live");
+    pause.hidden = true;
+    pause.textContent = "Pause";
+    tune.textContent = "Tune in";
+    tune.disabled = false;
+  };
+
+  pause.addEventListener("click", () => {
+    if (!session?.live) return;
+    const { audio } = session;
+    if (audio.state === "running") {
+      void audio.suspend().then(setLamp);
+      pause.textContent = "Resume";
+    } else {
+      void audio.resume().then(setLamp);
+      pause.textContent = "Pause";
+    }
+  });
+
   tune.addEventListener("click", () => {
     if (!cues.length) return;
     tune.disabled = true;
     tune.textContent = "On air";
-    document.body.dataset.onAir = "true";
+    download.hidden = true;
+    status.removeAttribute("data-state");
     // The size and the meter's max arrive with the manifest (its totalBytes);
     // until then the meter is indeterminate and the line states no size.
     status.textContent = "Warming the voice.";
     meter.hidden = false;
     meter.removeAttribute("value");
     let warmingStated = false;
+    let kept = true;
 
     const audio = new AudioContext();
     let nextAt = audio.currentTime + 0.2;
@@ -102,6 +144,16 @@ function setupBroadcast(): void {
     const rendered: { audio: Float32Array; pauseAfterMs: number }[] = [];
     let sampleRate = 24_000;
     let live = -1;
+    // Playback is live until the last scheduled line has ended after the
+    // render is done.
+    let playing = 0;
+    let renderDone = false;
+
+    const worker = new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
+    const own = { audio, worker, frame: 0, live: true };
+    session = own;
+    setLamp();
+    audio.onstatechange = setLamp;
 
     const follow = () => {
       const now = audio.currentTime;
@@ -113,30 +165,30 @@ function setupBroadcast(): void {
         lines[current]?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
         live = current;
       }
-      requestAnimationFrame(follow);
+      own.frame = requestAnimationFrame(follow);
     };
-    requestAnimationFrame(follow);
+    own.frame = requestAnimationFrame(follow);
 
     pause.hidden = false;
-    pause.addEventListener("click", () => {
-      if (audio.state === "running") {
-        void audio.suspend();
-        pause.textContent = "Resume";
-      } else {
-        void audio.resume();
-        pause.textContent = "Pause";
-      }
-    });
+    pause.textContent = "Pause";
 
-    // A failure ends the busy state: no meter is left running.
+    // Playback ended: the last line finished after the render was done.
+    const ended = () => {
+      if (session === own && renderDone && playing === 0) offAir();
+    };
+
+    // A failure ends the broadcast: no meter left running, no lamp left lit,
+    // and the status says what happened in plain words, with the fix.
     const stopped = (message: string) => {
-      worker.terminate();
+      if (session !== own) return;
+      offAir();
       meter.hidden = true;
-      status.textContent = `The render stopped: ${message}. Reload the page to try again.`;
+      status.textContent = stopLine(message);
       status.dataset.state = "error";
     };
-    const worker = new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
+
     worker.onmessage = (event: MessageEvent<FromWorker>) => {
+      if (session !== own) return;
       const msg = event.data;
       if (msg.type === "loading") {
         if (!warmingStated) {
@@ -149,9 +201,10 @@ function setupBroadcast(): void {
           meter.value = Math.min(msg.loaded, msg.total);
         }
       } else if (msg.type === "ready") {
+        kept = msg.kept;
         meter.max = cues.length;
         meter.value = 0;
-        status.textContent = `Rendering on this device: 0 of ${cues.length} lines.`;
+        status.textContent = renderingLine(0, cues.length, kept);
       } else if (msg.type === "cue") {
         sampleRate = msg.sampleRate;
         const cue = cues[msg.index]!;
@@ -162,19 +215,26 @@ function setupBroadcast(): void {
         node.buffer = buffer;
         node.connect(audio.destination);
         nextAt = Math.max(nextAt, audio.currentTime + 0.05);
+        playing++;
+        node.onended = () => {
+          playing--;
+          ended();
+        };
         node.start(nextAt);
         starts[msg.index] = nextAt;
         nextAt += buffer.duration + cue.pauseAfterMs / 1000;
         meter.value = msg.index + 1;
-        status.textContent = `Rendering on this device: ${msg.index + 1} of ${cues.length} lines.`;
+        status.textContent = renderingLine(msg.index + 1, cues.length, kept);
       } else if (msg.type === "done") {
         worker.terminate();
+        renderDone = true;
         const wav = encodeWav(assemble(rendered, sampleRate), sampleRate);
         download.href = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
         download.hidden = false;
         meter.hidden = true;
-        status.textContent = `Rendered. All ${cues.length} lines, made on this device. Nothing was sent anywhere.`;
+        status.textContent = renderedLine(cues.length, kept);
         reportCoreSuccess();
+        ended();
       } else {
         stopped(msg.message);
       }
@@ -182,7 +242,7 @@ function setupBroadcast(): void {
     // A worker that fails to start or throws outside its own handler.
     worker.onerror = (event) => {
       event.preventDefault();
-      stopped(event.message || "the voice could not start");
+      stopped(event.message || "");
     };
     worker.postMessage({ type: "render", cues } satisfies ToWorker);
   });
