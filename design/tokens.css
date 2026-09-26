@@ -1,7 +1,61 @@
 /*
  * Ink & Momentum tokens - the ONLY file in this repo allowed to define a
- * color literal (hex, rgb(), hsl()). Every other file must reference these
- * custom properties. scripts/lint-design.mjs enforces this.
+ * color literal (hex, rgb(), hsl(), oklch()). Every other file must reference
+ * these custom properties. scripts/lint-design.mjs enforces this.
+ *
+ * Dial: "Night Programme". Seven source hexes, nothing else. Every other colour
+ * here, including the whole Daylight theme, is derived from those seven with
+ * OKLch relative colour, except the three register hues and three realm hues,
+ * which are product hues with one meaning each (listed where they are defined).
+ *
+ * Token names are ROLES, named in the night palette. In Daylight they hold
+ * daylight values: --color-cream is the text colour (walnut ink by day),
+ * --color-bg is the page (paper by day). Never read a name as a literal colour.
+ *
+ * Contrast pairs checked (WCAG 2.2, sRGB, alpha composited onto the ground;
+ * computed 2026-09-26 with the OKLch maths the browser uses):
+ *
+ *   NIGHT                                   ratio  need
+ *   cream on bg                             14.62  4.5
+ *   cream on surface                        13.51  4.5
+ *   cream on surface-raised                 12.49  4.5
+ *   cream-muted on bg                        6.15  4.5
+ *   cream-muted on surface                   5.92  4.5
+ *   cream-muted on surface-raised            5.65  4.5
+ *   cream-muted on filament-glow (live line) 5.26 4.5
+ *   filament on bg                           8.06  4.5
+ *   filament on surface                      7.44  4.5
+ *   filament on surface-raised               6.88  4.5
+ *   filament on filament-glow (live line)    6.17  4.5
+ *   bg on filament (button label)            8.06  4.5
+ *   bg on filament-hover                     9.62  4.5
+ *   magic-eye on bg / surface                9.16 / 8.46  4.5
+ *   ochre on bg / surface                    7.81 / 7.21  4.5
+ *   register-speaking on bg                  8.86  4.5
+ *   register-letter on bg                    7.91  4.5
+ *   tally on surface (lamp, graphic only)    3.62  3.0
+ *   FAILS, so forbidden: any text on tally (cream 3.73, bg 3.92).
+ *   Tally is a lamp, never a text ground. The Spark's on-air button
+ *   (cream on tally) must change in Forge: see design/spec.md.
+ *
+ *   DAYLIGHT
+ *   ink (--color-cream) on bg               16.27  4.5
+ *   ink on surface                          17.51  4.5
+ *   ink on surface-raised                   16.03  4.5
+ *   ink-muted on bg                          5.00  4.5
+ *   ink-muted on surface                     5.13  4.5
+ *   ink-muted on surface-raised              4.97  4.5
+ *   filament on bg                           5.71  4.5
+ *   filament on surface                      6.15  4.5
+ *   filament on surface-raised               5.62  4.5
+ *   filament on filament-glow (live line)    4.82  4.5
+ *   bg on filament (button label)            5.71  4.5
+ *   bg on filament-hover                     7.06  4.5
+ *   magic-eye on bg / surface / raised       6.96 / 7.50 / 6.86  4.5
+ *   ochre on bg / surface / raised           7.05 / 7.59 / 6.95  4.5
+ *   register-speaking on surface             5.53  4.5
+ *   register-letter on surface               5.85  4.5
+ *   bg on tally                              6.37  (still forbidden as text by rule)
  */
 
 /* Faces are self-hosted (design/fonts.css); never a font CDN (V3). */
@@ -9,22 +63,59 @@
 
 :root {
   color-scheme: dark;
-  /* Dial palette: "Night Programme". Dark only: a radio cabinet at night.
-     One accent (filament); the others are earned by a state. */
-  --color-bg: #16110d; /* cabinet walnut: the page */
-  --color-surface: #211912; /* console: panels */
-  --color-cream: #ede2cf; /* text */
-  --color-filament: #e39b3f; /* valve amber: interactive and brand, the one accent */
-  --color-tally: #c8463a; /* ON AIR red: only while a render or playback is live */
-  --color-magic-eye: #7cc4a0; /* tuning-eye green: in spec, sealed, a match */
-  --color-ochre: #cba14e; /* a correction or attestation is pending */
+
+  /* ---- The seven source hexes (the only hexes in the product) ---------- */
+  --hex-walnut: #16110d; /* cabinet walnut */
+  --hex-console: #211912; /* console panel */
+  --hex-cream: #ede2cf; /* dial-glass cream */
+  --hex-amber: #e39b3f; /* valve filament */
+  --hex-tally: #c8463a; /* ON AIR lamp */
+  --hex-eye: #7cc4a0; /* tuning-eye green */
+  --hex-ochre: #cba14e; /* pending */
+
+  /* ---- Night (default): roles -------------------------------------------- */
+  --color-bg: var(--hex-walnut); /* the page */
+  --color-surface: var(--hex-console); /* panels */
+  --color-cream: var(--hex-cream); /* text */
+  --color-filament: var(--hex-amber); /* interactive and brand: the one accent */
+  --color-tally: var(--hex-tally); /* only while a render or playback is live; a lamp, never a text ground */
+  --color-magic-eye: var(--hex-eye); /* loudness in spec, the Seal closed, a /verify match, a public-domain basis checked */
+  --color-ochre: var(--hex-ochre); /* a correction or an attestation is pending */
 
   /* Derived states, never new hexes */
   --color-filament-hover: oklch(from var(--color-filament) calc(l + 0.05) c h);
   --color-filament-glow: oklch(from var(--color-filament) l c h / 0.16);
   --color-surface-raised: oklch(from var(--color-surface) calc(l + 0.03) c h);
   --color-cream-muted: oklch(from var(--color-cream) l c h / 0.62);
+  --color-cream-faint: oklch(from var(--color-cream) l c h / 0.12); /* ghost fills, unrendered time; never text */
   --color-border: oklch(from var(--color-cream) l c h / 0.14);
+  --color-eye-dim: oklch(from var(--color-magic-eye) calc(l - 0.42) calc(c * 0.6) h); /* the eye's unlit glass */
+  --color-scrim: oklch(from var(--color-bg) l c h / 0.72); /* behind sheets and dialogs */
+
+  /* ---- Register hues: the VU pair, the cue sheet and the Tuning Dial only --
+     Height is loudness, hue is register (Law 3's registers, read from form):
+       telling   narration and speech tags ("I said"): the text's own colour
+       speaking  a turn inside quotation marks or a script label: dial-glass blue
+       letter    italic or indented blocks, letters, verse: dusk violet
+     Never used for text other than their own legend. */
+  --color-register-telling: var(--color-cream);
+  --color-register-speaking: oklch(0.76 0.075 235);
+  --color-register-letter: oklch(0.74 0.08 305);
+
+  /* ---- Book colour (data-realm): the cue ribbon and the chapter card only --
+     Bleeds in over 2.4 s when a work goes on air (sadhana's data-raga). Low
+     chroma on purpose: it names which work is on air, it does not decorate. */
+  --realm-cave: oklch(0.64 0.075 48); /* firelight on the cave wall */
+  --realm-crito: oklch(0.64 0.045 255); /* the prison before dawn */
+  --realm-meditations: oklch(0.64 0.055 130); /* a camp on the Danube */
+  --color-realm: var(--color-cream-muted);
+  --dur-realm-bleed: 2400ms;
+
+  /* ---- Texture: one layer, the Studio console only -------------------------
+     On Air's console panel: a filament glow from above plus 4% grain. */
+  --texture-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --texture-grain-opacity: 0.04;
+  --texture-console: radial-gradient(120% 90% at 50% -20%, var(--color-filament-glow), transparent 60%);
 
   /* Radii and shadows */
   --radius-card: 14px;
@@ -32,13 +123,16 @@
   --radius-pill: 999px;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(12 8 4 / 0.35);
   --shadow-hover: 0 2px 4px rgb(0 0 0 / 0.4), 0 16px 40px rgb(12 8 4 / 0.45);
+  --shadow-lamp: 0 0 10px oklch(from var(--color-tally) l c h / 0.7);
+  --shadow-needle: 0 0 10px oklch(from var(--color-filament) l c h / 0.6);
 
   /* Type */
   --font-display: "Fraunces", ui-serif, Georgia, serif;
   --font-structure: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --measure-reading: 68ch; /* the script page and the manuscript never exceed this */
 
-  /* Motion */
+  /* Motion: family duration tiers */
   --dur-instant: 80ms;
   --dur-fast: 160ms;
   --dur-normal: 240ms;
@@ -48,12 +142,98 @@
   --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-rack: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --ease-whip: cubic-bezier(0.25, 0, 0, 1);
+
+  /* ---- Dial's named motion presets ----------------------------------------
+     JS springs read the three numbers (stiffness damping mass); CSS uses the
+     linear() step response simulated from the same numbers, over the settle
+     time (0.1% of target). Each names the state it carries:
+       needle-drop    a cue or line snaps into place, the needle lands on it
+       dial-drift     scrubbing and following: the needle glides to a position
+       valve-warm     the carrier, the eye or the voice warming up on load
+       vu-ballistics  the VU pair: 300 ms integration, the broadcast standard
+       hard-cut       where the audio cuts, the screen cuts: no transition */
+  --spring-needle-drop: 1000 30 1;
+  --dur-needle-drop: 530ms;
+  --ease-needle-drop: linear(0, 0.201 4.2%, 0.578 8.3%, 0.916 12.5%, 1.119 16.7%, 1.182 20.8%, 1.153 25%, 1.085 29.2%, 1.021 33.3%, 0.981 37.5%, 0.967 41.7%, 0.971 45.8%, 0.983 50%, 0.995 54.2%, 1.003 58.3%, 1.006 62.5%, 1.005 66.7%, 1.003 70.8%, 1 79.2%, 1);
+  --spring-dial-drift: 80 20 1;
+  --dur-dial-drift: 1340ms;
+  --ease-dial-drift: linear(0, 0.088 4.2%, 0.252 8.3%, 0.415 12.5%, 0.555 16.7%, 0.665 20.8%, 0.751 25%, 0.816 29.2%, 0.864 33.3%, 0.9 37.5%, 0.926 41.7%, 0.946 45.8%, 0.96 50%, 0.971 54.2%, 0.978 58.3%, 0.984 62.5%, 0.988 66.7%, 0.991 70.8%, 0.994 75%, 0.997 83.3%, 0.999 95.8%, 1);
+  --spring-valve-warm: 150 12 1.2;
+  --dur-valve-warm: 1430ms;
+  --ease-valve-warm: linear(0, 0.178 4.2%, 0.538 8.3%, 0.886 12.5%, 1.113 16.7%, 1.203 20.8%, 1.188 25%, 1.119 29.2%, 1.043 33.3%, 0.987 37.5%, 0.961 41.7%, 0.958 45.8%, 0.971 50%, 0.987 54.2%, 1 58.3%, 1.007 62.5%, 1.009 66.7%, 1.007 70.8%, 1.004 75%, 1.001 79.2%, 0.999 83.3%, 1);
+  --dur-vu-ballistics: 300ms;
+  --ease-vu-ballistics: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --dur-hard-cut: 0ms;
 }
+
+/* ---- Daylight: the same station by day ------------------------------------
+   Follows the device setting; data-theme pins either theme. Paper, walnut ink,
+   and every accent darkened in OKLch lightness only (hue and meaning kept).
+   The Studio console texture keeps its grain and drops the glow. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="night"]) {
+    color-scheme: light;
+    --color-bg: oklch(from var(--hex-cream) calc(l + 0.035) calc(c * 0.55) h); /* paper */
+    --color-surface: oklch(from var(--hex-cream) calc(l + 0.06) calc(c * 0.3) h); /* card stock */
+    --color-cream: var(--hex-walnut); /* ink */
+    --color-filament: oklch(from var(--hex-amber) calc(l - 0.26) c h);
+    --color-tally: oklch(from var(--hex-tally) calc(l - 0.1) c h);
+    --color-magic-eye: oklch(from var(--hex-eye) calc(l - 0.34) calc(c * 0.9) h);
+    --color-ochre: oklch(from var(--hex-ochre) calc(l - 0.3) calc(c * 0.95) h);
+    --color-filament-hover: oklch(from var(--color-filament) calc(l - 0.05) c h);
+    --color-filament-glow: oklch(from var(--color-filament) l c h / 0.12);
+    --color-surface-raised: oklch(from var(--color-surface) calc(l - 0.03) c h);
+    --color-eye-dim: oklch(from var(--color-magic-eye) calc(l + 0.5) calc(c * 0.4) h);
+    --color-register-speaking: oklch(0.5 0.09 240);
+    --color-register-letter: oklch(0.5 0.1 305);
+    --realm-cave: oklch(0.55 0.08 48);
+    --realm-crito: oklch(0.55 0.05 255);
+    --realm-meditations: oklch(0.55 0.06 130);
+    --texture-console: none;
+    --shadow-card: 0 1px 2px rgb(40 28 16 / 0.08), 0 8px 24px rgb(40 28 16 / 0.08);
+    --shadow-hover: 0 2px 4px rgb(40 28 16 / 0.1), 0 16px 40px rgb(40 28 16 / 0.12);
+  }
+}
+
+:root[data-theme="daylight"] {
+  color-scheme: light;
+  --color-bg: oklch(from var(--hex-cream) calc(l + 0.035) calc(c * 0.55) h);
+  --color-surface: oklch(from var(--hex-cream) calc(l + 0.06) calc(c * 0.3) h);
+  --color-cream: var(--hex-walnut);
+  --color-filament: oklch(from var(--hex-amber) calc(l - 0.26) c h);
+  --color-tally: oklch(from var(--hex-tally) calc(l - 0.1) c h);
+  --color-magic-eye: oklch(from var(--hex-eye) calc(l - 0.34) calc(c * 0.9) h);
+  --color-ochre: oklch(from var(--hex-ochre) calc(l - 0.3) calc(c * 0.95) h);
+  --color-filament-hover: oklch(from var(--color-filament) calc(l - 0.05) c h);
+  --color-filament-glow: oklch(from var(--color-filament) l c h / 0.12);
+  --color-surface-raised: oklch(from var(--color-surface) calc(l - 0.03) c h);
+  --color-eye-dim: oklch(from var(--color-magic-eye) calc(l + 0.5) calc(c * 0.4) h);
+  --color-register-speaking: oklch(0.5 0.09 240);
+  --color-register-letter: oklch(0.5 0.1 305);
+  --realm-cave: oklch(0.55 0.08 48);
+  --realm-crito: oklch(0.55 0.05 255);
+  --realm-meditations: oklch(0.55 0.06 130);
+  --texture-console: none;
+  --shadow-card: 0 1px 2px rgb(40 28 16 / 0.08), 0 8px 24px rgb(40 28 16 / 0.08);
+  --shadow-hover: 0 2px 4px rgb(40 28 16 / 0.1), 0 16px 40px rgb(40 28 16 / 0.12);
+}
+
+/* A work on air lends its colour to the ribbon and the chapter card. */
+[data-realm="cave"] { --color-realm: var(--realm-cave); }
+[data-realm="crito"] { --color-realm: var(--realm-crito); }
+[data-realm="meditations"] { --color-realm: var(--realm-meditations); }
 
 body {
   background: var(--color-bg);
   color: var(--color-cream);
   font-family: var(--font-structure);
+}
+
+/* Resolution-aware: at 1920 px and up the type steps up one size on the
+   scale. Reading measure stays --measure-reading; extra width goes to the
+   Tuning Dial's time resolution, never to line length. */
+@media (min-width: 1920px) {
+  html { font-size: 18px; }
 }
 
 /* Every numeral rides the data face with tabular figures, no exceptions. */
