@@ -13,7 +13,8 @@
     "test": "vitest run --reporter=default --reporter=json --outputFile=.vitest-report.json",
     "contract": "node scripts/contract.mjs",
     "scan-history": "node scripts/scan-history.mjs",
-    "gate": "node scripts/gate.mjs"
+    "gate": "node scripts/gate.mjs",
+    "voice-bench": "node scripts/voice-bench.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260924.1",
