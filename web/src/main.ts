@@ -140,19 +140,24 @@ function setupRadio(): void {
     paintTuneIn();
   };
 
+  const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone };
+
+  /** Tune in on the work on air reads "On air" while it is live, "Paused" when paused with every line made. */
   const paintTuneIn = () => {
     const w = WORKS[radio.tuned()]!;
     const here = !!session?.live && session.work === w;
-    tune.classList.toggle("is-on-air", here);
-    tune.textContent = here ? "On air" : "Tune in";
+    const lit = here && lampLit(lampState());
+    tune.classList.toggle("is-on-air", lit);
+    tune.textContent = here ? (lit ? "On air" : "Paused") : "Tune in";
     tune.disabled = here || !texts.has(w.slug);
   };
 
   // ---- the lamp: tally means a render or playback is live ------------------
   const setLamp = () => {
-    const lit = lampLit(session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone });
+    const lit = lampLit(lampState());
     if (lit) document.body.dataset.onAir = "true";
     else delete document.body.dataset.onAir;
+    paintTuneIn();
   };
 
   /** The announced line: set only when the broadcast's state changes. */
@@ -202,6 +207,8 @@ function setupRadio(): void {
     readAlong.hidden = true;
     progress.textContent = "";
     paintTuneIn();
+    // The question about stopping this broadcast no longer applies.
+    hideAsk();
     rescueFocus(pause);
     pause.hidden = true;
     pause.textContent = "Pause";
@@ -212,7 +219,7 @@ function setupRadio(): void {
     const s = session;
     if (!s?.live) return;
     const settle = () => {
-      setLamp();
+      setLamp(); // repaints Tune in too: "Paused" once nothing is live
       paintProgress();
       if (s.audio.state === "suspended") {
         const at = s.starts[0] === undefined ? 0 : Math.max(0, s.audio.currentTime - s.starts[0]);
@@ -419,6 +426,8 @@ function setupRadio(): void {
           download.hidden = false;
         }
         meter.hidden = true;
+        // Nothing is lost by switching now, so the question goes.
+        hideAsk();
         // Paused with every line made: nothing is live any more, so the lamp goes out.
         setLamp();
         paintProgress();

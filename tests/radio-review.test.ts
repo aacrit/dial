@@ -103,7 +103,8 @@ describe("the live region announces state changes only", () => {
     expect(main).toMatch(/if \(status\.textContent !== line\) status\.textContent = line;/);
     const html = read("web/index.html");
     expect(html).toContain('<p id="broadcast-status" role="status" aria-live="polite"></p>');
-    expect(html).toContain('<p id="broadcast-progress" aria-hidden="true"></p>');
+    // Readable, but not a live region, so it does not announce each line.
+    expect(html).toContain('<p id="broadcast-progress"></p>');
   });
 
   it("a new cue or a new line repaints the progress, never the announcement (except the first line going on air)", () => {
@@ -124,6 +125,25 @@ describe("the live region announces state changes only", () => {
 });
 
 describe("tuning away while a work is on air", () => {
+  it("the question hides itself when the old broadcast finishes making or stops", () => {
+    const offAir = block(main, "const offAir = () => {")!;
+    expect(offAir).toContain("hideAsk();");
+    const done = /msg\.type === "done"\) \{([\s\S]*?)\n {6}\} else \{/.exec(main)![1]!;
+    expect(done).toContain("hideAsk();");
+    const hideAsk = block(main, "const hideAsk = () => {")!;
+    expect(hideAsk).toMatch(/rescueFocus\(askYes, askNo\);\s*ask\.hidden = true;/);
+  });
+
+  it("Tune in on the work reads Paused, not On air, when paused with every line made", () => {
+    const paint = block(main, "const paintTuneIn = () => {")!;
+    expect(paint).toMatch(/const lit = here && lampLit\(lampState\(\)\);/);
+    expect(paint).toContain('tune.textContent = here ? (lit ? "On air" : "Paused") : "Tune in";');
+    expect(paint).toContain('tune.classList.toggle("is-on-air", lit);');
+    // Every lamp change repaints it, including the pause handler's.
+    expect(block(main, "const setLamp = () => {")).toContain("paintTuneIn();");
+    expect(main).toMatch(/const settle = \(\) => \{\s*setLamp\(\);/);
+  });
+
   it("asks in the page before stopping a work still being made, naming both", () => {
     expect(switchQuestion("Crito", "the Cave")).toBe("Stop Crito and tune in to the Cave? Crito's recording so far will be lost.");
     expect(switchQuestion("the Cave", "Crito")).toBe("Stop the Cave and tune in to Crito? The Cave's recording so far will be lost.");

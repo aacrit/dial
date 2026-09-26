@@ -112,7 +112,8 @@ describe("the lamp is lit only while a render or playback is live", () => {
   it("only setLamp writes on-air, from lampLit over the live session's state", () => {
     expect([...main.matchAll(/dataset\.onAir = /g)].length).toBe(1);
     const setLamp = block("setLamp");
-    expect(setLamp).toMatch(/lampLit\(session && \{ live: session\.live, playing: session\.audio\.state === "running", renderDone: session\.renderDone \}\)/);
+    expect(setLamp).toMatch(/const lit = lampLit\(lampState\(\)\);/);
+    expect(main).toContain('const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone };');
     expect(setLamp).toMatch(/if \(lit\) document\.body\.dataset\.onAir = "true";\s*else delete document\.body\.dataset\.onAir;/);
   });
 
