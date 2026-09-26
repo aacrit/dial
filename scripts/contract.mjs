@@ -72,22 +72,30 @@ async function runCheck(check, baseUrl) {
       // body `{ "error": <expect_error> }`: a WAF block page (Cloudflare's
       // "Error 1015") is a 429 too, and must not pass for the Worker's
       // limit. Retry-After alone is not trusted for the same reason.
+      // With `concurrency`, they go in waves of that many at once: the
+      // Workers rate-limit binding counts permissively and is eventually
+      // consistent, so a sequential probe at a few requests a second may
+      // never trip it even though a real burst does.
       const statuses = [];
       let matched = false;
-      for (let i = 0; i < check.count; i++) {
+      const one = async () => {
         const r = await fetch(target, { cache: "no-store" });
         const text = await r.text();
         statuses.push(r.status);
-        if (r.status !== check.expect_status) continue;
+        if (r.status !== check.expect_status) return;
         if (check.expect_error === undefined) {
           matched = true;
-          continue;
+          return;
         }
         try {
           if (JSON.parse(text)?.error === check.expect_error) matched = true;
         } catch {
           // Not the Worker's JSON (a WAF or proxy page): does not count.
         }
+      };
+      const wave = Math.max(1, check.concurrency ?? 1);
+      for (let sent = 0; sent < check.count; sent += wave) {
+        await Promise.all(Array.from({ length: Math.min(wave, check.count - sent) }, one));
       }
       const want = check.expect_error === undefined ? `${check.expect_status}` : `${check.expect_status} with {"error":"${check.expect_error}"}`;
       return { label, pass: matched, detail: matched ? undefined : `no ${want} in ${check.count} requests (got ${[...new Set(statuses)].join(", ")})` };

@@ -146,11 +146,14 @@ checks:
   # The per-client rate limit actually bites. The Workers Rate Limiting
   # binding only counts on Cloudflare, so this runs against the preview and
   # production only. It must be the Worker's own refusal, not a WAF 1015
-  # page (also a 429), and it waits out the WAF's 10 s window first.
+  # page (also a 429), and it waits out the WAF's 10 s window first. The
+  # binding counts permissively, so the burst goes 20 at a time: 25
+  # sequential requests never tripped it (Dial's Spark release, 2026-09-26).
   - name: rate limit bites on the Worker (deployed only)
     type: burst
     path: /healthz
-    count: 25
+    count: 80
+    concurrency: 20
     expect_status: 429
     expect_error: rate_limited
     pause_before_seconds: 11

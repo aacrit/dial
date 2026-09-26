@@ -108,6 +108,12 @@ describe("contract runner: deployed-only burst checks", () => {
     expect(worker.pass).toBe(true);
   });
 
+  it("a burst check with concurrency sends every request, in waves", async () => {
+    const results = await runContract({ checks: [{ name: "burst", type: "burst", path: "/", count: 7, concurrency: 3, expect_status: 429 }] }, baseUrl);
+    expect(results[0]!.pass).toBe(false);
+    expect(results[0]!.detail).toContain("in 7 requests");
+  });
+
   it("a burst check fails when no request is refused", async () => {
     const results = await runContract({ checks: [{ name: "burst", type: "burst", path: "/", count: 3, expect_status: 429 }] }, baseUrl);
     expect(results[0].pass).toBe(false);
