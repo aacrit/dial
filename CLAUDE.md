@@ -62,6 +62,12 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
 2. **The words are the author's.** Every cue's `text` is a byte-exact slice
    of its source and the cues rebuild it exactly (`tests/verbatim.test.ts`).
    `spoken` may differ only by whitespace until the Corrections sheet exists.
+   A translator's apparatus (footnotes, the markers that point at them, and
+   marks of a doubtful reading) may be removed only by
+   `scripts/extract-work.mjs`, which refuses unless the upstream Gutenberg
+   file matches its pinned SHA-256 and the note markers match the notes one
+   for one (`tests/verbatim.test.ts`). The Bookplate says what was removed,
+   and every word of the text itself stays verbatim.
 3. **One deterministic engine that never needs to understand the text.**
    `web/src/engine/` reads form only (paragraphs, sentence and clause marks,
    later speaker labels and tags). No LLM, ever, in the render path.

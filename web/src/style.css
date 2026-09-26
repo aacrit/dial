@@ -1,7 +1,10 @@
 /* Layout and component styles. Colors always come from design/tokens.css;
-   never a literal color value here. */
+   never a literal color value here. The radio follows the G2 round-2 mock
+   (design/mocks/repertory.html); no style="" anywhere (the CSP forbids it). */
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -11,47 +14,851 @@ body {
   min-height: 100%;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  line-height: 1.55;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--color-filament);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  color: var(--color-filament-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-filament);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-wrap: balance;
+}
+
+.eyebrow {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+  line-height: 1.3;
+}
+
+.muted {
+  color: var(--color-cream-muted);
+}
+
+.defs {
+  position: absolute;
+}
+
+/* ---- Buttons: verbs, 44 px, spring press -------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--color-filament);
+  color: var(--color-bg);
+  font: 600 0.95rem/1 var(--font-structure);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    transform var(--dur-normal) var(--ease-needle-drop);
+}
+
+.btn:hover {
+  background: var(--color-filament-hover);
+  color: var(--color-bg);
+}
+
+.btn:active {
+  transform: scale(0.97);
+  transition-duration: var(--dur-instant);
+}
+
+.btn.quiet {
+  background: transparent;
+  color: var(--color-cream);
+  border-color: var(--color-border);
+}
+
+.btn.quiet:hover {
+  background: var(--color-surface-raised);
+  color: var(--color-cream);
+}
+
+.btn:disabled {
+  background: var(--color-surface-raised);
+  color: var(--color-cream-muted);
+  border-color: var(--color-border);
+  cursor: default;
+  transform: none;
+}
+
+/* On air: tally is a lamp, never a text ground (cream on tally is 3.73:1,
+   design/spec.md 1.1). The button keeps a cream label and lights a small
+   tally lamp beside it. */
+body[data-on-air="true"] #tune-in.is-on-air {
+  background: transparent;
+  color: var(--color-cream);
+  border-color: var(--color-border);
+}
+
+body[data-on-air="true"] #tune-in.is-on-air::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-tally);
+  box-shadow: var(--shadow-lamp);
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+
+.masthead {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px 0;
+  padding-top: max(14px, env(safe-area-inset-top));
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-cream);
+}
+
+.brand .arch {
+  height: 28px;
+  width: auto;
+}
+
+.brand .wm {
+  height: 13px;
+  width: auto;
+  fill: var(--color-cream);
+}
+
+.brand .freq {
+  font: 500 0.66rem/1 var(--font-data);
+  letter-spacing: 0.16em;
+  color: var(--color-cream-muted);
+}
+
+.arch-body {
+  fill: var(--color-surface);
+  stroke: var(--color-cream);
+  stroke-width: 6;
+  stroke-linejoin: round;
+}
+
+.arch-inner {
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-width: 1.6;
+  opacity: 0.4;
+}
+
+.arch-live {
+  fill: none;
+  stroke: var(--color-filament);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+}
+
+/* ---- The room ------------------------------------------------------------ */
+
+.room {
+  padding: 0 0 40px;
+}
+
+.rep-head {
+  display: none;
+}
+
+/* ---- The device: a faceplate with a dial behind glass --------------------- */
+
+.device {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px;
+  border-radius: 30px;
+  background: var(--gradient-cabinet);
+  box-shadow: var(--shadow-device);
+  isolation: isolate;
+}
+
+/* One texture layer: 4% grain on the cabinet only. */
+.device::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: var(--texture-grain);
+  opacity: var(--texture-grain-opacity);
+  pointer-events: none;
+}
+
+.glasspanel {
+  position: relative;
+  border-radius: 18px;
+  background: var(--gradient-glass);
+  box-shadow: var(--shadow-glass-inset);
+  color: var(--color-glass-ink);
+}
+
+/* Dial window: an arch of glass, like the cathedral mark. */
+.dialwin {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 400 / 250;
+  border-radius: 50% 50% 18px 18px / 80% 80% 7.2% 7.2%;
+  background: var(--gradient-glass);
+  box-shadow: var(--shadow-glass-inset);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  outline-offset: 4px;
+}
+
+.dialwin:active {
+  cursor: grabbing;
+}
+
+.dialwin svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.dw-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 30%, var(--color-glass-sheen) 42%, transparent 55%),
+    radial-gradient(90% 40% at 50% 0%, var(--color-glass-sheen), transparent 70%);
+}
+
+.dw-scale .tk {
+  stroke: var(--color-glass-ink-faint);
+  stroke-width: 1;
+}
+
+.dw-scale .tk.maj {
+  stroke: var(--color-glass-ink-muted);
+  stroke-width: 1.2;
+}
+
+.dw-scale .tk.st {
+  stroke: var(--color-glass-ink);
+  stroke-width: 1.6;
+}
+
+.dw-scale .arc {
+  fill: none;
+  stroke: var(--color-glass-ink-faint);
+  stroke-width: 1;
+}
+
+.dw-scale .lb {
+  fill: var(--color-glass-ink-muted);
+  font: 500 11px var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  text-anchor: middle;
+}
+
+.dw-scale .lb.on {
+  fill: var(--color-glass-ink);
+}
+
+.dw-am {
+  fill: var(--color-glass-ink-muted);
+  font: 500 9px var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.16em;
+}
+
+.dw-needle .nd {
+  stroke: var(--color-glass-amber);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--color-glass-amber-glow));
+}
+
+.dw-needle .nd-tail {
+  stroke: var(--color-glass-ink-muted);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.dw-needle .nd-cap {
+  fill: var(--color-surface);
+  stroke: var(--color-bezel);
+  stroke-width: 1.5;
+}
+
+.dw-needle .nd-hub {
+  fill: var(--color-glass-amber);
+}
+
+/* The hub cap rims tally while a render or playback is live: a lamp, on glass. */
+body[data-on-air="true"] .dw-needle .nd-cap {
+  stroke: var(--color-glass-tally);
+}
+
+.dial-key {
+  font-size: 0.8rem;
+  color: var(--color-cream-muted);
+  padding: 0 4px;
+  max-width: 60ch;
+}
+
+/* Station line on the cabinet */
+.station-line {
+  display: grid;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.station-line h2 {
+  font-size: 1.45rem;
+  line-height: 1.12;
+}
+
+.station-line .by {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--color-cream-muted);
+  font-size: 0.92rem;
+}
+
+/* The display: instruments over the station card, one piece of glass */
+.display {
+  display: grid;
+  overflow: hidden;
+}
+
+.instruments {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-glass-ink-faint);
+}
+
+.inst {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 52px;
+}
+
+.il {
+  font: 500 0.6rem/1.2 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-glass-ink-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.mini-eye,
+.valve {
+  width: 40px;
+  height: 40px;
+}
+
+.mini-eye .me-glass {
+  fill: var(--color-glass-eye-dim);
+}
+
+.mini-eye .me-fan {
+  fill: var(--color-glass-eye);
+  filter: drop-shadow(0 0 5px var(--color-glass-eye));
+}
+
+.mini-eye .me-cap {
+  fill: var(--color-glass);
+  stroke: var(--color-glass-ink-faint);
+}
+
+.valve .v-env {
+  fill: none;
+  stroke: var(--color-glass-ink-muted);
+  stroke-width: 1.2;
+}
+
+.valve .v-base {
+  fill: var(--color-glass-ink-faint);
+}
+
+.valve .v-fil {
+  fill: none;
+  stroke: var(--color-glass-amber);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px var(--color-glass-amber));
+  opacity: 0.15;
+}
+
+.valve .v-glow {
+  fill: var(--color-glass-amber-glow);
+  opacity: 0;
+}
+
+.devnote {
+  padding: 10px 16px 0;
+  font-size: 0.82rem;
+  color: var(--color-glass-ink-muted);
+}
+
+.device[data-state="error"] .devnote {
+  color: var(--color-glass-ink);
+  padding-bottom: 12px;
+}
+
+.station-card {
+  padding: 12px 16px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.station-card .desc {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  color: var(--color-glass-ink);
+  max-width: var(--measure-reading);
+}
+
+.station-card .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font: 400 0.72rem/1.4 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-glass-ink-muted);
+}
+
+.station-card .meta .pd {
+  color: var(--color-glass-eye);
+}
+
+/* Read-along strip: the previous line, the live line, the next line */
+.readalong {
+  display: grid;
+  gap: 6px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-glass-ink-faint);
+}
+
+.ra-who {
+  font: 500 0.62rem/1 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-glass-ink-muted);
+}
+
+.ra-lines {
+  display: grid;
+  gap: 6px;
+  max-width: var(--measure-reading);
+}
+
+.ra {
+  font-family: var(--font-display);
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--color-glass-ink-muted);
+}
+
+.ra.prev,
+.ra.next {
+  font-size: 0.92rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The live line rises into place on needle-drop (reduced motion: tokens.css collapses it). */
+.ra.live {
+  font-size: 1.12rem;
+  color: var(--color-glass-amber);
+  animation: ra-rise var(--dur-needle-drop) var(--ease-needle-drop);
+}
+
+@keyframes ra-rise {
+  from {
+    transform: translateY(12px);
+    opacity: 0.4;
+  }
+}
+
+/* Tune in and the broadcast's own lines */
+.tunein {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.tunein #tune-in {
+  min-height: 48px;
+  padding: 0 22px;
+  font-size: 1rem;
+}
+
+.tunein .avail {
+  font-size: 0.84rem;
+  color: var(--color-cream-muted);
+}
+
+.onair-panel {
+  display: grid;
+  gap: 10px;
+  padding: 0 4px;
+  justify-items: start;
+}
+
+/* The status line carries counts, sizes and times ("line 3 of 118", "20:12"). */
+#broadcast-status {
+  font-size: 0.92rem;
+  color: var(--color-cream-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The per-line count: visual only (the live region above announces state changes). */
+#broadcast-progress {
+  font-size: 0.8rem;
+  color: var(--color-cream-muted);
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+#broadcast-progress:empty {
+  display: none;
+}
+
+/* Asked in the page before a broadcast still being made is stopped. */
+.switch-ask {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  margin: 0 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  font-size: 0.92rem;
+}
+
+.switch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Errors earn no hue: cream prose, full strength rather than muted. */
+#broadcast-status[data-state="error"] {
+  color: var(--color-cream);
+}
+
+progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  appearance: none;
+  border: none;
+  border-radius: 2px;
+  background: var(--color-cream-faint);
+  accent-color: var(--color-filament);
+}
+
+progress[hidden] {
+  display: none;
+}
+
+progress::-webkit-progress-bar {
+  background: var(--color-cream-faint);
+}
+
+progress::-webkit-progress-value {
+  background: var(--color-filament);
+}
+
+progress::-moz-progress-bar {
+  background: var(--color-filament);
+}
+
+/* Knobs: knurled, turnable */
+.controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 4px 2px 2px;
+}
+
+.knob {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.knob:focus-visible {
+  outline: none;
+}
+
+.kn-dial {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--gradient-knob);
+  box-shadow: var(--shadow-knob), inset 0 0 0 1px var(--color-bezel);
+  cursor: grab;
+}
+
+.kn-dial::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(var(--color-bezel) 0 2.5deg, transparent 2.5deg 7.5deg);
+  -webkit-mask: radial-gradient(circle, transparent 31px, black 32px 36px, transparent 37px);
+  mask: radial-gradient(circle, transparent 31px, black 32px 36px, transparent 37px);
+}
+
+.kn-rot {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.kn-mark {
+  position: absolute;
+  left: 50%;
+  top: 7px;
+  width: 3px;
+  height: 14px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--color-cream);
+}
+
+.knob:focus-visible .kn-dial {
+  outline: 2px solid var(--color-filament);
+  outline-offset: 6px;
+}
+
+.knob .kl {
+  font: 500 0.62rem/1 var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+/* Push keys: 3 px of travel; the tuned preset latches down */
+.keys {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.key {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  min-width: 64px;
+  min-height: 56px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-bezel);
+  border-radius: 12px;
+  background: var(--gradient-key);
+  color: var(--color-cream);
+  box-shadow: var(--shadow-key);
+  font: 500 0.8rem/1 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transform: translateY(0);
+  transition:
+    transform var(--dur-needle-drop) var(--ease-needle-drop),
+    box-shadow var(--dur-needle-drop) var(--ease-needle-drop);
+}
+
+.key:active,
+.key[aria-pressed="true"] {
+  transform: translateY(var(--key-travel));
+  box-shadow: var(--shadow-key-pressed);
+  transition-duration: var(--dur-instant);
+}
+
+.key[aria-pressed="true"] {
+  border-color: var(--color-filament);
+}
+
+.key .t {
+  font: 500 0.56rem/1.2 var(--font-structure);
+  color: var(--color-cream-muted);
+  max-width: 8em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Below the device ----------------------------------------------------- */
+
+.below {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 12px 16px 0;
+}
+
+.drill {
+  border-top: 1px solid var(--color-border);
+}
+
+.drill > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--color-cream);
+  font-weight: 500;
+}
+
+.drill > summary::-webkit-details-marker {
+  display: none;
+}
+
+.drill > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-right: 1.6px solid var(--color-cream-muted);
+  border-bottom: 1.6px solid var(--color-cream-muted);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.drill[open] > summary::after {
+  transform: rotate(-135deg) translateY(-2px);
+}
+
+.drill-body {
+  padding: 4px 0 16px;
+}
+
+.bookplate dl {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.bookplate dt {
+  font: 500 0.64rem/1 var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+  padding-top: 10px;
+}
+
+.bookplate dd {
+  margin: 0;
+}
+
+.pd {
+  color: var(--color-magic-eye);
+}
+
+.own {
+  font-size: 0.9rem;
+  color: var(--color-cream-muted);
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ---- Cards, forms, the privacy page ------------------------------------- */
+
 .page {
   max-width: 640px;
   margin: 0 auto;
-  padding: 48px 20px 96px;
+  padding: 48px max(20px, env(safe-area-inset-right)) 96px max(20px, env(safe-area-inset-left));
 }
 
 .page-header {
   margin-bottom: 32px;
 }
 
-.eyebrow {
-  font-family: var(--font-data);
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-cream-muted);
-  margin: 0 0 12px;
-}
-
-h1 {
-  font-family: var(--font-display);
+.page h1 {
   font-size: clamp(2rem, 5vw, 3rem);
-  font-weight: 500;
   margin: 0 0 12px;
 }
 
-h2 {
-  font-family: var(--font-display);
+.card h2 {
   font-size: 1.25rem;
-  font-weight: 500;
   margin: 0 0 8px;
 }
 
-.value-line {
-  font-size: 1.05rem;
-  color: var(--color-cream-muted);
-  margin: 0;
-}
-
-.muted {
-  color: var(--color-cream-muted);
+.card p + p {
+  margin-top: 1em;
 }
 
 .card {
@@ -59,14 +866,14 @@ h2 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-  padding: 24px;
+  padding: 22px;
   margin-bottom: 24px;
 }
 
 label {
   display: block;
   font-size: 0.9rem;
-  margin-bottom: 6px;
+  margin: 12px 0 6px;
 }
 
 textarea {
@@ -81,32 +888,18 @@ textarea {
   resize: vertical;
 }
 
-textarea:focus,
-button:focus-visible {
+textarea:focus {
   outline: 2px solid var(--color-filament);
   outline-offset: 2px;
 }
 
-button {
+#feedback-form .btn {
   margin-top: 12px;
-  min-height: 44px;
-  padding: 0 18px;
-  border: none;
-  border-radius: var(--radius-control);
-  background: var(--color-filament);
-  color: var(--color-bg);
-  font-family: var(--font-structure);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
-}
-
-button:hover {
-  background: var(--color-filament-hover);
 }
 
 #feedback-status {
   min-height: 1.2em;
+  margin-top: 8px;
   font-size: 0.9rem;
   color: var(--color-magic-eye);
 }
@@ -117,180 +910,161 @@ button:hover {
   color: var(--color-cream);
 }
 
-.page-footer a,
-a {
-  color: var(--color-filament);
+.page-footer {
+  padding: 8px 0 24px;
 }
 
-/* ---- Dial ---------------------------------------------------------------- */
+/* ---- Breakpoints ---------------------------------------------------------- */
 
-.page {
-  padding-left: max(20px, env(safe-area-inset-left));
-  padding-right: max(20px, env(safe-area-inset-right));
-}
-
-.wordmark {
-  letter-spacing: 0.04em;
-  padding-bottom: 10px;
-  border-bottom: 2px solid var(--color-filament);
-  display: inline-block;
-}
-
-.byline {
-  margin: 0 0 20px;
-  color: var(--color-cream-muted);
-}
-
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-}
-
-.controls button {
-  margin-top: 0;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-button.quiet {
-  background: transparent;
-  color: var(--color-cream);
-  border: 1px solid var(--color-border);
-}
-
-/* On air: tally is a lamp, never a text ground (cream on tally is 3.73:1,
-   design/spec.md 1.1). The button keeps a cream label and lights a small
-   tally lamp beside it. */
-body[data-on-air="true"] #tune-in {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  background: transparent;
-  color: var(--color-cream);
-  border: 1px solid var(--color-border);
-  opacity: 1;
-}
-
-body[data-on-air="true"] #tune-in::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-tally);
-  box-shadow: var(--shadow-lamp);
-}
-
-.button-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 18px;
-  border: 1px solid var(--color-filament);
-  border-radius: var(--radius-control);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.button-link[hidden] {
-  display: none;
-}
-
-progress {
-  display: block;
-  width: 100%;
-  height: 4px;
-  margin: 16px 0 0;
-  appearance: none;
-  border: none;
-  background: var(--color-border);
-  accent-color: var(--color-filament);
-}
-
-progress[hidden] {
-  display: none;
-}
-
-progress::-webkit-progress-bar {
-  background: var(--color-border);
-}
-
-progress::-webkit-progress-value {
-  background: var(--color-filament);
-}
-
-progress::-moz-progress-bar {
-  background: var(--color-filament);
-}
-
-/* The status line carries counts and sizes ("3 of 118 lines", "115 MB"). */
-#broadcast-status {
-  font-size: 0.92rem;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Errors earn no hue: cream prose, full strength rather than muted. */
-#broadcast-status[data-state="error"] {
-  color: var(--color-cream);
-}
-
-.bookplate {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 8px 16px;
-  margin: 24px 0 0;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
-  font-size: 0.9rem;
-}
-
-.bookplate dt {
-  font-family: var(--font-data);
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-cream-muted);
-  padding-top: 2px;
-}
-
-.bookplate dd {
-  margin: 0;
-}
-
-@media (max-width: 480px) {
-  .bookplate {
-    grid-template-columns: 1fr;
-    gap: 2px;
+/* Phone: the faceplate is the screen. Window, station line, Tune in, keys
+   and knobs in the bottom third for thumbs, then the glass display. */
+@media (max-width: 767px) {
+  html:has(body.faceplate-page) {
+    background: var(--color-surface);
   }
 
-  .bookplate dd {
-    margin-bottom: 10px;
+  body.faceplate-page {
+    background: var(--gradient-cabinet);
+    min-height: 100dvh;
+  }
+
+  .device {
+    padding: 8px 12px 12px;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .device::after {
+    display: none;
+  }
+
+  .device > .dialwin { order: 1; }
+  .device > .dial-key { order: 2; }
+  .device > .station-line { order: 3; }
+  .device > .tunein { order: 4; }
+  .device > .switch-ask { order: 5; }
+  .device > .onair-panel { order: 5; }
+  .device > .controls { order: 6; }
+  .device > .display { order: 7; }
+
+  /* Phone: the live line and the next only. */
+  .ra.prev {
+    display: none;
+  }
+
+  .kn-dial {
+    width: 56px;
+    height: 56px;
+  }
+
+  .kn-dial::before {
+    -webkit-mask: radial-gradient(circle, transparent 27px, black 28px 32px, transparent 33px);
+    mask: radial-gradient(circle, transparent 27px, black 28px 32px, transparent 33px);
+  }
+
+  .key {
+    min-width: 52px;
+    min-height: 52px;
   }
 }
 
-.script {
-  font-family: var(--font-display);
-  font-size: 1.12rem;
-  line-height: 1.7;
-  max-width: 68ch;
+@media (min-width: 768px) {
+  .room {
+    padding: 28px 24px 40px;
+  }
+
+  .masthead {
+    max-width: 608px;
+    margin: 0 auto;
+    padding: 20px 24px 0;
+  }
+
+  .rep-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20px;
+    max-width: 560px;
+    margin: 0 auto 18px;
+  }
+
+  .rep-head h1 {
+    font-size: 1.5rem;
+  }
+
+  .below {
+    max-width: 640px;
+    padding-top: 24px;
+  }
 }
 
-.script p {
-  margin: 0 0 1em;
+/* Desktop: a landscape cabinet, the dial window on the left. */
+@media (min-width: 1024px) {
+  .rep-head {
+    max-width: 1080px;
+  }
+
+  .masthead {
+    max-width: 1128px;
+  }
+
+  .device {
+    max-width: 1080px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    column-gap: 26px;
+    row-gap: 14px;
+    padding: 26px;
+    align-items: start;
+  }
+
+  .device > .dialwin {
+    grid-column: 1;
+    grid-row: 1 / span 6;
+    align-self: center;
+  }
+
+  .device > *:not(.dialwin) {
+    grid-column: 2;
+  }
+
+  .below {
+    max-width: 1080px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    column-gap: 26px;
+    align-items: start;
+  }
+
+  .below > .card,
+  .below > .page-footer {
+    grid-column: 1 / -1;
+  }
 }
 
-.cue {
-  border-radius: 4px;
-  transition:
-    color var(--dur-normal) var(--ease-out),
-    background var(--dur-normal) var(--ease-out);
-}
+/* 1920: the device grows to 1,420 px; the extra goes to the dial and the knobs. */
+@media (min-width: 1920px) {
+  .rep-head,
+  .below {
+    max-width: 1420px;
+  }
 
-.cue.is-live {
-  color: var(--color-filament);
-  background: var(--color-filament-glow);
+  .masthead {
+    max-width: 1468px;
+  }
+
+  .device {
+    max-width: 1420px;
+    padding: 34px;
+    column-gap: 40px;
+  }
+
+  .kn-dial {
+    width: 76px;
+    height: 76px;
+  }
+
+  .kn-dial::before {
+    -webkit-mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
+    mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
+  }
 }

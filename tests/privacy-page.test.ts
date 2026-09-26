@@ -32,7 +32,10 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the narration is made on the device: the render worker only receives text and posts audio back, and the voice sits in cache storage", () => {
-    expect(text).toContain("Nothing you listen to or render is sent anywhere");
+    expect(text).toContain("The words and the audio are never sent anywhere; the only things this page sends are the daily counts and any feedback you choose to send");
+    expect(text).not.toMatch(/Nothing you listen to or render is sent|Nothing was sent anywhere/);
+    // Paired with the allowlist every fetch in web/src is checked against (tests/no-network.test.ts).
+    expect(JSON.parse(read("privacy-allowlist.json")).sends).toEqual(["/e", "/feedback"]);
     expect(text).toContain("kept in your browser's cache storage");
     const worker = read("web/src/narrate.worker.ts");
     expect(worker).not.toMatch(/\bfetch\(/);

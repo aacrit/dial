@@ -9,6 +9,8 @@
 // scripts/lint-events.mjs fails the gate until it is renamed.
 export const ALLOWED_EVENTS = [
   "page_view",
+  // A station chosen on the Repertory's dial, once per station per page load (web/src/main.ts).
+  "work_opened",
   "chapter_rendered",
   // Server-only (see SERVER_ONLY_EVENTS): each is counted only by the
   // Worker code that does the thing being counted.
@@ -35,9 +37,11 @@ export const CLIENT_EVENTS = ALLOWED_EVENTS.filter((n) => !(SERVER_ONLY_EVENTS a
 // EVENT_DAILY_CEILING overrides it). Past it, /e writes nothing and answers
 // 204. Every client event name has its own ceiling, so together they must
 // fit this product's share of the account's D1 writes (see
-// worstCaseDailyWrites below). 4,000 is ~4 page views per visitor at the
-// 1,000-visitors-a-day estimate.
-export const DEFAULT_EVENT_DAILY_CEILING = 4_000;
+// worstCaseDailyWrites below). 3,500 is 3.5 page views per visitor at the
+// 1,000-visitors-a-day estimate; it came down from 4,000 when work_opened
+// became the third client event, so the three together stay within the
+// share budget.yaml states.
+export const DEFAULT_EVENT_DAILY_CEILING = 3_500;
 
 // Per-day ceiling on accepted feedback messages (env FEEDBACK_DAILY_CEILING
 // overrides it), counted as the server-only `feedback_received`. Past it,

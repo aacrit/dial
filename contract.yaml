@@ -76,6 +76,33 @@ checks:
     path: /works/cave.txt
     text: "They are the men, and I will choose them, he replied."
 
+  # T2: the radio's three stations. The homepage is the Repertory, and
+  # every station's text is served from this origin.
+  - name: homepage is the Repertory
+    type: contains
+    path: /
+    text: "The Repertory"
+
+  - name: Crito's text is served
+    type: contains
+    path: /works/crito.txt
+    text: "Why have you come at this hour, Crito?"
+
+  - name: Crito's text ends at the dialogue's last words
+    type: contains
+    path: /works/crito.txt
+    text: "whither he leads."
+
+  - name: the Meditations' Book II is served
+    type: contains
+    path: /works/meditations.txt
+    text: "Begin the morning by saying to thyself"
+
+  - name: the Meditations' Book II ends at Carnuntum
+    type: contains
+    path: /works/meditations.txt
+    text: "This in Carnuntum."
+
   - name: the voice manifest is served
     type: json
     path: /voice/manifest.json
@@ -177,6 +204,9 @@ zone_waf_rule:
 events:
   allowed:
     - page_view
+    # A station chosen on the dial at /, once per station per page load
+    # (web/src/main.ts).
+    - work_opened
     # The whole passage finished rendering in the tab (web/src/main.ts).
     - chapter_rendered
     - feedback_received
