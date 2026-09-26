@@ -12,6 +12,7 @@ import { WORKS, aboutMinutes, countWords, grouped, isPublicDomainWorldwide } fro
 import { firstOpen, lampLit, liveLine, wavName } from "../web/src/broadcast-state";
 import { ALIGN_WIDTH_DEG, MAX_ANGLE, alignment, angleAt, eyeWedge, landing, nearestStation, polar, tickStep } from "../web/src/device/needle";
 import { PRESETS, Spring, parseSpring } from "../web/src/device/spring";
+import { cast } from "../web/src/engine/cast";
 import { segment } from "../web/src/engine/segment";
 import { bookplateHtml, esc, eyebrowHtml, metaHtml, presetKeysHtml, readAlongHtml, scaleSvg } from "../web/src/render";
 import { ACCOUNT_D1_WRITES_PER_DAY, ALLOWED_EVENTS, CLIENT_EVENTS, DEFAULT_EVENT_DAILY_CEILING, worstCaseDailyWrites } from "../worker/src/config";
@@ -81,12 +82,11 @@ describe("the catalogue: three stations, every printed claim true", () => {
     expect(aboutMinutes("one two", [])).toBe(1);
   });
 
-  it("the catalogue text says one voice, the voice the render really uses", () => {
-    for (const w of WORKS) {
-      expect(metaHtml(w, 10)).toContain("One voice");
-      expect(bookplateHtml(w)).toContain("One voice, George, reads every part.");
-    }
-    expect(read("web/src/narrate.worker.ts")).toMatch(/voice: manifest\.narrator/);
+  it("the catalogue text states the voices the render really uses (tests/speakers.test.ts has the cast)", () => {
+    const voices = WORKS.map((w) => metaHtml(w, 10, cast(segment(text(w.slug)))));
+    expect(voices.map((m) => /<span>(\w+ voices?)<\/span>/.exec(m)?.[1])).toEqual(["One voice", "Two voices", "One voice"]);
+    expect(bookplateHtml(WORKS[0]!, cast(segment(text("cave"))))).toContain("One voice, George, reads every part.");
+    expect(read("web/src/narrate.worker.ts")).toMatch(/tts\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
   });
 });
 
@@ -184,6 +184,7 @@ describe("every renderer escapes what it interpolates, attributes included", () 
   const hostile = {
     ...WORKS[0]!,
     station: XSS,
+    dial: XSS,
     title: XSS,
     short: XSS,
     translator: XSS,
@@ -197,7 +198,7 @@ describe("every renderer escapes what it interpolates, attributes included", () 
     bookplate: bookplateHtml(hostile),
     scale: scaleSvg([hostile], 2, 0),
     keys: presetKeysHtml([hostile], 0),
-    readAlong: readAlongHtml([XSS, XSS, XSS], 1),
+    readAlong: readAlongHtml([{ text: XSS }, { text: XSS, speaker: XSS }, { text: XSS }], 1),
   };
 
   for (const [name, html] of Object.entries(outputs)) {

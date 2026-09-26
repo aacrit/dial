@@ -299,11 +299,13 @@ body[data-on-air="true"] #tune-in.is-on-air::before {
   stroke-width: 1;
 }
 
+/* Station names on the scale: the structure voice, sized in the 400-unit
+   viewBox so "Meditations" still reads at about 12 px on a 375 px phone. */
 .dw-scale .lb {
   fill: var(--color-glass-ink-muted);
-  font: 500 11px var(--font-data);
+  font: 500 13px var(--font-structure);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   text-anchor: middle;
 }
 
@@ -344,13 +346,6 @@ body[data-on-air="true"] #tune-in.is-on-air::before {
 /* The hub cap rims tally while a render or playback is live: a lamp, on glass. */
 body[data-on-air="true"] .dw-needle .nd-cap {
   stroke: var(--color-glass-tally);
-}
-
-.dial-key {
-  font-size: 0.8rem;
-  color: var(--color-cream-muted);
-  padding: 0 4px;
-  max-width: 60ch;
 }
 
 /* Station line on the cabinet */
@@ -514,6 +509,18 @@ body[data-on-air="true"] .dw-needle .nd-cap {
   font-weight: 300;
   line-height: 1.5;
   color: var(--color-glass-ink-muted);
+}
+
+/* The speaker's name before a line that opens a turn: a small structure-voice tag, never spoken. */
+.ra-sp {
+  font: 500 0.7rem/1 var(--font-structure);
+  letter-spacing: 0.04em;
+  color: var(--color-glass-ink-muted);
+  margin-right: 0.35em;
+}
+
+.ra.live .ra-sp {
+  color: var(--color-glass-ink);
 }
 
 .ra.prev,
@@ -940,7 +947,6 @@ textarea:focus {
   }
 
   .device > .dialwin { order: 1; }
-  .device > .dial-key { order: 2; }
   .device > .station-line { order: 3; }
   .device > .tunein { order: 4; }
   .device > .switch-ask { order: 5; }

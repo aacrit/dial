@@ -20,8 +20,10 @@ import type { Cue } from "./engine/segment";
 export interface Work {
   /** File name under /works/ and the realm colour's name. */
   slug: "cave" | "crito" | "meditations";
-  /** Station on the dial: "514 · <station>". */
+  /** Catalogue number: "514 · <station>" in the dial's readout and the Bookplate. */
   station: string;
+  /** The work's name on the dial scale, short enough to read at 375 px. */
+  dial: string;
   /** The needle's angle on the dial scale, in degrees (0 is straight up). */
   angle: number;
   title: string;
@@ -61,6 +63,7 @@ export const WORKS: readonly Work[] = [
   {
     slug: "cave",
     station: "001",
+    dial: "Cave",
     angle: -44,
     title: "The Allegory of the Cave",
     short: "The Cave",
@@ -83,6 +86,7 @@ export const WORKS: readonly Work[] = [
   {
     slug: "crito",
     station: "002",
+    dial: "Crito",
     angle: -8,
     title: "Crito",
     short: "Crito",
@@ -104,6 +108,7 @@ export const WORKS: readonly Work[] = [
   {
     slug: "meditations",
     station: "003",
+    dial: "Meditations",
     angle: 26,
     title: "Meditations, Book II",
     short: "Meditations",
@@ -127,11 +132,6 @@ export const WORKS: readonly Work[] = [
 /** The rule the Repertory holds every work to (CLAUDE.md). */
 export function isPublicDomainWorldwide(w: Pick<Work, "pd">): boolean {
   return w.pd.published < 1930 && w.pd.translatorDied < 1956;
-}
-
-/** Whether the text names its speakers in labels ("SOCRATES:  Why have you come"), which the one voice reads aloud. */
-export function hasSpeakerLabels(text: string): boolean {
-  return /^[A-Z][A-Z .'-]+:\s/m.test(text);
 }
 
 /** Words as a reader counts them: runs of non-space characters. */

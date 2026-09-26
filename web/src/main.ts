@@ -5,14 +5,15 @@
 // needed (see web/privacy.html). Every POST is same-origin JSON: the Worker
 // refuses anything else (worker/src/guard.ts), so never use sendBeacon,
 // which sends text/plain.
-import { WORKS, aboutMinutes, countWords, hasSpeakerLabels, type Work } from "./catalogue";
+import { WORKS, aboutMinutes, countWords, type Work } from "./catalogue";
 import { firstOpen, lampLit, liveLine, wavName } from "./broadcast-state";
 import { mountRadio } from "./device/radio";
 import { watchReducedMotion } from "./device/reduced-motion";
 import { isStatableTotal, warmingLine } from "./download-size";
+import { cast, type Cast } from "./engine/cast";
 import { segment, type Cue } from "./engine/segment";
 import { WavChunks } from "./engine/wav";
-import { bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml } from "./render";
+import { bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml, readLines } from "./render";
 import {
   STATIONS_SERVER,
   firstLineLine,
@@ -56,7 +57,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 interface Text {
   source: string;
   cues: Cue[];
-  speakerLabels: boolean;
+  /** Who speaks each cue, and in which voice (engine/cast.ts). */
+  cast: Cast;
 }
 
 /** One broadcast: a work being made on this device and played as it is made. */
@@ -133,8 +135,8 @@ function setupRadio(): void {
     title.textContent = w.title;
     credit.textContent = w.credit;
     sentence.textContent = w.sentence;
-    meta.innerHTML = metaHtml(w, text ? countWords(text.source) : undefined);
-    bookplate.innerHTML = bookplateHtml(w, text?.speakerLabels);
+    meta.innerHTML = metaHtml(w, text ? countWords(text.source) : undefined, text?.cast);
+    bookplate.innerHTML = bookplateHtml(w, text?.cast);
     device.dataset.realm = w.slug;
     avail.textContent = madeHere(voiceKept);
     paintTuneIn();
@@ -310,7 +312,7 @@ function setupRadio(): void {
       wav: null,
     };
     session = own;
-    const lines = cues.map((c) => c.text);
+    const lines = readLines(cues);
     let nextAt = audio.currentTime + 0.2;
     let warmingStated = false;
     // Playback is live until the last scheduled line has ended after the render is done.
@@ -443,7 +445,7 @@ function setupRadio(): void {
       event.preventDefault();
       stopped(event.message || "");
     };
-    worker.postMessage({ type: "render", cues } satisfies ToWorker);
+    worker.postMessage({ type: "render", cues, voices: text.cast.voices } satisfies ToWorker);
   };
 
   // ---- the works' texts: read once, then every station is ready ------------
@@ -458,7 +460,10 @@ function setupRadio(): void {
       WORKS.map((w) =>
         fetch(`/works/${w.slug}.txt`).then((r) => {
           if (!r.ok) throw new Error(`status ${r.status}`);
-          return r.text().then((source) => [w.slug, { source, cues: segment(source), speakerLabels: hasSpeakerLabels(source) }] as const);
+          return r.text().then((source) => {
+            const cues = segment(source);
+            return [w.slug, { source, cues, cast: cast(cues) }] as const;
+          });
         }),
       ),
     )
