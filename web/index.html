@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="build" content="__BUILD__" />
+    <meta name="description" content="Dial: radio theatre of the classics, rendered in your browser tab. Tonight, Plato's Allegory of the Cave." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 21V11a8 8 0 0 1 16 0v10' fill='none' stroke='currentColor' stroke-width='1.6'/%3E%3Ccircle cx='12' cy='14' r='1.6' fill='currentColor'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../design/tokens.css" />
+    <link rel="stylesheet" href="./src/style.css" />
+    <title>Dial</title>
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <p class="eyebrow"><span data-numeral>AM 514</span> kHz &middot; a voidvision production</p>
+        <h1 class="wordmark">Dial</h1>
+        <p class="value-line">Theatre of the mind. The classics, performed in your browser tab: nothing leaves it.</p>
+      </header>
+
+      <section class="card listing" aria-labelledby="work-title">
+        <p class="eyebrow"><span data-numeral>514 &middot; No. 001</span></p>
+        <h2 id="work-title">The Allegory of the Cave</h2>
+        <p class="byline">Plato, <cite>Republic</cite>, Book VII, <span data-numeral>514a&ndash;521b</span>. Translated by Benjamin Jowett.</p>
+
+        <div class="controls">
+          <button type="button" id="tune-in" disabled>Tune in</button>
+          <button type="button" id="pause" class="quiet" hidden>Pause</button>
+          <a id="download" class="button-link" download="dial-514-001-the-allegory-of-the-cave.wav" hidden>Download the recording</a>
+        </div>
+        <progress id="render-meter" hidden></progress>
+        <p id="broadcast-status" class="muted" role="status" aria-live="polite">
+          A plain narration, rendered on your device as you listen. The voice downloads once, then works offline.
+        </p>
+
+        <dl class="bookplate">
+          <dt>Source</dt>
+          <dd>Project Gutenberg eBook No. <span data-numeral>1497</span>, <cite>The Republic</cite>, translated by Benjamin Jowett. Performed from &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo; Jowett's introduction and the rest of the <cite>Republic</cite> are not performed.</dd>
+          <dt>Public domain</dt>
+          <dd>Worldwide: the translation was published before <span data-numeral>1930</span> and its translator died in <span data-numeral>1893</span>.</dd>
+          <dt>Voice</dt>
+          <dd>Kokoro-82M, running in this tab. AI-voiced; the words are Jowett's, verbatim.</dd>
+          <dt>Also</dt>
+          <dd>Prefer a human reader? <a href="https://librivox.org/platos_republic/" rel="noopener">LibriVox has a volunteer reading of the same translation</a>.</dd>
+        </dl>
+      </section>
+
+      <section class="card script-card" aria-label="The script">
+        <div id="script" class="script" lang="en"></div>
+      </section>
+
+      <section class="card" id="feedback-card">
+        <h2>Tell us what is missing</h2>
+        <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
+        <form id="feedback-form" novalidate>
+          <label for="feedback-text">Feedback</label>
+          <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
+          <button type="submit">Send</button>
+          <p id="feedback-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <footer class="page-footer">
+        <a href="./privacy.html">Privacy</a>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

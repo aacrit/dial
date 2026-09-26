@@ -1,0 +1,271 @@
+/* Layout and component styles. Colors always come from design/tokens.css;
+   never a literal color value here. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 20px 96px;
+}
+
+.page-header {
+  margin-bottom: 32px;
+}
+
+.eyebrow {
+  font-family: var(--font-data);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+  margin: 0 0 12px;
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+
+h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+
+.value-line {
+  font-size: 1.05rem;
+  color: var(--color-cream-muted);
+  margin: 0;
+}
+
+.muted {
+  color: var(--color-cream-muted);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+label {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+textarea {
+  width: 100%;
+  background: var(--color-bg);
+  color: var(--color-cream);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  font-family: var(--font-structure);
+  font-size: 0.95rem;
+  resize: vertical;
+}
+
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--color-filament);
+  outline-offset: 2px;
+}
+
+button {
+  margin-top: 12px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-filament);
+  color: var(--color-bg);
+  font-family: var(--font-structure);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+button:hover {
+  background: var(--color-filament-hover);
+}
+
+#feedback-status {
+  min-height: 1.2em;
+  font-size: 0.9rem;
+  color: var(--color-magic-eye);
+}
+
+#feedback-status[data-state="error"] {
+  color: var(--color-tally);
+}
+
+.page-footer a,
+a {
+  color: var(--color-filament);
+}
+
+/* ---- Dial ---------------------------------------------------------------- */
+
+.page {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+}
+
+.wordmark {
+  letter-spacing: 0.04em;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--color-filament);
+  display: inline-block;
+}
+
+.byline {
+  margin: 0 0 20px;
+  color: var(--color-cream-muted);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.controls button {
+  margin-top: 0;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.quiet {
+  background: transparent;
+  color: var(--color-cream);
+  border: 1px solid var(--color-border);
+}
+
+body[data-on-air="true"] #tune-in {
+  background: var(--color-tally);
+  color: var(--color-cream);
+  opacity: 1;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--color-filament);
+  border-radius: var(--radius-control);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button-link[hidden] {
+  display: none;
+}
+
+progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin: 16px 0 0;
+  appearance: none;
+  border: none;
+  background: var(--color-border);
+  accent-color: var(--color-filament);
+}
+
+progress::-webkit-progress-bar {
+  background: var(--color-border);
+}
+
+progress::-webkit-progress-value {
+  background: var(--color-filament);
+}
+
+progress::-moz-progress-bar {
+  background: var(--color-filament);
+}
+
+#broadcast-status {
+  font-size: 0.92rem;
+}
+
+#broadcast-status[data-state="error"] {
+  color: var(--color-tally);
+}
+
+.bookplate {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 24px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.9rem;
+}
+
+.bookplate dt {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+  padding-top: 2px;
+}
+
+.bookplate dd {
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .bookplate {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .bookplate dd {
+    margin-bottom: 10px;
+  }
+}
+
+.script {
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  line-height: 1.7;
+  max-width: 68ch;
+}
+
+.script p {
+  margin: 0 0 1em;
+}
+
+.cue {
+  border-radius: 4px;
+  transition:
+    color var(--dur-normal) var(--ease-out),
+    background var(--dur-normal) var(--ease-out);
+}
+
+.cue.is-live {
+  color: var(--color-filament);
+  background: var(--color-filament-glow);
+}

@@ -1,0 +1,35 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+cloudflare-env.d.ts
+reports/
+coverage/
+.vitest-report.json
+
+# media / binaries don't belong in this repo; data lives in D1/R2
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.mp3
+*.wav
+*.zip
+*.sqlite
+*.sqlite3
+*.db
+.gate-last.log
+
+# the voice, the WASM runtime and their download cache (scripts/fetch-voice.mjs)
+.cache/
+.scratch/
+web/public/voice/
+web/public/ort/
