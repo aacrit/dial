@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Dial's programme guide of public-domain philosophy, performed as radio theatre.">
+<title>The Repertory · Dial mock</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+/* ---- Shared shell for the G2 mocks. Colours only through tokens. ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+@media (min-width:1920px){html{font-size:18px}}
+body{line-height:1.55;min-height:100vh;min-height:100dvh}
+[hidden]{display:none !important}
+a{color:var(--color-filament);text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{color:var(--color-filament-hover)}
+:focus-visible{outline:2px solid var(--color-filament);outline-offset:2px;border-radius:4px}
+p{margin:0}
+h1,h2,h3{margin:0;font-weight:400;font-family:var(--font-display);text-wrap:balance}
+.num{font-family:var(--font-data);font-variant-numeric:tabular-nums}
+.eyebrow{font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);line-height:1.3}
+.muted{color:var(--color-cream-muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.glyph{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.glyph .ember{fill:var(--color-magic-eye);fill-opacity:.35;stroke:none}
+
+/* Buttons: verbs, 44 px, spring press */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--color-filament);color:var(--color-bg);font:600 .95rem/1 var(--font-structure);text-decoration:none;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),transform var(--dur-normal) var(--ease-needle-drop)}
+.btn:hover{background:var(--color-filament-hover);color:var(--color-bg)}
+.btn:active{transform:scale(.97);transition-duration:var(--dur-instant)}
+.btn.quiet{background:transparent;color:var(--color-cream);border-color:var(--color-border)}
+.btn.quiet:hover{background:var(--color-surface-raised);color:var(--color-cream)}
+.btn.text{background:transparent;color:var(--color-filament);padding:0 4px;min-height:44px}
+.btn.text:hover{color:var(--color-filament-hover);background:transparent}
+.btn[disabled],.btn[aria-disabled="true"]{background:var(--color-surface-raised);color:var(--color-cream-muted);border-color:var(--color-border);cursor:default;transform:none}
+.btn.icon{width:44px;padding:0;background:transparent;color:var(--color-cream);border-color:var(--color-border)}
+.btn.icon.play{width:56px;min-height:56px;border-radius:50%;background:var(--color-filament);color:var(--color-bg);border:none}
+.btn.icon.play .glyph{width:26px;height:26px}
+
+/* Cards and drills */
+.card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:22px}
+.drill{border-top:1px solid var(--color-border)}
+.drill>summary{list-style:none;display:flex;align-items:center;gap:12px;min-height:44px;cursor:pointer;color:var(--color-cream);font-weight:500}
+.drill>summary::-webkit-details-marker{display:none}
+.drill>summary .sum{margin-left:auto;font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:.8rem;color:var(--color-cream-muted);font-weight:400}
+.drill>summary::after{content:"";width:8px;height:8px;border-right:1.6px solid var(--color-cream-muted);border-bottom:1.6px solid var(--color-cream-muted);transform:rotate(45deg) translateY(-2px);transition:transform var(--dur-fast) var(--ease-out);flex:none}
+.drill:not(:has(.sum))>summary::after{margin-left:auto}
+.drill[open]>summary::after{transform:rotate(-135deg) translateY(-2px)}
+.drill>.drill-body{padding:4px 0 16px;animation:fade var(--dur-normal) var(--ease-out)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}}
+
+/* Lamps and pips */
+.lamp{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--color-tally);box-shadow:var(--shadow-lamp);flex:none}
+.lamp.off{background:var(--color-surface-raised);box-shadow:none;border:1px solid var(--color-border)}
+.pip{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.pip.ochre{background:var(--color-ochre)}
+.pip.eye{background:var(--color-magic-eye)}
+.onair{display:inline-flex;align-items:center;gap:8px;font:600 .72rem/1 var(--font-data);letter-spacing:.12em;text-transform:uppercase;color:var(--color-cream)}
+
+/* The living wave (tab underline, loaders) */
+.wave-underline{display:block;width:40px;height:8px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,black 25%,black 75%,transparent);mask-image:linear-gradient(90deg,transparent,black 25%,black 75%,transparent)}
+.wave-underline svg{display:block;width:80px;height:8px;animation:carrier 1.4s linear infinite}
+.wave-underline path{fill:none;stroke:var(--color-filament);stroke-width:1.4;stroke-linecap:round}
+@keyframes carrier{to{transform:translateX(-13.333px)}}
+.standing{display:block;width:120px;height:36px}
+.standing path{fill:none;stroke-linecap:round}
+.standing .n1{stroke:var(--color-filament);stroke-width:1.6;animation:stand 1.6s var(--ease-rack) infinite alternate;transform-origin:center}
+.standing .n2{stroke:var(--color-cream-muted);stroke-width:1;opacity:.5;animation:stand 1.6s var(--ease-rack) infinite alternate-reverse;transform-origin:center}
+@keyframes stand{from{transform:scaleY(1)}to{transform:scaleY(-1)}}
+
+/* ---- Station bar: tablet and desktop -------------------------------------- */
+.station{position:sticky;top:0;z-index:30;display:none;align-items:center;gap:28px;height:60px;padding:0 24px;background:var(--color-bg);border-bottom:1px solid var(--color-border)}
+.brand{display:flex;align-items:center;gap:10px;color:var(--color-cream);text-decoration:none}
+.brand .arch{height:30px;width:auto}
+.brand .wm{height:15px;width:auto;fill:currentColor}
+.brand .freq{font:500 .66rem/1 var(--font-data);letter-spacing:.16em;color:var(--color-cream-muted);margin-left:4px;white-space:nowrap}
+.tabs{display:flex;gap:2px;height:100%}
+.tabs a{position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;padding:0 14px;color:var(--color-cream-muted);text-decoration:none;font:500 .92rem/1 var(--font-structure)}
+.tabs a:hover{color:var(--color-cream)}
+.tabs a .wave-underline{visibility:hidden}
+.tabs a[aria-current="page"]{color:var(--color-cream)}
+.tabs a[aria-current="page"] .wave-underline{visibility:visible}
+.station .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.sealpip{display:inline-flex;align-items:center;gap:8px;color:var(--color-cream-muted);text-decoration:none;font-size:.85rem}
+.sealpip:hover{color:var(--color-cream)}
+.keycap{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 6px;border:1px solid var(--color-border);border-bottom-width:2px;border-radius:6px;font:500 .78rem/1 var(--font-data);color:var(--color-cream)}
+button.keycap{background:transparent;cursor:pointer}
+
+/* ---- Phone chrome: tab bar and mini-player -------------------------------- */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(4,1fr);height:calc(64px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--color-bg);border-top:1px solid var(--color-border)}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--color-cream-muted);text-decoration:none;font:500 .7rem/1 var(--font-structure);min-height:44px}
+.tabbar a .wave-underline{visibility:hidden;width:32px}
+.tabbar a[aria-current="page"]{color:var(--color-cream)}
+.tabbar a[aria-current="page"] .wave-underline{visibility:visible}
+.mini{position:fixed;left:8px;right:8px;bottom:calc(72px + env(safe-area-inset-bottom));z-index:39;display:flex;align-items:center;gap:12px;height:60px;padding:0 8px 0 14px;background:var(--color-surface-raised);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-hover);overflow:hidden}
+.mini .grab{position:absolute;top:5px;left:50%;width:28px;height:3px;margin-left:-14px;border-radius:2px;background:var(--color-border)}
+.mini .t{min-width:0;flex:1}
+.mini .t b{display:block;font:500 .9rem/1.25 var(--font-structure);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .t>span{display:block;font-size:.75rem;color:var(--color-cream-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .prog{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--color-cream-faint)}
+.mini .prog i{display:block;height:100%;background:var(--color-realm);transition:background-color var(--dur-realm-bleed) linear}
+.mini .btn.icon{border:none;color:var(--color-cream)}
+.phone-head{display:flex;align-items:center;gap:10px;padding:14px 16px 0;padding-top:max(14px,env(safe-area-inset-top))}
+.phone-head .arch{height:26px;width:auto}
+.phone-head .wm{height:12px;width:auto;fill:var(--color-cream)}
+.phone-head .freq{font:500 .62rem/1 var(--font-data);letter-spacing:.16em;color:var(--color-cream-muted)}
+.phone-head .sealpip{margin-left:auto}
+
+/* ---- Player bar: tablet and desktop --------------------------------------- */
+.playerbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:none;align-items:center;gap:20px;height:76px;padding:0 24px;background:var(--color-surface);border-top:1px solid var(--color-border)}
+.playerbar .now{display:flex;align-items:center;gap:12px;min-width:0;width:clamp(200px,22vw,360px)}
+.playerbar .now b{display:block;font:500 .92rem/1.3 var(--font-structure);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.playerbar .now>div>span{display:block;font-size:.76rem;color:var(--color-cream-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.transport{display:flex;align-items:center;gap:8px}
+.playerbar .now>div{min-width:0}
+@media (max-width:1279px){.transport .btn.icon:nth-child(2),.transport .btn.icon:nth-child(4){display:none}}
+.transport .btn.icon.play{width:48px;min-height:48px}
+.transport .btn.icon{border:none}
+.ribbon-wrap{flex:1;min-width:120px;display:grid;gap:4px}
+.ribbon{display:block;width:100%;height:30px}
+.ribbon .seg{fill:var(--color-realm);transition:fill var(--dur-realm-bleed) linear}
+.ribbon .seg.ahead{opacity:.42}
+.ribbon .seg.unrendered{fill:var(--color-cream-faint);opacity:1}
+.ribbon .needle{stroke:var(--color-filament);stroke-width:2;filter:drop-shadow(0 0 4px var(--color-filament))}
+.ribbon .renderhead{stroke:var(--color-tally);stroke-width:1.5}
+.timecode{font:400 .8rem/1 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted);white-space:nowrap}
+.timecode b{color:var(--color-cream);font-weight:400}
+
+/* ---- Breakpoints: phone chrome below 768, station + player bar above ------ */
+@media (min-width:768px){
+  .station{display:flex}
+  .playerbar{display:flex}
+  .tabbar,.mini,.phone-head{display:none}
+  .room{padding-bottom:100px}
+}
+@media (max-width:767px){
+  .room{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
+  .desk-only{display:none !important}
+}
+@media (min-width:768px){.phone-only{display:none !important}}
+@media (max-width:1279px){.wide-only{display:none !important}}
+@media (min-width:1280px){.tablet-only{display:none !important}}
+@media (max-width:767px),(min-width:1280px){.tablet-up-to-desk{display:none !important}}
+
+/* ---- Mock state switcher (hidden with ?clean) ----------------------------- */
+.mockbar{position:fixed;top:8px;right:8px;z-index:100;display:flex;gap:8px;align-items:center;padding:6px 8px 6px 12px;background:var(--color-surface-raised);border:1px dashed var(--color-cream-muted);border-radius:var(--radius-pill);font:500 .72rem/1 var(--font-data);color:var(--color-cream-muted);box-shadow:var(--shadow-hover)}
+.mockbar select{background:var(--color-bg);color:var(--color-cream);border:1px solid var(--color-border);border-radius:6px;font:inherit;padding:4px 6px;max-width:170px}
+@media (max-width:767px){.mockbar{top:auto;bottom:calc(140px + env(safe-area-inset-bottom));right:8px}}
+
+/* Shortcuts dialog */
+.dialog-scrim{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:var(--color-scrim)}
+.dialog{width:min(520px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-hover);padding:24px;animation:rise var(--dur-normal) var(--ease-cinematic)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:center;margin:16px 0 0}
+.keys dt{display:flex;gap:4px}
+.keys dd{margin:0;font-size:.92rem}
+/* Screenshot mode (?still): final states, no motion in flight */
+.still *,.still *::before,.still *::after{animation:none !important;transition:none !important}
+html.still{scrollbar-width:none}html.still::-webkit-scrollbar{display:none}
+
+.arch-body{fill:var(--color-surface);stroke:var(--color-cream);stroke-width:6;stroke-linejoin:round}.arch-inner{fill:none;stroke:var(--color-cream);stroke-width:1.6;opacity:.4}.arch .live{fill:none;stroke:var(--color-filament);stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round}body[data-onair="true"] .arch .live{stroke:var(--color-tally)}
+</style>
+<style>
+/* Repertory: the programme guide. One hero: the listings. */
+.rep{padding:8px 16px 0;max-width:1560px;margin:0 auto}
+.guide-head{display:grid;gap:10px;padding:22px 0 26px}
+.guide-head h1{font-size:2.3rem;line-height:1.05;letter-spacing:-.01em}
+.lede{font-size:1.02rem;color:var(--color-cream-muted);max-width:44ch}
+.first-run{font-size:.92rem;max-width:52ch;padding:12px 14px;border-left:2px solid var(--color-border);color:var(--color-cream)}
+.search{display:flex;align-items:center;gap:10px;height:44px;padding:0 10px 0 12px;border:1px solid var(--color-border);border-radius:var(--radius-control);background:var(--color-surface);color:var(--color-cream-muted);max-width:360px}
+.search input{flex:1;min-width:0;background:transparent;border:0;color:var(--color-cream);font:400 .95rem var(--font-structure);outline:none}
+.search:focus-within{outline:2px solid var(--color-filament);outline-offset:2px}
+.search input::placeholder{color:var(--color-cream-muted)}
+
+.guide{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.guide-list{display:grid;gap:16px;align-content:start;grid-template-columns:minmax(0,1fr)}
+.listing{position:relative;display:grid;gap:10px;padding:22px 22px 8px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-card);transition:box-shadow var(--dur-fast) var(--ease-out),opacity var(--dur-normal) var(--ease-rack),filter var(--dur-normal) var(--ease-rack)}
+.listing .l-top{display:flex;justify-content:space-between;gap:12px}
+.listing h2{font-size:1.85rem;line-height:1.08;letter-spacing:-.005em}
+.listing h2 a{color:inherit;text-decoration:none}
+.listing .by{font-family:var(--font-display);font-style:italic;color:var(--color-cream-muted);font-size:1rem;line-height:1.4}
+.listing .desc{font-size:.97rem;max-width:48ch}
+.fp{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:center;margin:4px 0 2px}
+.fp svg{min-width:0;width:100%;height:34px;display:block;grid-row:span 2}
+.fp .who{font:500 .66rem/1 var(--font-data);letter-spacing:.08em;text-transform:uppercase;color:var(--color-cream-muted)}
+.fp rect{fill:var(--color-cream);opacity:.5}
+.fp line{stroke:var(--color-border);stroke-width:1}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font:400 .78rem/1.4 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted);padding-top:10px;border-top:1px solid var(--color-border)}
+.meta .pd{color:var(--color-magic-eye)}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:6px 0 6px}
+.avail{font-size:.84rem;color:var(--color-cream-muted)}
+.save{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;align-items:center;padding:10px 0 12px;border-top:1px solid var(--color-border)}
+.save .btn{min-height:40px;padding:0 14px;font-size:.88rem}
+.save .sz{font-size:.8rem;color:var(--color-cream-muted);line-height:1.35}
+.save .ok{display:inline-flex;align-items:center;gap:8px;font-weight:500;font-size:.9rem}
+.save .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--color-cream-faint);overflow:hidden}
+.save .bar i{display:block;height:100%;background:var(--color-filament)}
+.steps{margin:0;padding-left:1.3em;display:grid;gap:6px;font-size:.95rem}
+.steps li::marker{font-family:var(--font-data);color:var(--color-cream-muted)}
+.bookplate dl{display:grid;grid-template-columns:1fr;gap:2px;margin:0;font-size:.88rem}
+.bookplate dt{font:500 .66rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);padding-top:10px}
+.bookplate dd{margin:0;line-height:1.5}
+.bookplate dd .pd{color:var(--color-magic-eye)}
+/* Rack focus: hovering one listing softens the rest */
+@media (hover:hover){.guide-list:has(.listing:hover) .listing:not(:hover){opacity:.55;filter:blur(.4px)}.listing:hover{box-shadow:var(--shadow-hover)}}
+
+.coming{margin:28px 0 8px;padding:18px 0 0;border-top:1px solid var(--color-border);display:grid;gap:10px}
+.coming ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.coming li{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+.coming .t{font-family:var(--font-display);font-size:1.25rem}
+.coming p{font-size:.88rem;color:var(--color-cream-muted);max-width:60ch}
+
+.notice{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;margin:12px 0 0;border:1px solid var(--color-border);border-radius:var(--radius-card);background:var(--color-surface);font-size:.92rem}
+.notice .glyph{color:var(--color-cream-muted);margin-top:1px}
+.notice b{font-weight:600}
+.state-card{display:grid;gap:10px;justify-items:start;padding:28px 24px;max-width:560px}
+.state-card h2{font-size:1.5rem}
+.skeleton{height:280px;border-radius:var(--radius-card);background:linear-gradient(100deg,var(--color-surface) 30%,var(--color-surface-raised) 50%,var(--color-surface) 70%);background-size:300% 100%;animation:shimmer 1.6s linear infinite;border:1px solid var(--color-border)}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
+.loading-line{display:flex;align-items:center;gap:14px;color:var(--color-cream-muted);font-size:.92rem;margin-bottom:16px}
+.install{display:grid;gap:10px;margin:0 0 16px}
+.install h2{font-size:1.3rem}
+.install .row{display:flex;gap:10px;flex-wrap:wrap}
+.detail-pane{display:none}
+
+/* Tablet: list and detail */
+@media (min-width:768px) and (max-width:1279px){
+  .rep{padding:0 24px}
+  .guide{grid-template-columns:300px 1fr;align-items:start;gap:20px}
+  .guide-list .listing{padding:16px 16px 14px;gap:6px;cursor:pointer}
+  .guide-list .listing h2{font-size:1.3rem}
+  .guide-list .listing :is(.desc,.fp,.meta,.actions,.bookplate){display:none}
+  .guide-list .listing[aria-current="true"]{border-color:var(--color-filament);box-shadow:inset 3px 0 0 var(--color-filament),var(--shadow-card)}
+  .detail-pane{display:block;position:sticky;top:76px}
+  .detail-pane .listing{padding:28px 28px 12px}
+  .detail-pane .listing h2{font-size:2.3rem}
+  .guide-head{grid-template-columns:1fr 1fr;align-items:end}
+}
+/* Desktop: the multi-column programme guide */
+@media (min-width:1280px){
+  .rep{padding:0 40px}
+  .guide-head{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:end;padding:40px 0 32px;gap:24px 48px}
+  .guide-head h1{font-size:3.6rem}
+  .guide-intro{display:grid;gap:14px;justify-items:start}
+  .guide-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start}
+  .listing{padding:26px 26px 10px}
+  .coming{grid-template-columns:auto 1fr auto;align-items:baseline;gap:12px 32px}
+  .coming ul{display:flex;gap:28px}
+}
+@media (min-width:1920px){.rep{padding:0 64px}.guide-list{gap:28px}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="g-repertory" viewBox="0 0 24 24"><path d="M6 3.5h12a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5Z"/><path d="M8 8h3M8 12h8M8 15.5h6"/></symbol>
+<symbol id="g-broadcast" viewBox="0 0 24 24"><path d="M3 12h2.5l1.6-4 2 9 2.1-12 2 14 2-10 1.4 5 1-2H21"/></symbol>
+<symbol id="g-studio" viewBox="0 0 24 24"><path d="M4 17a8 8 0 0 1 16 0"/><path d="M12 17l3.6-5.6"/><path d="M6.3 12.2l1.2.9M12 9v1.5M17.7 12.2l-1.2.9"/><path d="M3.5 20.5h17"/></symbol>
+<symbol id="g-seal" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 12 9.6 3.9M12 12l2.4-8.1"/><circle class="ember" cx="12" cy="12" r="3"/></symbol>
+<symbol id="g-play" viewBox="0 0 24 24"><path d="M8.5 5.8v12.4l10-6.2z"/></symbol>
+<symbol id="g-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></symbol>
+<symbol id="g-prev" viewBox="0 0 24 24"><path d="M6 6v12M18 6.5l-8.5 5.5 8.5 5.5z"/></symbol>
+<symbol id="g-next" viewBox="0 0 24 24"><path d="M18 6v12M6 6.5l8.5 5.5L6 17.5z"/></symbol>
+<symbol id="g-back" viewBox="0 0 24 24"><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M5 4v3.5h3.5"/></symbol>
+<symbol id="g-fwd" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M19 4v3.5h-3.5"/></symbol>
+<symbol id="g-down" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/></symbol>
+<symbol id="g-chev" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+<symbol id="g-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+<symbol id="g-imp" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></symbol>
+<symbol id="g-lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></symbol>
+<symbol id="g-file" viewBox="0 0 24 24"><path d="M7 3.5h7l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M14 3.5V8h4.5"/></symbol>
+<symbol id="g-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+<symbol id="g-offline" viewBox="0 0 24 24"><path d="M4 4l16 16"/><path d="M8.5 18H17a3.5 3.5 0 0 0 1.2-6.8A6 6 0 0 0 10 7.2"/><path d="M6.2 9.6A4.5 4.5 0 0 0 7 18"/></symbol>
+<symbol id="g-up" viewBox="0 0 24 24"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/></symbol>
+<symbol id="g-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="x-wordmark" viewBox="0 -72.2 261.5 72.8"><path d="M8.6 -69.1L29.0 -69.1Q43.2 -69.1 49.8 -67.1Q57.4 -64.7 61.5 -61.1Q65.6 -57.4 68.0 -53.5Q72.8 -45.6 72.8 -35.4Q72.8 -19.5 61.3 -9.7Q53.2 -2.6 42.2 -0.9Q36.1 0.0 25.1 0.0L8.6 0.0L8.6 -69.1ZM33.5 -4.1Q34.3 -4.0 35.0 -4.0L36.1 -4.0Q49.3 -4.0 58.7 -12.3Q68.6 -20.9 68.6 -35.4Q68.6 -44.4 64.3 -51.7Q58.0 -62.3 44.3 -64.6Q39.9 -65.3 33.5 -65.4L33.5 -4.1ZM92.9 -69.1L117.8 -69.1L117.8 0.0L92.9 0.0L92.9 -69.1ZM154.4 -8.7Q145.4 -8.7 142.2 -8.8L140.8 -5.5Q140.1 -4.1 139.6 -2.5Q138.5 0.5 136.5 0.5Q135.5 0.5 134.9 -0.0Q134.4 -0.6 134.4 -1.3Q134.4 -2.3 135.3 -3.7Q136.8 -5.7 138.2 -9.0Q134.0 -9.4 134.0 -11.5Q134.0 -13.5 136.4 -13.5Q137.8 -13.5 139.8 -13.0L164.1 -72.2L197.5 0.0L172.1 0.0L168.1 -8.7L154.4 -8.7ZM143.7 -12.6Q148.4 -12.3 152.1 -12.3L166.4 -12.3L154.2 -38.6L143.7 -12.6ZM258.2 -4.4Q260.8 -4.4 260.8 -2.2Q260.8 -1.4 259.7 -0.7Q258.7 0.0 256.0 0.0L216.3 0.0L216.3 -69.1L241.2 -69.1L241.2 -3.2L250.4 -3.2Q253.4 -3.2 255.7 -3.8Q257.9 -4.4 258.2 -4.4Z"/></symbol>
+</defs></svg>
+<header class="station">
+  <a class="brand" href="repertory.html" aria-label="Dial, AM 514 kHz"><svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z"/><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145"/><path class="live" d="M20 94 L100 94"/></svg><svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark"/></svg><span class="freq">AM <span class="num">514</span> kHz</span></a>
+  <nav class="tabs" aria-label="Rooms"><a href="repertory.html" aria-current="page">Repertory<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html">Broadcast<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html">Studio<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html">Seal<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
+  <div class="right"><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a><button class="keycap" type="button" data-open-shortcuts aria-label="Keyboard shortcuts">?</button></div>
+</header>
+<div class="phone-head"><svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z"/><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145"/><path class="live" d="M20 94 L100 94"/></svg><svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark"/></svg><span class="freq">AM <span class="num">514</span> kHz</span><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a></div>
+<main class="room rep" id="main">
+  <div class="notice" data-when="offline" role="status"><svg class="glyph" aria-hidden="true"><use href="#g-offline"/></svg><p><b>Offline.</b> Works saved on this device play as usual. The others need a connection for their first listen.</p></div>
+
+  <header class="guide-head">
+    <div>
+      <p class="eyebrow">First shelf · Philosophy · <span class="num">3</span> works</p>
+      <h1>The Repertory</h1>
+    </div>
+    <div class="guide-intro">
+      <p class="lede">Philosophy, performed as radio theatre. Free to hear and to keep, with no account.</p>
+      <p class="first-run" data-when="first-run">Each performance is made from the words on the page and nothing else. Nothing you do here leaves your device. <a href="seal.html">See the Seal</a></p>
+      <label class="search desk-only"><svg class="glyph" aria-hidden="true"><use href="#g-search"/></svg><span class="sr">Search the Repertory</span><input data-search id="q" type="search" placeholder="Search the Repertory" autocomplete="off"><span class="keycap" aria-hidden="true">/</span></label>
+    </div>
+  </header>
+
+  <!-- After the first completed listen (never on arrival) -->
+  <section class="card install" data-when="after-listen" aria-labelledby="inst-h">
+    <h2 id="inst-h">Keep Dial on this device</h2>
+    <p class="muted">Install it to open from your home screen, with lock-screen controls. Works you save for offline stay with it.</p>
+    <div class="row"><button class="btn" type="button">Install</button><button class="btn quiet" type="button">Not now</button></div>
+  </section>
+  <section class="card install" data-when="after-listen-ios" aria-labelledby="ios-h">
+    <h2 id="ios-h">Add Dial to your Home Screen</h2>
+    <ol class="steps"><li>In Safari, tap Share: the square with an arrow pointing up.</li><li>Scroll down and tap Add to Home Screen.</li><li>Tap Add.</li></ol>
+    <p class="muted" style="font-size:.88rem">From the Home Screen, Dial keeps your saved works and shows lock-screen controls. In a Safari tab, iPhone can clear saved works if you do not open Dial for a week.</p>
+    <div class="row"><button class="btn quiet" type="button">Not now</button></div>
+  </section>
+
+  <div data-when="loading">
+    <p class="loading-line" role="status"><svg class="standing" viewBox="0 0 120 36" aria-hidden="true"><path class="n2" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/><path class="n1" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/></svg>Tuning in to the Repertory.</p>
+    <div class="guide-list"><div class="skeleton"></div><div class="skeleton desk-only"></div><div class="skeleton desk-only"></div></div>
+  </div>
+
+  <section class="card state-card" data-when="error" role="alert">
+    <h2>The Repertory did not load</h2>
+    <p class="muted">The list of works could not be fetched from dial.voidvision.org. Check your connection, then try again. Works you have saved still play from the Broadcast tab.</p>
+    <button class="btn" type="button">Try again</button>
+  </section>
+
+  <section class="card state-card" data-when="search-empty" role="status">
+    <h2>Nothing on the shelf matches &ldquo;Seneca&rdquo;</h2>
+    <p class="muted">The Repertory holds public-domain works only, and its first shelf is philosophy. Search looks at titles, authors and translators.</p>
+    <button class="btn quiet" type="button">Clear the search</button>
+  </section>
+
+  <section class="guide" data-not="loading error search-empty" aria-label="Listings">
+    <div class="guide-list">
+      <article class="listing" aria-current="true" aria-labelledby="w1">
+        <div class="l-top"><p class="eyebrow num">514 · No. 001</p><p class="eyebrow num">about 20 min</p></div>
+        <h2 id="w1"><a href="broadcast.html">The Allegory of the Cave</a></h2>
+        <p class="by">Plato, Republic, Book VII, <span class="num" style="font-style:normal;font-size:.9em">514a&ndash;521b</span>. Translated by Benjamin Jowett.</p>
+        <p class="desc">Prisoners in the dark take shadows for the world. One of them is turned toward the light.</p>
+        <div class="fp" aria-label="The turns of the dialogue: Socrates above the line, Glaucon below, each mark as long as the turn."><span class="who">Socrates</span><svg data-fp="cave" preserveAspectRatio="none" aria-hidden="true"></svg><span class="who">Glaucon</span></div>
+        <p class="meta"><span>2,990 words</span><span>2 voices</span><span class="pd">Public domain worldwide</span></p>
+        <div class="actions"><a class="btn" href="broadcast.html">Tune in</a><span class="avail">Plays at once: Dial made this recording in advance.</span></div>
+        <div class="save" data-work="cave" aria-live="polite"></div>
+        <details class="drill bookplate"><summary>Bookplate</summary><div class="drill-body"><dl>
+          <dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1497</span>, <cite>The Republic</cite>, translated by Benjamin Jowett. Performed from &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo; Jowett's introduction and the rest of the <cite>Republic</cite> are not performed.</dd>
+          <dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Jowett's translation was published in <span class="num">1871</span>, and he died in <span class="num">1893</span>.</dd>
+          <dt>Voices</dt><dd>Socrates, George. Glaucon, Lewis. The voice is Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are Jowett's, exactly as printed.</dd>
+          <dt>Corrections</dt><dd><span class="num">2</span>, accepted by the curator. The voice says &ldquo;an underground den&rdquo; where Jowett printed &ldquo;a underground den&rdquo;, and says Glaucon as GLAW-kon. The page keeps what Jowett printed.</dd>
+          <dt>Direction</dt><dd>Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone.</dd>
+          <dt>Also</dt><dd>Prefer a human reader? <a href="https://librivox.org/platos_republic/" rel="noopener">LibriVox has a volunteer reading of Jowett's Republic</a>.</dd>
+        </dl></div></details>
+      </article>
+
+      <article class="listing" aria-labelledby="w2">
+        <div class="l-top"><p class="eyebrow num">514 · No. 002</p><p class="eyebrow num">about 36 min</p></div>
+        <h2 id="w2"><a href="broadcast.html">Crito</a></h2>
+        <p class="by">Plato. Translated by Benjamin Jowett.</p>
+        <p class="desc">Socrates in prison before dawn. His friend has a plan for escape. The Laws of Athens answer him.</p>
+        <div class="fp" aria-label="The turns of the dialogue: Socrates above the line, Crito below."><span class="who">Socrates</span><svg data-fp="crito" preserveAspectRatio="none" aria-hidden="true"></svg><span class="who">Crito</span></div>
+        <p class="meta"><span>5,347 words</span><span>2 voices</span><span class="pd">Public domain worldwide</span></p>
+        <div class="actions"><a class="btn" href="broadcast.html">Tune in</a><span class="avail">Made on your device as you listen.</span></div>
+        <div class="save" data-work="crito" aria-live="polite"></div>
+        <details class="drill bookplate"><summary>Bookplate</summary><div class="drill-body"><dl>
+          <dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1657</span>, <cite>Crito</cite>, translated by Benjamin Jowett. Performed from &ldquo;Why have you come at this hour, Crito?&rdquo; to &ldquo;whither he leads.&rdquo; Jowett's introduction is not performed.</dd>
+          <dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Published in <span class="num">1871</span>; Jowett died in <span class="num">1893</span>.</dd>
+          <dt>Voices</dt><dd>Socrates, George. Crito, Lewis. Cast in order of first appearance, the same rule for every work.</dd>
+          <dt>Corrections</dt><dd><span class="num">2</span>, accepted by the curator: Phthia and Sunium, Greek place names, given their English pronunciations.</dd>
+          <dt>Also</dt><dd><a href="https://librivox.org/" rel="noopener">LibriVox</a> has human readings of Plato's dialogues.</dd>
+        </dl></div></details>
+      </article>
+
+      <article class="listing" aria-labelledby="w3">
+        <div class="l-top"><p class="eyebrow num">514 · No. 003</p><p class="eyebrow num">about 16 min</p></div>
+        <h2 id="w3"><a href="broadcast.html">Meditations, Book II</a></h2>
+        <p class="by">Marcus Aurelius. Translated by George Long.</p>
+        <p class="desc">An emperor's notes to himself, written on campaign by the Danube. Seventeen short sections, each followed by a silence.</p>
+        <div class="fp" aria-label="Seventeen sections in one voice, with a silence after each."><span class="who">One voice</span><svg data-fp="meditations" preserveAspectRatio="none" aria-hidden="true"></svg><span class="who">&nbsp;</span></div>
+        <p class="meta"><span>2,350 words</span><span>1 voice</span><span class="pd">Public domain worldwide</span></p>
+        <div class="actions"><a class="btn" href="broadcast.html">Tune in</a><span class="avail">Made on your device as you listen.</span></div>
+        <div class="save" data-work="meditations" aria-live="polite"></div>
+        <details class="drill bookplate"><summary>Bookplate</summary><div class="drill-body"><dl>
+          <dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">15877</span>, <cite>Thoughts of Marcus Aurelius Antoninus</cite>, translated by George Long. Book II, from &ldquo;Begin the morning by saying to thyself&rdquo; to &ldquo;This in Carnuntum.&rdquo; Long's footnotes are not performed; the words he supplied in brackets are.</dd>
+          <dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Long's translation was first published in <span class="num">1862</span>, and he died in <span class="num">1879</span>.</dd>
+          <dt>Voice</dt><dd>George, as narrator. The text names no speakers, so there is one voice.</dd>
+          <dt>Corrections</dt><dd>None.</dd>
+          <dt>Also</dt><dd><a href="https://librivox.org/" rel="noopener">LibriVox</a> has human readings of the Meditations.</dd>
+        </dl></div></details>
+      </article>
+    </div>
+
+    <!-- Tablet detail pane: the selected listing in full -->
+    <div class="detail-pane" aria-label="Selected work">
+      <article class="listing" aria-labelledby="w1d">
+        <div class="l-top"><p class="eyebrow num">514 · No. 001</p><p class="eyebrow num">about 20 min</p></div>
+        <h2 id="w1d">The Allegory of the Cave</h2>
+        <p class="by">Plato, Republic, Book VII, <span class="num" style="font-style:normal;font-size:.9em">514a&ndash;521b</span>. Translated by Benjamin Jowett.</p>
+        <p class="desc">Prisoners in the dark take shadows for the world. One of them is turned toward the light.</p>
+        <div class="fp" aria-label="The turns of the dialogue: Socrates above the line, Glaucon below."><span class="who">Socrates</span><svg data-fp="cave" preserveAspectRatio="none" aria-hidden="true"></svg><span class="who">Glaucon</span></div>
+        <p class="meta"><span>2,990 words</span><span>2 voices</span><span class="pd">Public domain worldwide</span></p>
+        <div class="actions"><a class="btn" href="broadcast.html">Tune in</a><span class="avail">Plays at once: Dial made this recording in advance.</span></div>
+        <div class="save" data-work="cave" aria-live="polite"></div>
+        <details class="drill bookplate" open><summary>Bookplate</summary><div class="drill-body"><dl>
+          <dt>Source</dt><dd>Project Gutenberg eBook No. <span class="num">1497</span>, <cite>The Republic</cite>, translated by Benjamin Jowett. Performed from &ldquo;And now, I said&rdquo; to &ldquo;I will choose them, he replied.&rdquo; Jowett's introduction and the rest of the <cite>Republic</cite> are not performed.</dd>
+          <dt>Public domain</dt><dd><span class="pd">Worldwide.</span> Jowett's translation was published in <span class="num">1871</span>, and he died in <span class="num">1893</span>.</dd>
+          <dt>Voices</dt><dd>Socrates, George. Glaucon, Lewis. The voice is Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are Jowett's, exactly as printed.</dd>
+          <dt>Corrections</dt><dd><span class="num">2</span>, accepted by the curator. The voice says &ldquo;an underground den&rdquo; where Jowett printed &ldquo;a underground den&rdquo;, and says Glaucon as GLAW-kon.</dd>
+          <dt>Also</dt><dd>Prefer a human reader? <a href="https://librivox.org/platos_republic/" rel="noopener">LibriVox has a volunteer reading</a>.</dd>
+        </dl></div></details>
+      </article>
+    </div>
+  </section>
+
+  <section class="coming" data-not="loading error search-empty" aria-labelledby="coming-h">
+    <h2 id="coming-h" class="eyebrow">In preparation</h2>
+    <ul>
+      <li><span class="t">Apology</span><span class="muted">Plato, translated by Benjamin Jowett</span></li>
+      <li><span class="t">Phaedo</span><span class="muted">Plato, translated by Benjamin Jowett</span></li>
+    </ul>
+    <p>With Crito, they complete the trial and death of Socrates. They join the shelf when their performances pass the same checks as the rest.</p>
+  </section>
+</main>
+<div class="mini" data-realm="cave" role="region" aria-label="Now playing. Swipe up to open the Broadcast."><span class="grab" aria-hidden="true"></span><span class="lamp" aria-hidden="true"></span><a class="t" href="broadcast.html" style="color:inherit;text-decoration:none"><b>The Allegory of the Cave</b><span>Glaucon, speaking · <span class="num">01:27</span> of <span class="num">20:12</span></span></a><button class="btn icon" type="button" aria-label="Pause"><svg class="glyph" aria-hidden="true"><use href="#g-pause"/></svg></button><div class="prog" aria-hidden="true"><i style="width:7.2%"></i></div></div>
+<nav class="tabbar" aria-label="Rooms"><a href="repertory.html" aria-current="page"><svg class="glyph" aria-hidden="true"><use href="#g-repertory"/></svg><span>Repertory</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html"><svg class="glyph" aria-hidden="true"><use href="#g-broadcast"/></svg><span>Broadcast</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html"><svg class="glyph" aria-hidden="true"><use href="#g-seal"/></svg><span>Seal</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
+<footer class="playerbar" data-realm="cave" aria-label="Player">
+  <div class="now"><span class="lamp" aria-hidden="true"></span><div><b>The Allegory of the Cave</b><span><span class="num">514 · No. 001</span> · Plato, translated by Benjamin Jowett</span></div></div>
+  <div class="transport">
+    <button class="btn icon" type="button" aria-label="Previous line ([)"><svg class="glyph" aria-hidden="true"><use href="#g-prev"/></svg></button>
+    <button class="btn icon" type="button" aria-label="Back 10 seconds (J)"><svg class="glyph" aria-hidden="true"><use href="#g-back"/></svg></button>
+    <button class="btn icon play" type="button" aria-label="Pause (space)"><svg class="glyph" aria-hidden="true"><use href="#g-pause"/></svg></button>
+    <button class="btn icon" type="button" aria-label="Forward 10 seconds (L)"><svg class="glyph" aria-hidden="true"><use href="#g-fwd"/></svg></button>
+    <button class="btn icon" type="button" aria-label="Next line (])"><svg class="glyph" aria-hidden="true"><use href="#g-next"/></svg></button>
+  </div>
+  <div class="ribbon-wrap"><svg class="ribbon" data-ribbon data-played="87" data-rendered="99999" preserveAspectRatio="none" role="img" aria-label="Position: 1 minute 27 of 20 minutes 12"></svg></div>
+  <span class="timecode"><b>01:27</b> / 20:12</span>
+</footer>
+<div class="dialog-scrim" id="shortcuts" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="kb-h">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 id="kb-h" style="font-size:1.4rem">Keyboard</h2><button class="btn icon" type="button" data-close aria-label="Close"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button></div>
+  <dl class="keys">
+    <dt><span class="keycap">Space</span></dt><dd>Play or pause</dd>
+    <dt><span class="keycap">J</span></dt><dd>Back 10 seconds. Press again to scrub faster.</dd>
+    <dt><span class="keycap">K</span></dt><dd>Stop scrubbing and pause</dd>
+    <dt><span class="keycap">L</span></dt><dd>Forward 10 seconds. Press again to scrub faster.</dd>
+    <dt><span class="keycap">[</span><span class="keycap">]</span></dt><dd>Previous or next line. In the Studio, previous or next cue.</dd>
+    <dt><span class="keycap">/</span></dt><dd>Search the Repertory, the script or the manuscript</dd>
+    <dt><span class="keycap">?</span></dt><dd>Show this list</dd>
+    <dt><span class="keycap">Esc</span></dt><dd>Close a sheet or dialog</dd>
+  </dl></div></div>
+<script>
+window.MOCK_STATES=[["first-run","First visit"],["listening","Listening"],["saving","Saving for offline"],["saved","Saved for offline"],["after-listen","After a first listen: Install"],["after-listen-ios","After a first listen: iPhone"],["loading","Loading"],["offline","Offline"],["error","Did not load"],["search-empty","Search, no results"]];
+(()=>{
+const DL='<svg class="glyph" aria-hidden="true"><use href="#g-down"/></svg>';
+const idle=(t)=>`<button class="btn quiet" type="button">${DL}Save for offline</button><span class="sz">${t}</span>`;
+const saving=(a,b)=>`<span class="ok">Saving&hellip;</span><span class="sz"><span class="num">${a}</span> of <span class="num">${b}</span> MB</span><span class="bar"><i style="width:${(a/b*100).toFixed(0)}%"></i></span><button class="btn text" type="button" style="grid-column:1/-1;justify-self:start;min-height:36px">Cancel</button>`;
+const saved=(t)=>`<span class="ok"><span class="pip eye" aria-hidden="true"></span>Saved for offline</span><span class="sz">${t} <button class="btn text" type="button" style="min-height:32px;font-size:.8rem">Remove</button></span>`;
+const need=`<span class="ok">Not saved</span><span class="sz">Needs a connection to save or play.</span>`;
+const V='plus the voice, once (<span class="num">115</span> MB)';
+const C='<span class="num">7.3</span> MB: the recording Dial made. No voice download.';
+const M={
+ idle:{cave:idle(C),crito:idle(`<span class="num">29</span> kB of text, ${V}`),meditations:idle(`<span class="num">13</span> kB of text, ${V}`)},
+ saving:{cave:idle(C),crito:saving(48.2,114.6),meditations:idle(`<span class="num">13</span> kB of text, ${V}`)},
+ saved:{cave:saved('<span class="num">7.3</span> MB.'),crito:saved('Text and voice, <span class="num">114.6</span> MB.'),meditations:idle('<span class="num">13</span> kB of text. The voice is already saved.')},
+ offline:{cave:saved('Plays with no connection.'),crito:saved('Plays with no connection.'),meditations:need}};
+window.onMockState=(s)=>{const q=document.getElementById("q");if(q)q.value=s==="search-empty"?"Seneca":"";
+  const playing=["listening","saving","saved","after-listen","after-listen-ios","offline"].includes(s);document.querySelectorAll(".mini,.playerbar").forEach(el=>el.hidden=!playing);
+  const m=M[s]||M.idle;document.querySelectorAll(".save[data-work]").forEach(el=>el.innerHTML=m[el.dataset.work]);};
+})();
+(()=>{const T={"cave":[[128,1],[2,0],[42,1],[12,0],[28,1],[20,0],[17,1],[3,0],[23,1],[2,0],[39,1],[4,0],[16,1],[3,0],[168,1],[2,0],[58,1],[3,0],[65,1],[7,0],[77,1],[1,0],[42,1],[1,0],[49,1],[14,0],[31,1],[3,0],[75,1],[10,0],[15,1],[22,0],[33,1],[5,0],[117,1],[4,0],[164,1],[13,0],[50,1],[3,0],[79,1],[5,0],[177,1],[8,0],[35,1],[6,0],[85,1],[2,0],[42,1],[9,0],[121,1],[4,0],[98,1],[2,0],[96,1],[4,0],[65,1],[4,0],[42,1],[21,0],[80,1],[6,0],[289,1],[4,0],[37,1],[46,0],[129,1],[4,0],[24,1],[6,0],[25,1],[2,0],[51,1],[11,0]],"crito":[[14,1],[3,0],[6,1],[5,0],[13,1],[16,0],[7,1],[7,0],[15,1],[75,0],[21,1],[19,0],[17,1],[34,0],[17,1],[42,0],[27,1],[6,0],[18,1],[8,0],[37,1],[9,0],[25,1],[12,1],[6,0],[12,1],[116,0],[36,1],[36,0],[63,1],[108,0],[17,1],[500,0],[364,1],[2,0],[11,1],[2,0],[17,1],[2,0],[44,1],[5,0],[21,1],[3,0],[37,1],[2,0],[30,1],[4,0],[16,1],[13,0],[109,1],[5,0],[41,1],[2,0],[10,1],[3,0],[49,1],[3,0],[6,1],[3,0],[73,1],[9,0],[45,1],[6,0],[15,1],[4,0],[177,1],[13,0],[81,1],[3,0],[142,1],[2,0],[7,1],[3,0],[22,1],[3,0],[7,1],[4,0],[21,1],[3,0],[12,1],[3,0],[173,1],[11,0],[37,1],[9,0],[54,1],[10,0],[167,1],[4,0],[513,1],[6,0],[265,1],[334,1],[6,0],[188,1],[497,1],[179,1],[64,1],[7,0],[17,1]],"meditations":[[170,1],[128,1],[144,1],[89,1],[138,1],[47,1],[70,1],[37,1],[69,1],[160,1],[261,1],[197,1],[144,1],[214,1],[43,1],[192,1],[244,1],[3,1]]};
+  const rate=155/60;
+  for(const svg of document.querySelectorAll("[data-fp]")){const turns=T[svg.dataset.fp];const sec=svg.dataset.fp==="meditations";
+    let t=0;const parts=[];for(const [w,up] of turns){const d=w/rate;parts.push([t,d,up]);t+=d+(sec?2.5:0.6);}
+    const W=1000,H=34,mid=H/2;svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+    let out=`<line x1="0" x2="${W}" y1="${mid}" y2="${mid}" vector-effect="non-scaling-stroke"/>`;
+    for(const [s,d,up] of parts){const x=s/t*W,w=Math.max(1.4,d/t*W-0.8);out+=`<rect x="${x.toFixed(1)}" width="${w.toFixed(1)}" y="${up?4:mid+1.5}" height="${mid-5.5}" rx="1"/>`;}
+    svg.innerHTML=out;}
+})();
+</script>
+<script>
+(()=>{const C=[[18,0],[56,0],[54,1],[2,1],[35,0],[7,1],[12,1],[28,1],[20,1],[17,1],[3,1],[23,1],[2,1],[39,1],[4,1],[16,1],[3,1],[20,0],[56,0],[44,0],[26,0],[22,1],[2,1],[58,1],[3,1],[38,0],[27,1],[7,1],[13,0],[64,1],[1,1],[42,1],[1,1],[49,1],[14,1],[31,1],[3,1],[38,0],[31,0],[6,1],[10,1],[15,1],[22,1],[33,1],[5,1],[32,0],[30,0],[55,1],[4,1],[15,0],[55,0],[29,0],[41,0],[24,1],[13,1],[50,1],[3,1],[24,0],[55,1],[5,1],[51,0],[63,0],[63,1],[8,1],[35,1],[6,1],[16,0],[44,0],[25,1],[2,1],[42,1],[9,1],[33,0],[24,0],[8,0],[56,1],[4,1],[17,0],[43,0],[39,1],[2,1],[46,0],[50,1],[4,1],[46,0],[19,1],[4,1],[42,1],[5,0],[16,1],[29,0],[51,1],[6,1],[20,0],[44,0],[18,0],[47,0],[25,0],[45,0],[55,0],[35,1],[4,1],[37,1],[46,1],[10,0],[57,0],[33,0],[29,1],[4,1],[18,0],[6,1],[6,1],[12,0],[13,1],[2,1],[11,0],[40,1],[11,0]];const r=155/60;let t=0;const seg=C.map(([w,p])=>{const d=w/r,s=t;t+=d+(p?0.6:0.3);return [s,d];});
+window.drawRibbons=()=>{for(const svg of document.querySelectorAll("[data-ribbon]")){const played=+svg.dataset.played,ren=+svg.dataset.rendered,W=1000,H=30;svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+let o="";for(const [s,d] of seg){const x=s/t*W,w=Math.max(.8,d/t*W-.6);const cls=s>ren?"seg unrendered":s>played?"seg ahead":"seg";o+=`<rect class="${cls}" x="${x.toFixed(1)}" y="9" width="${w.toFixed(1)}" height="12" rx="1"/>`;}
+if(ren<t){const rx=ren/t*W;o+=`<line class="renderhead" x1="${rx}" x2="${rx}" y1="5" y2="25" vector-effect="non-scaling-stroke"/>`;}
+const nx=played/t*W;o+=`<line class="needle" x1="${nx}" x2="${nx}" y1="2" y2="28" vector-effect="non-scaling-stroke"/>`;svg.innerHTML=o;}};drawRibbons();})();
+// Shared mock behaviour: state switcher, theme, shortcuts, the living logo wave.
+(() => {
+  const q = new URLSearchParams(location.search);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches || q.has("still");
+  window.DIAL_REDUCED = reduce;
+  if (q.has("still")) document.documentElement.classList.add("still");
+  const states = window.MOCK_STATES || [];
+  const root = document.documentElement;
+  if (q.get("theme") === "daylight" || q.get("theme") === "night") root.dataset.theme = q.get("theme");
+
+  function setState(s) {
+    document.body.dataset.state = s;
+    for (const el of document.querySelectorAll("[data-when]")) el.hidden = !el.dataset.when.split(" ").includes(s);
+    for (const el of document.querySelectorAll("[data-not]")) el.hidden = el.dataset.not.split(" ").includes(s);
+    const sel = document.getElementById("mock-state");
+    if (sel) sel.value = s;
+    if (window.onMockState) window.onMockState(s);
+  }
+  window.setMockState = setState;
+
+  if (!q.has("clean") && states.length) {
+    const bar = document.createElement("div");
+    bar.className = "mockbar";
+    bar.setAttribute("aria-label", "Mock controls, not part of the design");
+    bar.innerHTML = `<span>Mock</span><select id="mock-state" aria-label="State">${states.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select><select id="mock-theme" aria-label="Theme"><option value="">Device theme</option><option value="night">Night</option><option value="daylight">Daylight</option></select>`;
+    document.body.append(bar);
+    bar.querySelector("#mock-state").addEventListener("change", (e) => setState(e.target.value));
+    const th = bar.querySelector("#mock-theme");
+    th.value = root.dataset.theme || "";
+    th.addEventListener("change", (e) => { if (e.target.value) root.dataset.theme = e.target.value; else delete root.dataset.theme; });
+  }
+  setState(q.get("state") || (states[0] && states[0][0]) || "default");
+
+  // Shortcuts: ? opens the map, Esc closes, / focuses search where the room has one.
+  const dlg = document.getElementById("shortcuts");
+  const open = () => { if (dlg) { dlg.hidden = false; dlg.querySelector("button")?.focus(); } };
+  const close = () => { if (dlg) dlg.hidden = true; };
+  document.querySelectorAll("[data-open-shortcuts]").forEach((b) => b.addEventListener("click", open));
+  dlg?.addEventListener("click", (e) => { if (e.target === dlg || e.target.closest("[data-close]")) close(); });
+  addEventListener("keydown", (e) => {
+    if (e.target.closest("input, textarea, select")) return;
+    if (e.key === "?") { e.preventDefault(); open(); }
+    else if (e.key === "Escape") close();
+    else if (e.key === "/") { const s = document.querySelector("[data-search]"); if (s) { e.preventDefault(); s.focus(); } }
+    else if (e.key === " " && window.onMockSpace) { e.preventDefault(); window.onMockSpace(); }
+  });
+  if (q.get("dialog") === "shortcuts") open();
+
+  // The living wave inside the arch: moves in the app, holds still with reduced motion.
+  const waves = [...document.querySelectorAll(".arch .live")];
+  function archWave(t) {
+    let d = "";
+    for (let i = 0; i <= 80; i++) {
+      const u = i / 80, x = 20 + i;
+      const e = Math.sin(Math.PI * u) * (0.62 + 0.38 * Math.sin(2 * Math.PI * u * 1.5 + 0.7 + t * 1.3));
+      const y = 94 + 22 * e * Math.sin(2 * Math.PI * 6 * u - t * 2.4);
+      d += (i ? " L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+    }
+    for (const w of waves) w.setAttribute("d", d);
+  }
+  archWave(1.1);
+  if (!reduce && waves.length) {
+    let last = 0;
+    const loop = (ms) => { if (ms - last > 50) { archWave(ms / 1000); last = ms; } requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+})();
+
+</script>
+</body>
+</html>

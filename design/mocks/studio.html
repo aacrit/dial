@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="The Dial Studio: import a chapter, read the Direction report, override cues, render with the Tuning Dial, state the rights and export.">
+<title>Studio · Dial mock</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+/* ---- Shared shell for the G2 mocks. Colours only through tokens. ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+@media (min-width:1920px){html{font-size:18px}}
+body{line-height:1.55;min-height:100vh;min-height:100dvh}
+[hidden]{display:none !important}
+a{color:var(--color-filament);text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{color:var(--color-filament-hover)}
+:focus-visible{outline:2px solid var(--color-filament);outline-offset:2px;border-radius:4px}
+p{margin:0}
+h1,h2,h3{margin:0;font-weight:400;font-family:var(--font-display);text-wrap:balance}
+.num{font-family:var(--font-data);font-variant-numeric:tabular-nums}
+.eyebrow{font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);line-height:1.3}
+.muted{color:var(--color-cream-muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.glyph{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.glyph .ember{fill:var(--color-magic-eye);fill-opacity:.35;stroke:none}
+
+/* Buttons: verbs, 44 px, spring press */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--color-filament);color:var(--color-bg);font:600 .95rem/1 var(--font-structure);text-decoration:none;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),transform var(--dur-normal) var(--ease-needle-drop)}
+.btn:hover{background:var(--color-filament-hover);color:var(--color-bg)}
+.btn:active{transform:scale(.97);transition-duration:var(--dur-instant)}
+.btn.quiet{background:transparent;color:var(--color-cream);border-color:var(--color-border)}
+.btn.quiet:hover{background:var(--color-surface-raised);color:var(--color-cream)}
+.btn.text{background:transparent;color:var(--color-filament);padding:0 4px;min-height:44px}
+.btn.text:hover{color:var(--color-filament-hover);background:transparent}
+.btn[disabled],.btn[aria-disabled="true"]{background:var(--color-surface-raised);color:var(--color-cream-muted);border-color:var(--color-border);cursor:default;transform:none}
+.btn.icon{width:44px;padding:0;background:transparent;color:var(--color-cream);border-color:var(--color-border)}
+.btn.icon.play{width:56px;min-height:56px;border-radius:50%;background:var(--color-filament);color:var(--color-bg);border:none}
+.btn.icon.play .glyph{width:26px;height:26px}
+
+/* Cards and drills */
+.card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:22px}
+.drill{border-top:1px solid var(--color-border)}
+.drill>summary{list-style:none;display:flex;align-items:center;gap:12px;min-height:44px;cursor:pointer;color:var(--color-cream);font-weight:500}
+.drill>summary::-webkit-details-marker{display:none}
+.drill>summary .sum{margin-left:auto;font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:.8rem;color:var(--color-cream-muted);font-weight:400}
+.drill>summary::after{content:"";width:8px;height:8px;border-right:1.6px solid var(--color-cream-muted);border-bottom:1.6px solid var(--color-cream-muted);transform:rotate(45deg) translateY(-2px);transition:transform var(--dur-fast) var(--ease-out);flex:none}
+.drill:not(:has(.sum))>summary::after{margin-left:auto}
+.drill[open]>summary::after{transform:rotate(-135deg) translateY(-2px)}
+.drill>.drill-body{padding:4px 0 16px;animation:fade var(--dur-normal) var(--ease-out)}
+@keyframes fade{from{opacity:0;transform:translateY(-4px)}}
+
+/* Lamps and pips */
+.lamp{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--color-tally);box-shadow:var(--shadow-lamp);flex:none}
+.lamp.off{background:var(--color-surface-raised);box-shadow:none;border:1px solid var(--color-border)}
+.pip{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.pip.ochre{background:var(--color-ochre)}
+.pip.eye{background:var(--color-magic-eye)}
+.onair{display:inline-flex;align-items:center;gap:8px;font:600 .72rem/1 var(--font-data);letter-spacing:.12em;text-transform:uppercase;color:var(--color-cream)}
+
+/* The living wave (tab underline, loaders) */
+.wave-underline{display:block;width:40px;height:8px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,black 25%,black 75%,transparent);mask-image:linear-gradient(90deg,transparent,black 25%,black 75%,transparent)}
+.wave-underline svg{display:block;width:80px;height:8px;animation:carrier 1.4s linear infinite}
+.wave-underline path{fill:none;stroke:var(--color-filament);stroke-width:1.4;stroke-linecap:round}
+@keyframes carrier{to{transform:translateX(-13.333px)}}
+.standing{display:block;width:120px;height:36px}
+.standing path{fill:none;stroke-linecap:round}
+.standing .n1{stroke:var(--color-filament);stroke-width:1.6;animation:stand 1.6s var(--ease-rack) infinite alternate;transform-origin:center}
+.standing .n2{stroke:var(--color-cream-muted);stroke-width:1;opacity:.5;animation:stand 1.6s var(--ease-rack) infinite alternate-reverse;transform-origin:center}
+@keyframes stand{from{transform:scaleY(1)}to{transform:scaleY(-1)}}
+
+/* ---- Station bar: tablet and desktop -------------------------------------- */
+.station{position:sticky;top:0;z-index:30;display:none;align-items:center;gap:28px;height:60px;padding:0 24px;background:var(--color-bg);border-bottom:1px solid var(--color-border)}
+.brand{display:flex;align-items:center;gap:10px;color:var(--color-cream);text-decoration:none}
+.brand .arch{height:30px;width:auto}
+.brand .wm{height:15px;width:auto;fill:currentColor}
+.brand .freq{font:500 .66rem/1 var(--font-data);letter-spacing:.16em;color:var(--color-cream-muted);margin-left:4px;white-space:nowrap}
+.tabs{display:flex;gap:2px;height:100%}
+.tabs a{position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;padding:0 14px;color:var(--color-cream-muted);text-decoration:none;font:500 .92rem/1 var(--font-structure)}
+.tabs a:hover{color:var(--color-cream)}
+.tabs a .wave-underline{visibility:hidden}
+.tabs a[aria-current="page"]{color:var(--color-cream)}
+.tabs a[aria-current="page"] .wave-underline{visibility:visible}
+.station .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.sealpip{display:inline-flex;align-items:center;gap:8px;color:var(--color-cream-muted);text-decoration:none;font-size:.85rem}
+.sealpip:hover{color:var(--color-cream)}
+.keycap{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 6px;border:1px solid var(--color-border);border-bottom-width:2px;border-radius:6px;font:500 .78rem/1 var(--font-data);color:var(--color-cream)}
+button.keycap{background:transparent;cursor:pointer}
+
+/* ---- Phone chrome: tab bar and mini-player -------------------------------- */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(4,1fr);height:calc(64px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--color-bg);border-top:1px solid var(--color-border)}
+.tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--color-cream-muted);text-decoration:none;font:500 .7rem/1 var(--font-structure);min-height:44px}
+.tabbar a .wave-underline{visibility:hidden;width:32px}
+.tabbar a[aria-current="page"]{color:var(--color-cream)}
+.tabbar a[aria-current="page"] .wave-underline{visibility:visible}
+.mini{position:fixed;left:8px;right:8px;bottom:calc(72px + env(safe-area-inset-bottom));z-index:39;display:flex;align-items:center;gap:12px;height:60px;padding:0 8px 0 14px;background:var(--color-surface-raised);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-hover);overflow:hidden}
+.mini .grab{position:absolute;top:5px;left:50%;width:28px;height:3px;margin-left:-14px;border-radius:2px;background:var(--color-border)}
+.mini .t{min-width:0;flex:1}
+.mini .t b{display:block;font:500 .9rem/1.25 var(--font-structure);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .t>span{display:block;font-size:.75rem;color:var(--color-cream-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .prog{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--color-cream-faint)}
+.mini .prog i{display:block;height:100%;background:var(--color-realm);transition:background-color var(--dur-realm-bleed) linear}
+.mini .btn.icon{border:none;color:var(--color-cream)}
+.phone-head{display:flex;align-items:center;gap:10px;padding:14px 16px 0;padding-top:max(14px,env(safe-area-inset-top))}
+.phone-head .arch{height:26px;width:auto}
+.phone-head .wm{height:12px;width:auto;fill:var(--color-cream)}
+.phone-head .freq{font:500 .62rem/1 var(--font-data);letter-spacing:.16em;color:var(--color-cream-muted)}
+.phone-head .sealpip{margin-left:auto}
+
+/* ---- Player bar: tablet and desktop --------------------------------------- */
+.playerbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:none;align-items:center;gap:20px;height:76px;padding:0 24px;background:var(--color-surface);border-top:1px solid var(--color-border)}
+.playerbar .now{display:flex;align-items:center;gap:12px;min-width:0;width:clamp(200px,22vw,360px)}
+.playerbar .now b{display:block;font:500 .92rem/1.3 var(--font-structure);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.playerbar .now>div>span{display:block;font-size:.76rem;color:var(--color-cream-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.transport{display:flex;align-items:center;gap:8px}
+.playerbar .now>div{min-width:0}
+@media (max-width:1279px){.transport .btn.icon:nth-child(2),.transport .btn.icon:nth-child(4){display:none}}
+.transport .btn.icon.play{width:48px;min-height:48px}
+.transport .btn.icon{border:none}
+.ribbon-wrap{flex:1;min-width:120px;display:grid;gap:4px}
+.ribbon{display:block;width:100%;height:30px}
+.ribbon .seg{fill:var(--color-realm);transition:fill var(--dur-realm-bleed) linear}
+.ribbon .seg.ahead{opacity:.42}
+.ribbon .seg.unrendered{fill:var(--color-cream-faint);opacity:1}
+.ribbon .needle{stroke:var(--color-filament);stroke-width:2;filter:drop-shadow(0 0 4px var(--color-filament))}
+.ribbon .renderhead{stroke:var(--color-tally);stroke-width:1.5}
+.timecode{font:400 .8rem/1 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted);white-space:nowrap}
+.timecode b{color:var(--color-cream);font-weight:400}
+
+/* ---- Breakpoints: phone chrome below 768, station + player bar above ------ */
+@media (min-width:768px){
+  .station{display:flex}
+  .playerbar{display:flex}
+  .tabbar,.mini,.phone-head{display:none}
+  .room{padding-bottom:100px}
+}
+@media (max-width:767px){
+  .room{padding-bottom:calc(150px + env(safe-area-inset-bottom))}
+  .desk-only{display:none !important}
+}
+@media (min-width:768px){.phone-only{display:none !important}}
+@media (max-width:1279px){.wide-only{display:none !important}}
+@media (min-width:1280px){.tablet-only{display:none !important}}
+@media (max-width:767px),(min-width:1280px){.tablet-up-to-desk{display:none !important}}
+
+/* ---- Mock state switcher (hidden with ?clean) ----------------------------- */
+.mockbar{position:fixed;top:8px;right:8px;z-index:100;display:flex;gap:8px;align-items:center;padding:6px 8px 6px 12px;background:var(--color-surface-raised);border:1px dashed var(--color-cream-muted);border-radius:var(--radius-pill);font:500 .72rem/1 var(--font-data);color:var(--color-cream-muted);box-shadow:var(--shadow-hover)}
+.mockbar select{background:var(--color-bg);color:var(--color-cream);border:1px solid var(--color-border);border-radius:6px;font:inherit;padding:4px 6px;max-width:170px}
+@media (max-width:767px){.mockbar{top:auto;bottom:calc(140px + env(safe-area-inset-bottom));right:8px}}
+
+/* Shortcuts dialog */
+.dialog-scrim{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:var(--color-scrim)}
+.dialog{width:min(520px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-hover);padding:24px;animation:rise var(--dur-normal) var(--ease-cinematic)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:center;margin:16px 0 0}
+.keys dt{display:flex;gap:4px}
+.keys dd{margin:0;font-size:.92rem}
+/* Screenshot mode (?still): final states, no motion in flight */
+.still *,.still *::before,.still *::after{animation:none !important;transition:none !important}
+html.still{scrollbar-width:none}html.still::-webkit-scrollbar{display:none}
+
+.arch-body{fill:var(--color-surface);stroke:var(--color-cream);stroke-width:6;stroke-linejoin:round}.arch-inner{fill:none;stroke:var(--color-cream);stroke-width:1.6;opacity:.4}.arch .live{fill:none;stroke:var(--color-filament);stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round}body[data-onair="true"] .arch .live{stroke:var(--color-tally)}
+</style>
+<style>
+/* Studio: the production console. One hero: the Tuning Dial. */
+.studio{height:calc(100dvh - 60px - 76px);display:flex;flex-direction:column;padding-bottom:0}
+.prodbar{display:flex;align-items:center;gap:20px;padding:12px 24px;border-bottom:1px solid var(--color-border);min-height:64px}
+.prodbar h1{font-size:1.25rem;line-height:1.15}
+.prodbar .sub{font:400 .74rem/1.3 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.chip{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid var(--color-border);border-radius:var(--radius-pill);font-size:.8rem;color:var(--color-cream);background:transparent;cursor:pointer;white-space:nowrap}
+.chip .num{font-size:.78rem}
+.prodbar .acts{display:flex;gap:8px}
+.console{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,30%) minmax(0,1fr) 340px}
+.pane{min-height:0;overflow:auto;padding:18px 22px}
+.pane+.pane{border-left:1px solid var(--color-border)}
+.pane-title{display:flex;align-items:baseline;gap:10px;margin:0 0 12px}
+.pane-title h2{font:600 .72rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
+.pane-title .num{font-size:.72rem;color:var(--color-cream-muted);margin-left:auto}
+
+/* Manuscript: verbatim, with cue boundaries and correction marks */
+.ms{font-family:var(--font-display);font-weight:300;font-size:1rem;line-height:1.7;max-width:var(--measure-reading)}
+.ms p{margin:0 0 .9em}
+.ms .c{border-radius:3px;cursor:pointer;transition:background-color var(--dur-fast) var(--ease-out)}
+.ms .c:hover{background:var(--color-surface-raised)}
+.ms .c.sel{outline:1px solid var(--color-filament);outline-offset:1px}
+.ms .c.live{color:var(--color-filament);background:var(--color-filament-glow)}
+.ms .corr{text-decoration:underline dotted var(--color-ochre);text-decoration-thickness:2px;text-underline-offset:4px}
+.ms .corr.ok{text-decoration:underline solid var(--color-border)}
+
+/* The Tuning Dial */
+.tuning{position:relative;isolation:isolate;margin:0 0 16px;padding:14px 16px 12px;border:1px solid var(--color-border);border-radius:var(--radius-card);background:var(--texture-console),var(--color-surface);box-shadow:inset 0 1px 0 var(--color-cream-faint),var(--shadow-card);overflow:hidden}
+.tuning::after{content:"";position:absolute;inset:0;z-index:-1;background-image:var(--texture-grain);opacity:var(--texture-grain-opacity);pointer-events:none}
+.tuning .head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px}
+.tuning .head h2{font-family:var(--font-display);font-size:1.15rem}
+.tuning .head .num{margin-left:auto;font-size:.74rem;color:var(--color-cream-muted)}
+.tdial{display:block;width:100%;height:150px}
+.tdial .tick{stroke:var(--color-cream-muted);stroke-width:1}
+.tdial .tick.minor{opacity:.35}
+.tdial .tlab{fill:var(--color-cream-muted);font:400 10px var(--font-data);font-variant-numeric:tabular-nums}
+.tdial .base{stroke:var(--color-border)}
+.tdial .telling{fill:var(--color-register-telling);opacity:.78}
+.tdial .speaking{fill:var(--color-register-speaking)}
+.tdial .letter{fill:var(--color-register-letter)}
+.tdial .hollow{fill-opacity:0;stroke-width:1.2}
+.tdial .hollow.speaking{stroke:var(--color-register-speaking)}
+.tdial .unrendered{fill:var(--color-cream-faint);opacity:1}
+.tdial .static{fill:url(#x-static)}
+.tdial .pin{fill:var(--color-ochre)}
+.tdial .rh{stroke:var(--color-tally);stroke-width:1.5}
+.tdial .rhlab{fill:var(--color-tally);font:600 9px var(--font-data);letter-spacing:.1em}
+.tdial .needle{stroke:var(--color-filament);stroke-width:2;filter:drop-shadow(0 0 5px var(--color-filament))}
+.tdial .needlecap{fill:var(--color-filament)}
+.tdial .sel{fill:none;stroke:var(--color-filament);stroke-width:1;stroke-dasharray:2 2}
+.readout{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;margin-top:8px;font:400 .76rem/1.4 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted)}
+.readout .lamp{width:8px;height:8px}
+.readout b{color:var(--color-cream);font-weight:400}
+.tlegend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.72rem;color:var(--color-cream-muted);margin-top:8px}
+.tlegend span{display:inline-flex;align-items:center;gap:6px}
+.tlegend i{display:inline-block;width:12px;height:6px;border-radius:2px}
+.tlegend i.h{border:1.2px solid var(--color-register-speaking);background:transparent}
+
+/* Cue sheet */
+.cues{width:100%;border-collapse:collapse;font-size:.84rem;table-layout:fixed}
+.cues th:nth-child(1){width:44px}.cues th:nth-child(2){width:78px}.cues th:nth-child(3){width:96px}.cues th:nth-child(4){width:100px}.cues th:nth-child(6){width:62px}
+@media (max-width:1279px){.cues th:nth-child(6),.cues td.p{display:none}.cues th:nth-child(4){width:34px}.cues td.r{font-size:0}.cues th:nth-child(4){font-size:0}}
+.cues th{position:sticky;top:-18px;background:var(--color-bg);text-align:left;font:500 .64rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);padding:8px 8px;border-bottom:1px solid var(--color-border)}
+.cues td{padding:7px 8px;border-bottom:1px solid var(--color-border);vertical-align:top}
+.cues td.n,.cues td.t,.cues td.p{font-family:var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted);white-space:nowrap;font-size:.78rem}
+.cues td.p{text-align:right}
+.cues td.x{font-family:var(--font-display);font-weight:300;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cues td.r{white-space:nowrap}
+.cues .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.cues tr.sel td{background:var(--color-surface-raised)}
+.cues tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--color-filament)}
+.cues tr:hover td{background:var(--color-surface)}
+.yours{display:inline-block;margin-left:6px;padding:1px 6px;border:1px solid var(--color-border);border-radius:var(--radius-pill);font:500 .62rem/1.4 var(--font-data);letter-spacing:.06em;color:var(--color-cream)}
+.unres{color:var(--color-cream-muted);font-style:italic}
+
+/* Inspector */
+.tabs2{display:flex;gap:2px;border-bottom:1px solid var(--color-border);margin:-18px -22px 16px;padding:0 12px;position:sticky;top:-18px;background:var(--color-bg);z-index:2}
+.tabs2 button{display:inline-flex;align-items:center;gap:6px;height:46px;padding:0 10px;background:none;border:0;border-bottom:2px solid transparent;color:var(--color-cream-muted);font:500 .86rem var(--font-structure);cursor:pointer}
+.tabs2 button[aria-selected="true"]{color:var(--color-cream);border-bottom-color:var(--color-filament)}
+.insp h3{font-family:var(--font-display);font-size:1.15rem;margin:0 0 4px}
+.insp .q{font-family:var(--font-display);font-weight:300;font-size:1.05rem;margin:6px 0 4px}
+.insp .src{font:400 .72rem/1.4 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted)}
+.report{display:grid;gap:0;margin:14px 0 18px}
+.report div{padding:10px 0;border-top:1px solid var(--color-border)}
+.report dt{font:500 .64rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
+.report dd{margin:5px 0 0;font-size:.92rem}
+.report .rule{display:block;margin-top:3px;font-size:.8rem;color:var(--color-cream-muted)}
+.field{display:grid;gap:6px;margin:0 0 12px}
+.field label,.field .lab{font-size:.84rem}
+select.in,input.in{height:44px;padding:0 10px;background:var(--color-bg);color:var(--color-cream);border:1px solid var(--color-border);border-radius:var(--radius-control);font:400 .92rem var(--font-structure);width:100%}
+input.in.num{font-family:var(--font-data)}
+select.in:focus,input.in:focus{outline:2px solid var(--color-filament);outline-offset:1px}
+.radio{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--color-border);border-radius:var(--radius-control);font-size:.9rem;cursor:pointer}
+.radio input{margin:3px 0 0;accent-color:var(--color-filament);width:18px;height:18px;flex:none}
+.radio:has(input:checked){border-color:var(--color-filament)}
+.note{font-size:.8rem;color:var(--color-cream-muted)}
+.stack{display:grid;gap:10px}
+.sect{padding:14px 0;border-top:1px solid var(--color-border);display:grid;gap:10px}
+.sect h4{margin:0;font:600 .72rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted)}
+.pending{display:flex;gap:8px;align-items:center;font-size:.86rem}
+.label-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:.82rem}
+.label-dl dt{color:var(--color-cream-muted)}
+.label-dl dd{margin:0}
+.corr-row{display:grid;gap:6px;padding:12px 0;border-top:1px solid var(--color-border)}
+.corr-row .pair{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;font-family:var(--font-display);font-size:1.05rem}
+.corr-row .pair .arrow{font-family:var(--font-data);color:var(--color-cream-muted);font-size:.8rem}
+.corr-row .why{font-size:.82rem;color:var(--color-cream-muted)}
+.corr-row .row{display:flex;gap:8px;align-items:center}
+.corr-row .btn{min-height:36px;padding:0 12px;font-size:.84rem}
+.voice-row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding:10px 0;border-top:1px solid var(--color-border)}
+.voice-row b{font-weight:500}
+.voice-row span{font-size:.8rem;color:var(--color-cream-muted)}
+.cast{width:100%;border-collapse:collapse;font-size:.84rem}
+.cast td,.cast th{padding:8px 4px;border-top:1px solid var(--color-border);text-align:left;vertical-align:top}
+.cast th{font:500 .62rem/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;color:var(--color-cream-muted);border-top:0}
+.done-panel{display:grid;gap:8px;padding:14px;border:1px solid var(--color-border);border-radius:var(--radius-control);background:var(--color-surface)}
+
+/* Import, errors and the limit sheet */
+.import{flex:1;display:grid;place-items:center;padding:24px}
+.dropzone{display:grid;gap:14px;justify-items:center;text-align:center;width:min(620px,100%);padding:48px 32px;border:1.5px dashed var(--color-border);border-radius:var(--radius-card);background:var(--color-surface)}
+.dropzone h2{font-size:2rem}
+.dropzone p{max-width:48ch;color:var(--color-cream-muted)}
+.dropzone .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.dropzone .terms{display:block;max-width:52ch;font-size:.84rem;color:var(--color-cream-muted);margin-top:6px}
+.sheet-scrim{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:var(--color-scrim)}
+.sheet{width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto;display:grid;gap:14px;padding:26px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);box-shadow:var(--shadow-hover);animation:rise var(--dur-morph) var(--ease-cinematic)}
+.sheet h2{font-size:1.5rem}
+.price{display:grid;gap:8px;padding:16px;border:1px solid var(--color-border);border-radius:var(--radius-control)}
+.price .amt{font:400 1.6rem/1 var(--font-data);font-variant-numeric:tabular-nums}
+.price ul{margin:0;padding-left:1.1em;font-size:.88rem;display:grid;gap:4px}
+
+/* Tablet: manuscript and cue sheet; the Tuning Dial lives in a sheet */
+@media (min-width:768px) and (max-width:1279px){
+  .console{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .console .inspector{display:none}
+  .center .tuning{position:fixed;left:12px;right:12px;bottom:88px;z-index:20;margin:0;box-shadow:var(--shadow-hover)}
+  .center .tuning::before{content:"";position:absolute;top:6px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--color-border)}
+  .center .tuning .tlegend{display:none}
+  .center{padding-bottom:280px}
+  .prodbar{flex-wrap:wrap}
+  .chips{margin-left:0;order:3;width:100%}
+}
+@media (min-width:1920px){
+  .console{grid-template-columns:minmax(0,calc(var(--measure-reading) + 60px)) minmax(0,1fr) 400px}
+  .tdial{height:170px}
+}
+
+/* Phone: import, trial render and export only */
+.phone-studio{display:none}
+@media (max-width:767px){
+  .studio{height:auto;display:block}
+  .prodbar,.console,.import-desk,.sheet-desk{display:none !important}
+  .phone-studio{display:grid;gap:14px;padding:14px 16px 0}
+  .phone-studio h1{font-size:2rem}
+  .phone-studio .card{padding:18px;display:grid;gap:10px}
+  .phone-studio .card h2{font-size:1.2rem}
+  .phone-studio .kv{font:400 .76rem/1.5 var(--font-data);font-variant-numeric:tabular-nums;color:var(--color-cream-muted)}
+  .phone-studio .desk-note{display:flex;gap:10px;font-size:.88rem;color:var(--color-cream-muted);padding:12px 14px;border-left:2px solid var(--color-border)}
+  .phone-studio .meter-line{height:4px;border-radius:2px;background:var(--color-cream-faint);overflow:hidden}
+  .phone-studio .meter-line i{display:block;height:100%;background:var(--color-filament)}
+  .phone-studio .mini-dial{display:block;width:100%;height:56px}
+}
+</style>
+</head>
+<body data-onair="true">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="g-repertory" viewBox="0 0 24 24"><path d="M6 3.5h12a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19V5A1.5 1.5 0 0 1 6 3.5Z"/><path d="M8 8h3M8 12h8M8 15.5h6"/></symbol>
+<symbol id="g-broadcast" viewBox="0 0 24 24"><path d="M3 12h2.5l1.6-4 2 9 2.1-12 2 14 2-10 1.4 5 1-2H21"/></symbol>
+<symbol id="g-studio" viewBox="0 0 24 24"><path d="M4 17a8 8 0 0 1 16 0"/><path d="M12 17l3.6-5.6"/><path d="M6.3 12.2l1.2.9M12 9v1.5M17.7 12.2l-1.2.9"/><path d="M3.5 20.5h17"/></symbol>
+<symbol id="g-seal" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 12 9.6 3.9M12 12l2.4-8.1"/><circle class="ember" cx="12" cy="12" r="3"/></symbol>
+<symbol id="g-play" viewBox="0 0 24 24"><path d="M8.5 5.8v12.4l10-6.2z"/></symbol>
+<symbol id="g-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></symbol>
+<symbol id="g-prev" viewBox="0 0 24 24"><path d="M6 6v12M18 6.5l-8.5 5.5 8.5 5.5z"/></symbol>
+<symbol id="g-next" viewBox="0 0 24 24"><path d="M18 6v12M6 6.5l8.5 5.5L6 17.5z"/></symbol>
+<symbol id="g-back" viewBox="0 0 24 24"><path d="M5 12a7 7 0 1 0 2.1-5"/><path d="M5 4v3.5h3.5"/></symbol>
+<symbol id="g-fwd" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M19 4v3.5h-3.5"/></symbol>
+<symbol id="g-down" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/></symbol>
+<symbol id="g-chev" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+<symbol id="g-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+<symbol id="g-imp" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></symbol>
+<symbol id="g-lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></symbol>
+<symbol id="g-file" viewBox="0 0 24 24"><path d="M7 3.5h7l4.5 4.5v11a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5Z"/><path d="M14 3.5V8h4.5"/></symbol>
+<symbol id="g-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+<symbol id="g-offline" viewBox="0 0 24 24"><path d="M4 4l16 16"/><path d="M8.5 18H17a3.5 3.5 0 0 0 1.2-6.8A6 6 0 0 0 10 7.2"/><path d="M6.2 9.6A4.5 4.5 0 0 0 7 18"/></symbol>
+<symbol id="g-up" viewBox="0 0 24 24"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/></symbol>
+<symbol id="g-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="x-wordmark" viewBox="0 -72.2 261.5 72.8"><path d="M8.6 -69.1L29.0 -69.1Q43.2 -69.1 49.8 -67.1Q57.4 -64.7 61.5 -61.1Q65.6 -57.4 68.0 -53.5Q72.8 -45.6 72.8 -35.4Q72.8 -19.5 61.3 -9.7Q53.2 -2.6 42.2 -0.9Q36.1 0.0 25.1 0.0L8.6 0.0L8.6 -69.1ZM33.5 -4.1Q34.3 -4.0 35.0 -4.0L36.1 -4.0Q49.3 -4.0 58.7 -12.3Q68.6 -20.9 68.6 -35.4Q68.6 -44.4 64.3 -51.7Q58.0 -62.3 44.3 -64.6Q39.9 -65.3 33.5 -65.4L33.5 -4.1ZM92.9 -69.1L117.8 -69.1L117.8 0.0L92.9 0.0L92.9 -69.1ZM154.4 -8.7Q145.4 -8.7 142.2 -8.8L140.8 -5.5Q140.1 -4.1 139.6 -2.5Q138.5 0.5 136.5 0.5Q135.5 0.5 134.9 -0.0Q134.4 -0.6 134.4 -1.3Q134.4 -2.3 135.3 -3.7Q136.8 -5.7 138.2 -9.0Q134.0 -9.4 134.0 -11.5Q134.0 -13.5 136.4 -13.5Q137.8 -13.5 139.8 -13.0L164.1 -72.2L197.5 0.0L172.1 0.0L168.1 -8.7L154.4 -8.7ZM143.7 -12.6Q148.4 -12.3 152.1 -12.3L166.4 -12.3L154.2 -38.6L143.7 -12.6ZM258.2 -4.4Q260.8 -4.4 260.8 -2.2Q260.8 -1.4 259.7 -0.7Q258.7 0.0 256.0 0.0L216.3 0.0L216.3 -69.1L241.2 -69.1L241.2 -3.2L250.4 -3.2Q253.4 -3.2 255.7 -3.8Q257.9 -4.4 258.2 -4.4Z"/></symbol>
+</defs></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><pattern id="x-static" width="4" height="4" patternUnits="userSpaceOnUse"><path d="M0 4 4 0" stroke="currentColor" stroke-width=".6" opacity=".25"/></pattern></defs></svg>
+<header class="station">
+  <a class="brand" href="repertory.html" aria-label="Dial, AM 514 kHz"><svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z"/><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145"/><path class="live" d="M20 94 L100 94"/></svg><svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark"/></svg><span class="freq">AM <span class="num">514</span> kHz</span></a>
+  <nav class="tabs" aria-label="Rooms"><a href="repertory.html">Repertory<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html">Broadcast<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html" aria-current="page">Studio<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html">Seal<span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
+  <div class="right"><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a><button class="keycap" type="button" data-open-shortcuts aria-label="Keyboard shortcuts">?</button></div>
+</header>
+<div class="phone-head"><svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z"/><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145"/><path class="live" d="M20 94 L100 94"/></svg><svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark"/></svg><span class="freq">AM <span class="num">514</span> kHz</span><a class="sealpip" href="seal.html"><span class="pip eye" aria-hidden="true"></span>Sealed</a></div>
+<main class="room studio" id="main">
+  <!-- ======================= DESKTOP AND TABLET ======================= -->
+  <div class="prodbar" data-not="first-run structuring import-error">
+    <div>
+      <h1>Pride and Prejudice, Chapter I</h1>
+      <p class="sub">pride-and-prejudice-ch1.txt · <span data-words>847</span> words · <span data-ncues>64</span> cues · sealed in this tab</p>
+    </div>
+    <div class="chips" id="chips" aria-label="Production status"></div>
+    <div class="acts">
+      <button class="btn quiet" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-lock"/></svg>Keep</button>
+      <button class="btn" type="button" id="hdr-export">Export</button>
+    </div>
+  </div>
+
+  <div class="console" data-not="first-run structuring import-error">
+    <section class="pane manuscript" aria-labelledby="ms-h">
+      <div class="pane-title"><h2 id="ms-h">Manuscript</h2><span class="num">verbatim</span></div>
+      <div class="ms" id="ms" lang="en"></div>
+    </section>
+
+    <section class="pane center" aria-label="Tuning Dial and cue sheet">
+      <div class="tuning" aria-labelledby="td-h">
+        <div class="head"><h2 id="td-h">Tuning Dial</h2><span class="num" data-window>00:00 to 01:00</span></div>
+        <div data-not="warming">
+          <svg class="tdial" id="tdial" role="img" aria-label="The chapter along time: cues by register, the render head and the play needle."></svg>
+          <div class="readout" data-not="slow exported keep"><span class="lamp" aria-hidden="true"></span><span>Rendered <b><span class="num">41</span> of <span class="num" data-ncues>64</span></b> cues</span><span><span class="num">1.8×</span> real time on this device (WebGPU)</span><span>about <span class="num">1</span> min left</span></div>
+          <div class="readout" data-when="slow"><span class="lamp" aria-hidden="true"></span><span>Rendered <b><span class="num">41</span> of <span class="num" data-ncues>64</span></b></span><span>This computer renders at <span class="num">0.7×</span> real time: no WebGPU here, so the processor does the work. About <span class="num">8</span> min for this chapter. Keep editing while it renders.</span></div>
+          <div class="readout" data-when="exported keep"><span class="pip eye" aria-hidden="true"></span><span>Rendered, all <span class="num" data-ncues>64</span> cues. Loudness in spec: voice <span class="num">-20.6</span> dBFS, peaks <span class="num">-4.1</span> dBFS.</span></div>
+          <div class="tlegend"><span><i style="background:var(--color-register-telling)"></i>Telling</span><span><i style="background:var(--color-register-speaking)"></i>Speaking</span><span><i style="background:var(--color-register-letter)"></i>Letter or verse</span><span><i class="h"></i>Speaker unresolved: narrator's voice</span><span><i style="background:var(--color-ochre);width:6px;border-radius:50%"></i>Correction to review</span></div>
+        </div>
+        <div data-when="warming" role="status" style="display:grid;gap:10px;padding:18px 0 8px">
+          <div style="display:flex;align-items:center;gap:14px"><svg class="standing" viewBox="0 0 120 36" aria-hidden="true"><path class="n2" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/><path class="n1" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/></svg><p>Warming the voices: <span class="num">61.0</span> of <span class="num">115.6</span> MB</p></div>
+          <p class="note">The voice model, its runtime and the three voices this chapter casts download once from dial.voidvision.org, then stay on this device. You can read the Direction report and set overrides meanwhile.</p>
+        </div>
+      </div>
+      <div class="pane-title"><h2>Cue sheet</h2><span class="num"><span data-ncues>64</span> cues · <span data-dur>05:54</span></span></div>
+      <table class="cues" id="cues"><thead><tr><th>Cue</th><th>Start</th><th>Voice</th><th>Register</th><th>Text</th><th style="text-align:right">Pause</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <aside class="pane inspector" aria-label="Inspector">
+      <div class="tabs2" role="tablist">
+        <button role="tab" data-tab="cue" aria-selected="true">Cue</button>
+        <button role="tab" data-tab="voices" aria-selected="false">Voices</button>
+        <button role="tab" data-tab="corrections" aria-selected="false">Corrections <span class="pip ochre" aria-hidden="true"></span></button>
+        <button role="tab" data-tab="export" aria-selected="false">Export <span class="pip ochre" aria-hidden="true" data-not="exported keep"></span></button>
+      </div>
+
+      <div class="insp" data-tab-panel="cue">
+        <p class="eyebrow">Cue <span class="num" data-selno>7</span> · <span class="num" data-selt>00:21.4</span></p>
+        <p class="q" data-selq></p>
+        <p class="src">Characters <span data-span></span> of the source, verbatim</p>
+        <dl class="report">
+          <div><dt>Register</dt><dd>Speaking<span class="rule">Rule: text inside quotation marks is dialogue.</span></dd></div>
+          <div><dt>Speaker</dt><dd class="unres">Unresolved<span class="rule" style="font-style:normal">Rule: the speech tag's subject is a pronoun (&ldquo;returned she&rdquo;). Dial never guesses who a pronoun means.</span></dd></div>
+          <div><dt>Voice</dt><dd>Emma, the narrator<span class="rule">Rule: an unresolved turn falls back to the narrator's voice.</span></dd></div>
+          <div><dt>Pause after</dt><dd><span class="num">0.15</span> s<span class="rule">Rule: a comma closing the quotation, from the punctuation table.</span></dd></div>
+        </dl>
+        <h3>Your override</h3>
+        <p class="note" style="margin-bottom:12px">Overrides stay in this tab, and in your Keep file if you keep one. They are the only direction a production has.</p>
+        <div class="field"><label for="ov-sp">Speaker</label><select class="in" id="ov-sp"><option>Unresolved (narrator's voice)</option><option selected>his lady</option><option>his wife</option><option>Mr. Bennet</option><option>Name a speaker</option></select></div>
+        <div class="field"><span class="lab">Apply to</span>
+          <label class="radio"><input type="radio" name="ov-to">This cue only</label>
+          <label class="radio"><input type="radio" name="ov-to" checked>This turn: cues <span class="num" data-ref="sel">7</span> and <span class="num" data-ref="sel2">9</span></label>
+        </div>
+        <div class="field"><label for="ov-p">Pause after, in seconds</label><input class="in num" id="ov-p" value="0.15" inputmode="decimal"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button">Apply override</button><button class="btn quiet" type="button">Reset to the engine</button></div>
+      </div>
+
+      <div class="insp" data-tab-panel="voices" hidden>
+        <h3>Casting</h3>
+        <p class="note">Dial casts speakers in the order they first speak. It never infers gender or character from a name. Change any line here; the change stays in this tab.</p>
+        <table class="cast" style="margin:10px 0 18px"><thead><tr><th>In the text</th><th>Engine</th><th>Yours</th></tr></thead><tbody>
+          <tr><td>Narrator</td><td>Emma</td><td class="muted">none</td></tr>
+          <tr><td>&ldquo;his lady&rdquo;, first at cue <span class="num" data-ref="lady">3</span></td><td>Lewis</td><td>Isabella <span class="yours">yours</span></td></tr>
+          <tr><td>&ldquo;his wife&rdquo;, first at cue <span class="num" data-ref="wife">15</span></td><td>Isabella</td><td class="muted">none</td></tr>
+          <tr><td>Mr. Bennet, named by you</td><td class="muted">none</td><td>George <span class="yours">yours</span></td></tr>
+        </tbody></table>
+        <h3>Voice palette</h3>
+        <p class="note">Six voices, the same for every production.</p>
+        <div class="voice-row"><div><b>Emma</b><br><span>Narrator in this production</span></div><button class="btn quiet" type="button" style="min-height:36px">Hear</button></div>
+        <div class="voice-row"><div><b>Isabella</b><br><span>his lady, his wife</span></div><button class="btn quiet" type="button" style="min-height:36px">Hear</button></div>
+        <div class="voice-row"><div><b>George</b><br><span>Mr. Bennet</span></div><button class="btn quiet" type="button" style="min-height:36px">Hear</button></div>
+        <div class="voice-row"><div><b>Lewis</b><br><span>Not cast</span></div><button class="btn quiet" type="button" style="min-height:36px">Hear</button></div>
+        <div class="voice-row"><div><b>Alice</b><br><span>Not cast</span></div><button class="btn quiet" type="button" style="min-height:36px">Hear</button></div>
+        <div class="voice-row"><div><b>Daniel</b><br><span>Not cast</span></div><button class="btn quiet" type="button" style="min-height:36px">Hear</button></div>
+      </div>
+
+      <div class="insp" data-tab-panel="corrections" hidden>
+        <h3>Corrections sheet</h3>
+        <p class="note">A correction changes only what the voice says. The manuscript and every cue keep the text exactly as written. Nothing applies until you accept it.</p>
+        <p class="pending" style="margin:12px 0 2px"><span class="pip ochre" aria-hidden="true"></span><span class="num">2</span> to review · <span class="num">1</span> accepted</p>
+        <div class="corr-row"><div class="pair"><span>Michaelmas</span><span class="arrow">spoken as</span><span>Mickle-mus</span></div><p class="why">A feast-day name the voice misreads. Found in the pronunciation lexicon. Cue <span class="num" data-ref="mich">19</span>.</p><div class="row"><button class="btn" type="button">Accept</button><button class="btn quiet" type="button">Keep as written</button><button class="btn text" type="button">Hear both</button></div></div>
+        <div class="corr-row"><div class="pair"><span>chaise</span><span class="arrow">spoken as</span><span>shays</span></div><p class="why">A French loanword the voice misreads. Found in the pronunciation lexicon. Cue <span class="num" data-ref="mich">19</span>.</p><div class="row"><button class="btn" type="button">Accept</button><button class="btn quiet" type="button">Keep as written</button><button class="btn text" type="button">Hear both</button></div></div>
+        <div class="corr-row"><div class="pair"><span>develope</span><span class="arrow">spoken as</span><span>develop</span></div><p class="why">A period spelling the voice reads as four syllables. Accepted; the page keeps Austen's spelling. Cue <span class="num" data-ref="dev">63</span>.</p><div class="row"><span class="pip eye" aria-hidden="true"></span><span class="note">Accepted</span><button class="btn text" type="button">Undo</button></div></div>
+      </div>
+
+      <div class="insp" data-tab-panel="export" hidden>
+        <div data-not="exported">
+        <h3>Rights</h3>
+        <p class="note">Required before each export. There is no default; choose the one that is true.</p>
+        <div class="stack" style="margin:10px 0 4px">
+          <label class="radio"><input type="radio" name="rights" data-r="own">I wrote this, or I hold the audio rights to it.</label>
+          <label class="radio"><input type="radio" name="rights" data-r="pd">It is public domain.</label>
+          <div class="field" data-when="keep" style="margin:0"><label for="src">Source</label><input class="in" id="src" value="Project Gutenberg eBook No. 1342"></div>
+        </div>
+        <p class="pending" data-not="keep"><span class="pip ochre" aria-hidden="true"></span>Not stated yet</p>
+        <div class="sect"><h4>Free trial</h4><p class="note">This chapter: <span class="num" data-words>847</span> words. The free trial covers one chapter of your own writing, up to <span class="num">8,000</span> words. Public-domain texts with a source are free at any length.</p></div>
+        <div class="sect"><h4>Written into the file</h4>
+          <dl class="label-dl">
+            <dt>Label</dt><dd>AI-voiced with Dial</dd>
+            <dt>Made</dt><dd><span class="num">26</span> September <span class="num">2026</span></dd>
+            <dt>Rights</dt><dd data-not="keep" class="muted">Not stated yet</dd><dd data-when="keep">Public domain. Source: Project Gutenberg eBook No. <span class="num">1342</span></dd>
+            <dt>Source text</dt><dd><span class="num">SHA-256 9c1e44a0 7b3d2f18 …</span>, computed on this device</dd>
+            <dt>Mark</dt><dd>An inaudible <span class="num">64</span>-bit mark: the Dial tag and a short fingerprint of this text. It never contains who you are.</dd>
+          </dl></div>
+        <div class="sect"><h4>File</h4><p class="note">WAV · <span class="num">24</span> kHz mono · about <span class="num" data-size>17.0</span> MB. M4A and Opus come with the full engine.</p>
+          <button class="btn" type="button" disabled data-not="keep">Export chapter</button><button class="btn" type="button" data-when="keep">Export chapter</button>
+          <p class="note" data-when="keep"><span class="num">2</span> corrections are not reviewed, so the voice says those words as written. You can review them first or export now.</p>
+          <p class="note" data-not="keep">State the rights above, and let the render finish (<span class="num">41</span> of <span class="num" data-ncues>64</span> cues).</p></div>
+        <div class="sect"><h4>Keep</h4>
+          <p class="note">Closing this tab erases this production. Keep saves it on this device, encrypted with a passphrase you choose. Nothing is uploaded, and Dial cannot recover a forgotten passphrase.</p>
+          <div class="field" data-when="keep" style="margin:0"><label for="pp">Passphrase</label><input class="in" id="pp" type="password" value="lamplight over longbourn"></div>
+          <button class="btn quiet" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-lock"/></svg>Keep on this device</button>
+        </div>
+        </div>
+        <div data-when="exported" class="stack">
+          <div class="done-panel" role="status"><p style="display:flex;gap:8px;align-items:center"><span class="pip eye" aria-hidden="true"></span><b style="font-weight:600">Exported</b></p>
+            <p class="note" style="color:var(--color-cream)">pride-and-prejudice-chapter-i.wav, <span class="num" data-size>17.0</span> MB, is in your downloads.</p>
+            <p class="note">Its label reads: AI-voiced with Dial. Public domain, Project Gutenberg eBook No. <span class="num">1342</span>. <span class="num">26</span> September <span class="num">2026</span>.</p>
+            <a href="seal.html">Check it on the Seal</a></div>
+          <p class="note">This production is still sealed in this tab. Keep it, or it is erased when the tab closes.</p>
+          <button class="btn quiet" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-lock"/></svg>Keep on this device</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="import import-desk" data-when="first-run structuring import-error">
+    <div class="dropzone" data-when="first-run">
+      <h2>Bring a chapter</h2>
+      <p>Paste it, or drop a .txt or .docx file here. It is read in this tab and never uploaded.</p>
+      <div class="row"><button class="btn" type="button">Paste text</button><button class="btn quiet" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-imp"/></svg>Choose a file</button></div>
+      <p class="terms">Free: one chapter, up to <span class="num">8,000</span> words, and any public-domain text. Your whole book: <span class="num">$15</span> once, not on sale yet. Nothing is sent: check it on the <a href="seal.html">Seal</a>.</p>
+    </div>
+    <div class="dropzone" data-when="structuring" role="status">
+      <svg class="standing" viewBox="0 0 120 36" aria-hidden="true"><path class="n2" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/><path class="n1" d="M0 18.00 L2 20.03 L4 22.02 L6 23.90 L8 25.64 L10 27.19 L12 28.52 L14 29.58 L16 30.36 L18 30.84 L20 31.00 L22 30.84 L24 30.36 L26 29.58 L28 28.52 L30 27.19 L32 25.64 L34 23.90 L36 22.02 L38 20.03 L40 18.00 L42 15.97 L44 13.98 L46 12.10 L48 10.36 L50 8.81 L52 7.48 L54 6.42 L56 5.64 L58 5.16 L60 5.00 L62 5.16 L64 5.64 L66 6.42 L68 7.48 L70 8.81 L72 10.36 L74 12.10 L76 13.98 L78 15.97 L80 18.00 L82 20.03 L84 22.02 L86 23.90 L88 25.64 L90 27.19 L92 28.52 L94 29.58 L96 30.36 L98 30.84 L100 31.00 L102 30.84 L104 30.36 L106 29.58 L108 28.52 L110 27.19 L112 25.64 L114 23.90 L116 22.02 L118 20.03 L120 18.00"/></svg>
+      <h2>Reading the structure</h2>
+      <p>pride-and-prejudice-ch1.txt: <span class="num">34</span> paragraphs, <span class="num">28</span> with quotations, <span class="num">847</span> words. Dial reads the form of the text, never its meaning.</p>
+    </div>
+    <div class="dropzone" data-when="import-error" role="alert">
+      <h2>This file could not be read</h2>
+      <p>manuscript.pages is a Pages document. Dial reads .txt and .docx. In Pages, choose File, Export To, Word, then drop the .docx here.</p>
+      <div class="row"><button class="btn" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-imp"/></svg>Choose another file</button><button class="btn quiet" type="button">Paste text instead</button></div>
+    </div>
+  </div>
+
+  <div class="sheet-scrim sheet-desk" data-when="over-limit">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ol-h">
+      <h2 id="ol-h">This manuscript is longer than the free chapter</h2>
+      <p class="muted">manuscript.docx has <span class="num">41,260</span> words in <span class="num">12</span> chapters. The free trial covers one chapter of your own writing, up to <span class="num">8,000</span> words. Chapter <span class="num">1</span> (<span class="num">6,912</span> words) is ready to render now.</p>
+      <div class="price">
+        <p style="display:flex;align-items:baseline;gap:10px"><span class="amt">$15</span><span class="muted">once, no subscription</span></p>
+        <ul><li>Your own books, any length</li><li>Cast voices and Keep</li><li>The Repertory's motif palettes</li></ul>
+        <button class="btn" type="button" disabled>Not on sale yet</button>
+        <p class="note">The Studio's terms, rights statement and file labels are with a lawyer before Dial takes money. Until then, the free chapter works in full and public-domain texts stay free. When it opens, payment goes through Polar, and the licence is checked once and then works offline.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button">Render chapter 1 free</button><a class="btn text" href="#">Ask for an accessibility or student waiver</a></div>
+    </div>
+  </div>
+
+  <!-- ============================ PHONE ============================ -->
+  <div class="phone-studio">
+    <header><p class="eyebrow">Studio</p><h1>Hear your chapter</h1></header>
+
+    <section class="card" data-when="first-run structuring import-error">
+      <h2 data-when="first-run">Bring a chapter</h2>
+      <p class="muted" data-when="first-run">Paste it, or choose a .txt or .docx file. It is read on this phone and never uploaded.</p>
+      <h2 data-when="import-error">This file could not be read</h2>
+      <p class="muted" data-when="import-error">manuscript.pages is a Pages document. Dial reads .txt and .docx. Export it as Word from Pages, then choose it here.</p>
+      <p class="muted" data-when="structuring">Reading the structure of pride-and-prejudice-ch1.txt.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap" data-not="structuring"><button class="btn" type="button">Paste text</button><button class="btn quiet" type="button">Choose a file</button></div>
+      <p class="note" data-when="first-run">Free: one chapter, up to <span class="num">8,000</span> words, and any public-domain text. Your whole book: <span class="num">$15</span> once, not on sale yet. Nothing is sent: check it on the <a href="seal.html">Seal</a>.</p>
+    </section>
+
+    <section class="card" data-not="first-run structuring import-error over-limit">
+      <p class="eyebrow">This chapter</p>
+      <h2>Pride and Prejudice, Chapter I</h2>
+      <p class="kv">pride-and-prejudice-ch1.txt · <span data-words>847</span> words · 3 voices · <span data-dur>05:54</span></p>
+      <svg class="mini-dial" id="minidial" aria-hidden="true"></svg>
+      <p class="kv" data-not="exported"><span class="lamp" aria-hidden="true" style="width:8px;height:8px;margin-right:6px"></span>Trial render: <span class="num">41</span> of <span class="num" data-ncues>64</span> cues, <span class="num">0.9×</span> real time on this phone</p>
+      <div class="meter-line" aria-hidden="true" data-not="exported"><i style="width:64%"></i></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="button"><svg class="glyph" aria-hidden="true"><use href="#g-play"/></svg>Play the trial</button></div>
+    </section>
+
+    <section class="card" data-not="first-run structuring import-error over-limit exported">
+      <h2>Rights</h2>
+      <p class="note">Required before export. There is no default.</p>
+      <label class="radio"><input type="radio" name="prights">I wrote this, or I hold the audio rights to it.</label>
+      <label class="radio"><input type="radio" name="prights">It is public domain.</label>
+      <button class="btn" type="button" disabled>Export chapter</button>
+      <p class="note">State the rights, and let the trial render finish.</p>
+    </section>
+
+    <section class="card" data-when="exported" role="status">
+      <h2>Exported</h2>
+      <p class="muted">pride-and-prejudice-chapter-i.wav, <span class="num">16.9</span> MB, is in your downloads. Its label reads: AI-voiced with Dial. Public domain, Project Gutenberg eBook No. <span class="num">1342</span>.</p>
+    </section>
+
+    <section class="card" data-when="over-limit">
+      <h2>Longer than the free chapter</h2>
+      <p class="muted">manuscript.docx has <span class="num">41,260</span> words. The free trial covers one chapter, up to <span class="num">8,000</span> words; chapter <span class="num">1</span> is ready now.</p>
+      <p><span class="num">$15</span> once for the Studio. <span class="muted">Not on sale yet: its terms are with a lawyer first.</span></p>
+      <button class="btn" type="button">Render chapter 1 free</button>
+    </section>
+
+    <p class="desk-note"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Changing voices, pauses and registers cue by cue needs a larger screen. On a computer, import the same file and the Studio opens in full. On a phone, Dial imports, plays a trial and exports.</span></p>
+  </div>
+</main>
+<nav class="tabbar" aria-label="Rooms"><a href="repertory.html"><svg class="glyph" aria-hidden="true"><use href="#g-repertory"/></svg><span>Repertory</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="broadcast.html"><svg class="glyph" aria-hidden="true"><use href="#g-broadcast"/></svg><span>Broadcast</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="studio.html" aria-current="page"><svg class="glyph" aria-hidden="true"><use href="#g-studio"/></svg><span>Studio</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a><a href="seal.html"><svg class="glyph" aria-hidden="true"><use href="#g-seal"/></svg><span>Seal</span><span class="wave-underline" aria-hidden="true"><svg viewBox="0 0 80 8"><path d="M0 4.00 L1 5.18 L2 6.10 L3 6.57 L4 6.47 L5 5.84 L6 4.80 L7 3.59 L8 2.47 L9 1.68 L10 1.40 L11 1.68 L12 2.47 L13 3.59 L14 4.80 L15 5.84 L16 6.47 L17 6.57 L18 6.10 L19 5.18 L20 4.00 L21 2.82 L22 1.90 L23 1.43 L24 1.53 L25 2.16 L26 3.20 L27 4.41 L28 5.53 L29 6.32 L30 6.60 L31 6.32 L32 5.53 L33 4.41 L34 3.20 L35 2.16 L36 1.53 L37 1.43 L38 1.90 L39 2.82 L40 4.00 L41 5.18 L42 6.10 L43 6.57 L44 6.47 L45 5.84 L46 4.80 L47 3.59 L48 2.47 L49 1.68 L50 1.40 L51 1.68 L52 2.47 L53 3.59 L54 4.81 L55 5.84 L56 6.47 L57 6.57 L58 6.10 L59 5.18 L60 4.00 L61 2.82 L62 1.90 L63 1.43 L64 1.53 L65 2.16 L66 3.20 L67 4.41 L68 5.53 L69 6.32 L70 6.60 L71 6.32 L72 5.53 L73 4.40 L74 3.19 L75 2.16 L76 1.53 L77 1.43 L78 1.90 L79 2.82 L80 4.00"/></svg></span></a></nav>
+<footer class="playerbar" aria-label="Player" data-not="first-run structuring import-error">
+  <div class="now"><span class="lamp" aria-hidden="true"></span><div><b>Pride and Prejudice, Chapter I</b><span>Trial render · cue <span class="num" data-ref="sel">7</span> of <span class="num" data-ncues>64</span></span></div></div>
+  <div class="transport">
+    <button class="btn icon" type="button" aria-label="Previous cue ([)"><svg class="glyph" aria-hidden="true"><use href="#g-prev"/></svg></button>
+    <button class="btn icon" type="button" aria-label="Back 10 seconds (J)"><svg class="glyph" aria-hidden="true"><use href="#g-back"/></svg></button>
+    <button class="btn icon play" type="button" aria-label="Pause (space)"><svg class="glyph" aria-hidden="true"><use href="#g-pause"/></svg></button>
+    <button class="btn icon" type="button" aria-label="Forward 10 seconds (L)"><svg class="glyph" aria-hidden="true"><use href="#g-fwd"/></svg></button>
+    <button class="btn icon" type="button" aria-label="Next cue (])"><svg class="glyph" aria-hidden="true"><use href="#g-next"/></svg></button>
+  </div>
+  <div class="ribbon-wrap"><svg class="ribbon" id="sribbon" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+  <span class="timecode"><b data-selt2>00:21</b> / <span data-dur>05:54</span></span>
+</footer>
+<div class="dialog-scrim" id="shortcuts" hidden><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="kb-h">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h2 id="kb-h" style="font-size:1.4rem">Keyboard</h2><button class="btn icon" type="button" data-close aria-label="Close"><svg class="glyph" aria-hidden="true"><use href="#g-x"/></svg></button></div>
+  <dl class="keys">
+    <dt><span class="keycap">Space</span></dt><dd>Play or pause</dd>
+    <dt><span class="keycap">J</span></dt><dd>Back 10 seconds. Press again to scrub faster.</dd>
+    <dt><span class="keycap">K</span></dt><dd>Stop scrubbing and pause</dd>
+    <dt><span class="keycap">L</span></dt><dd>Forward 10 seconds. Press again to scrub faster.</dd>
+    <dt><span class="keycap">[</span><span class="keycap">]</span></dt><dd>Previous or next line. In the Studio, previous or next cue.</dd>
+    <dt><span class="keycap">/</span></dt><dd>Search the Repertory, the script or the manuscript</dd>
+    <dt><span class="keycap">?</span></dt><dd>Show this list</dd>
+    <dt><span class="keycap">Esc</span></dt><dd>Close a sheet or dialog</dd>
+  </dl></div></div>
+<script>
+window.MOCK_STATES=[["first-run","First visit: import"],["structuring","Reading the structure"],["import-error","Import error"],["workspace","Console: Direction report"],["voices","Voices and casting"],["corrections","Corrections sheet"],["export","Export: rights not stated"],["keep","Export: ready, Keep"],["exported","Exported"],["warming","Warming the voices"],["slow","Device renders slowly"],["over-limit","Longer than the free chapter"]];
+(()=>{
+const P=["It is a truth universally acknowledged, that a single man in possession of a good fortune must be in want of a wife.","However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered as the rightful property of some one or other of their daughters.","“My dear Mr. Bennet,” said his lady to him one day, “have you heard that Netherfield Park is let at last?”","Mr. Bennet replied that he had not.","“But it is,” returned she; “for Mrs. Long has just been here, and she told me all about it.”","Mr. Bennet made no answer.","“Do not you want to know who has taken it?” cried his wife, impatiently.","“_You_ want to tell me, and I have no objection to hearing it.”","This was invitation enough.","“Why, my dear, you must know, Mrs. Long says that Netherfield is taken by a young man of large fortune from the north of England; that he came down on Monday in a chaise and four to see the place, and was so much delighted with it that he agreed with Mr. Morris immediately; that he is to take possession before Michaelmas, and some of his servants are to be in the house by the end of next week.”","“What is his name?”","“Bingley.”","“Is he married or single?”","“Oh, single, my dear, to be sure! A single man of large fortune; four or five thousand a year. What a fine thing for our girls!”","“How so? how can it affect them?”","“My dear Mr. Bennet,” replied his wife, “how can you be so tiresome? You must know that I am thinking of his marrying one of them.”","“Is that his design in settling here?”","“Design? Nonsense, how can you talk so! But it is very likely that he _may_ fall in love with one of them, and therefore you must visit him as soon as he comes.”","“I see no occasion for that. You and the girls may go--or you may send them by themselves, which perhaps will be still better; for as you are as handsome as any of them, Mr. Bingley might like you the best of the party.”","“My dear, you flatter me. I certainly _have_ had my share of beauty, but I do not pretend to be anything extraordinary now. When a woman has five grown-up daughters, she ought to give over thinking of her own beauty.”","“In such cases, a woman has not often much beauty to think of.”","“But, my dear, you must indeed go and see Mr. Bingley when he comes into the neighbourhood.”","“It is more than I engage for, I assure you.”","“But consider your daughters. Only think what an establishment it would be for one of them. Sir William and Lady Lucas are determined to go, merely on that account; for in general, you know, they visit no new comers. Indeed you must go, for it will be impossible for _us_ to visit him, if you do not.”","“You are over scrupulous, surely. I dare say Mr. Bingley will be very glad to see you; and I will send a few lines by you to assure him of my hearty consent to his marrying whichever he chooses of the girls--though I must throw in a good word for my little Lizzy.”","“I desire you will do no such thing. Lizzy is not a bit better than the others: and I am sure she is not half so handsome as Jane, nor half so good-humoured as Lydia. But you are always giving _her_ the preference.”","“They have none of them much to recommend them,” replied he: “they are all silly and ignorant like other girls; but Lizzy has something more of quickness than her sisters.”","“Mr. Bennet, how can you abuse your own children in such a way? You take delight in vexing me. You have no compassion on my poor nerves.”","“You mistake me, my dear. I have a high respect for your nerves. They are my old friends. I have heard you mention them with consideration these twenty years at least.”","“Ah, you do not know what I suffer.”","“But I hope you will get over it, and live to see many young men of four thousand a year come into the neighbourhood.”","“It will be no use to us, if twenty such should come, since you will not visit them.”","“Depend upon it, my dear, that when there are twenty, I will visit them all.”","Mr. Bennet was so odd a mixture of quick parts, sarcastic humour, reserve, and caprice, that the experience of three-and-twenty years had been insufficient to make his wife understand his character. _Her_ mind was less difficult to develope. She was a woman of mean understanding, little information, and uncertain temper. When she was discontented, she fancied herself nervous. The business of her life was to get her daughters married: its solace was visiting and news."];
+const R=155/60, cues=[]; let src=0;
+const nameOf=(m)=>m?m.toLowerCase():null;
+P.forEach((p,pi)=>{
+  const base=src; src+=p.length+2;
+  if(!p.includes("“")){ // narration: sentences
+    const parts=p.match(/(?:\bMrs?\.|[^.?!])+[.?!]+[”)]*\s*/g)||[p]; let off=0;
+    parts.forEach((s,i)=>{cues.push({t:s.trim(),reg:"telling",who:"narrator",pause:i===parts.length-1?0.6:0.3,p:pi,s:base+off});off+=s.length;});return;}
+  const parts=p.split(/(“[^”]*”)/).filter(x=>x.trim());
+  let tag=null;for(const x of parts)if(!x.startsWith("“")){const m=x.match(/\b(?:said|returned|cried|replied)\s+(his lady|his wife|she|he)\b/i)||x.match(/\b(she|he)\s+(?:said|replied)\b/i);if(m)tag=m[1].toLowerCase();}
+  const who=tag?(tag==="she"||tag==="he"?"pronoun":tag):"untagged";
+  let off=0;parts.forEach((x,i)=>{const q=x.startsWith("“");const at=p.indexOf(x,off);off=at+x.length;
+    cues.push({t:x.trim(),reg:q?"speaking":"telling",who:q?who:"narrator",tag:!q,pause:i===parts.length-1?0.6:(q&&/,”$/.test(x.trim())?0.15:0.3),p:pi,s:base+at});});
+});
+// casting: narrator Emma; speakers by first appearance; author overrides marked "yours"
+const engine={narrator:"Emma","his lady":"Lewis","his wife":"Isabella"};
+const yours={"his lady":"Isabella"};
+cues.forEach((c,i)=>{c.i=i+1;
+  c.voice=c.who in engine?engine[c.who]:"Emma";
+  if(yours[c.who]){c.voice=yours[c.who];c.mine=true;}
+  if(c.p===7&&c.reg==="speaking"){c.voice="George";c.mine=true;c.named="Mr. Bennet";}
+  c.dur=c.t.split(/\s+/).length/R;});
+let t=0;cues.forEach(c=>{c.start=t;t+=c.dur+c.pause;});const total=t;
+const fmt=(s,d)=>{const m=Math.floor(s/60),x=s-m*60;return String(m).padStart(2,"0")+":"+(d?x.toFixed(1).padStart(4,"0"):String(Math.floor(x)).padStart(2,"0"));};
+const sel=cues.find(c=>c.t.startsWith("“But it is"));const selNo=sel.i;
+let rendered=41; const played=sel.start+0.6;
+const refs={sel:selNo,sel2:selNo+2,lady:cues.find(c=>c.who==="his lady").i,wife:cues.find(c=>c.who==="his wife").i,mich:cues.find(c=>/Michaelmas/.test(c.t)).i,dev:cues.find(c=>/develope/.test(c.t)).i};
+document.querySelectorAll("[data-ref]").forEach(e=>e.textContent=refs[e.dataset.ref]);
+const words=P.join(" ").split(/\s+/).length;
+document.querySelectorAll("[data-ncues]").forEach(e=>e.textContent=cues.length);
+document.querySelectorAll("[data-words]").forEach(e=>e.textContent=words.toLocaleString("en"));
+document.querySelectorAll("[data-dur]").forEach(e=>e.textContent=fmt(total));
+document.querySelectorAll("[data-size]").forEach(e=>e.textContent=(total*24000*2/1e6).toFixed(1));
+document.querySelector("[data-selno]").textContent=selNo;
+document.querySelector("[data-selt]").textContent=fmt(sel.start,true);
+document.querySelector("[data-selt2]").textContent=fmt(sel.start);
+document.querySelector("[data-selq]").textContent=sel.t;
+document.querySelector("[data-span]").textContent=(sel.s+1).toLocaleString("en")+" to "+(sel.s+sel.t.length).toLocaleString("en");
+// manuscript
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const mark=s=>esc(s).replace(/_([^_]+)_/g,"<i>$1</i>").replace(/Michaelmas|chaise/g,m=>`<span class="corr" title="Correction to review">${m}</span>`).replace(/develope/g,m=>`<span class="corr ok" title="Correction accepted">${m}</span>`);
+const ms=document.getElementById("ms");let html="",cur=-1;
+cues.forEach(c=>{if(c.p!==cur){if(cur>=0)html+="</p>";html+="<p>";cur=c.p;}html+=`<span class="c${c.i===selNo?" sel live":""}" data-i="${c.i}">${mark(c.t)}</span> `;});ms.innerHTML=html+"</p>";
+// cue sheet
+const regName={telling:"Telling",speaking:"Speaking",letter:"Letter"};
+const tb=document.querySelector("#cues tbody");
+tb.innerHTML=cues.map(c=>`<tr class="${c.i===selNo?"sel":""}"><td class="n">${c.i}</td><td class="t">${fmt(c.start,true)}</td><td>${c.who==="pronoun"||c.who==="untagged"?(c.mine?"":'<span class="unres">'):""}${c.voice}${c.mine?'<span class="yours">yours</span>':""}${(c.who==="pronoun"||c.who==="untagged")&&!c.mine?"</span>":""}</td><td class="r"><span class="sw" style="background:var(--color-register-${c.reg})"></span>${regName[c.reg]}</td><td class="x">${mark(c.t)}</td><td class="p">${c.pause.toFixed(2)} s</td></tr>`).join("");
+// Tuning Dial: fixed pixels per second, so wider screens show more time (the 1920 rule)
+const PXS=10;
+function drawDial(){const svg=document.getElementById("tdial");const W=svg.clientWidth||600,H=svg.clientHeight||150;const span=W/PXS;const t0=0;
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);const mid=H*0.62,amp=H*0.3;let o="";
+  for(let s=0;s<=span;s++){const x=(s-t0)*PXS;const major=s%10===0;o+=`<line class="tick${major?"":" minor"}" x1="${x}" x2="${x}" y1="${major?14:18}" y2="${major?26:23}"/>`;if(major)o+=`<text class="tlab" x="${x+3}" y="11">${fmt(s)}</text>`;}
+  o+=`<line class="base" x1="0" x2="${W}" y1="${mid}" y2="${mid}"/>`;
+  const renderT=cues[rendered]?cues[rendered].start:total;
+  for(const c of cues){const x=c.start*PXS;if(x>W)break;const w=Math.max(1.5,c.dur*PXS-1);
+    const lvl=(c.reg==="speaking"?0.78:0.58)+((c.t.length*7)%11)/60;const h=amp*lvl;
+    if(c.start>=renderT){o+=`<rect class="unrendered" x="${x}" y="${mid-h}" width="${w}" height="${h*2}" rx="1.5"/>`;continue;}
+    const hollow=(c.reg==="speaking"&&(c.who==="pronoun"||c.who==="untagged")&&!c.mine);
+    o+=`<rect class="${c.reg}${hollow?" hollow":""}" x="${x}" y="${mid-h}" width="${w}" height="${h*2}" rx="1.5"/>`;
+    if(/Michaelmas|chaise/.test(c.t))o+=`<circle class="pin" cx="${x+w/2}" cy="${mid-amp*1.12}" r="3.5"/>`;
+    if(c.i===selNo)o+=`<rect class="sel" x="${x-2}" y="${mid-h-4}" width="${w+4}" height="${h*2+8}" rx="3"/>`;}
+  const rx=renderT*PXS;if(rx<W){o+=`<rect class="static" x="${rx}" y="30" width="${W-rx}" height="${H-34}" style="color:var(--color-cream)"/><line class="rh" x1="${rx}" x2="${rx}" y1="28" y2="${H-4}"/><text class="rhlab" x="${rx+5}" y="${H-6}">RENDERING</text>`;}
+  const nx=played*PXS;o+=`<line class="needle" x1="${nx}" x2="${nx}" y1="14" y2="${H-2}"/><circle class="needlecap" cx="${nx}" cy="14" r="3"/>`;
+  svg.innerHTML=o;document.querySelector("[data-window]").textContent=`${fmt(0)} to ${fmt(span)} · ${Math.round(span)} s in view`;}
+function drawRibbon(){const svg=document.getElementById("sribbon");const W=1000,H=30;svg.setAttribute("viewBox",`0 0 ${W} ${H}`);let o="";const renderT=cues[rendered]?cues[rendered].start:total;
+  for(const c of cues){const x=c.start/total*W,w=Math.max(.8,c.dur/total*W-.6);o+=`<rect class="seg${c.start>=renderT?" unrendered":c.start>played?" ahead":""}" x="${x}" y="9" width="${w}" height="12" rx="1"/>`;}
+  const rx=renderT/total*W;o+=`<line class="renderhead" x1="${rx}" x2="${rx}" y1="5" y2="25" vector-effect="non-scaling-stroke"/><line class="needle" x1="${played/total*W}" x2="${played/total*W}" y1="2" y2="28" vector-effect="non-scaling-stroke"/>`;svg.innerHTML=o;
+  const md=document.getElementById("minidial");if(md){md.setAttribute("viewBox",`0 0 ${W} 56`);md.setAttribute("preserveAspectRatio","none");let m="";for(const c of cues){const x=c.start/total*W,w=Math.max(.8,c.dur/total*W-.8);const h=c.reg==="speaking"?20:14;m+=`<rect x="${x}" y="${28-h}" width="${w}" height="${h*2}" rx="1" style="fill:${c.start>=renderT?"var(--color-cream-faint)":`var(--color-register-${c.reg})`}"/>`;}m+=`<line x1="${rx}" x2="${rx}" y1="0" y2="56" style="stroke:var(--color-tally)" vector-effect="non-scaling-stroke"/>`;md.innerHTML=m;}}
+window.addEventListener("resize",drawDial);
+const tabs=[...document.querySelectorAll("[data-tab]")];
+function showTab(n){tabs.forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===n)));document.querySelectorAll("[data-tab-panel]").forEach(p=>p.hidden=p.dataset.tabPanel!==n);}
+tabs.forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
+// One production model drives the header chips, the Export button and the Export panel,
+// so they can never disagree.
+const LAMP='<span class="lamp" aria-hidden="true"></span>',OCH='<span class="pip ochre" aria-hidden="true"></span>',EYE='<span class="pip eye" aria-hidden="true"></span>',OK='<svg class="glyph" aria-hidden="true" style="width:16px;height:16px"><use href="#g-check"/></svg>';
+function model(s){const ready=s==="keep",done=s==="exported";
+  return {rights:ready||done?"pd":"none",render:s==="warming"?"warming":(ready||done)?"done":"rendering",exported:done};}
+function paintChips(s){const m=model(s),n=cues.length;let c=`<button class="chip" type="button" data-go="corrections">${OCH}Corrections: <span class="num">2</span> ${m.exported?"not reviewed":"to review"}</button>`;
+  c+=m.rights==="pd"?`<button class="chip" type="button" data-go="export">${OK}Rights: public domain</button>`:`<button class="chip" type="button" data-go="export">${OCH}Rights: not stated</button>`;
+  c+=m.render==="warming"?`<button class="chip" type="button">${LAMP}Getting the voices ready</button>`:m.render==="done"?`<button class="chip" type="button">${EYE}Rendered: <span class="num">${n}</span> of <span class="num">${n}</span></button>`:`<button class="chip" type="button">${LAMP}Rendering: <span class="num">41</span> of <span class="num">${n}</span></button>`;
+  if(m.exported)c+=`<button class="chip" type="button">${EYE}Exported <span class="num">21:46</span></button>`;
+  document.getElementById("chips").innerHTML=c;
+  const b=document.getElementById("hdr-export");const can=m.rights!=="none"&&m.render==="done";b.disabled=!can;b.textContent=m.exported?"Export again":"Export";
+  b.title=can?"":(m.rights==="none"?"State the rights in the Export tab first":"Wait for the render to finish");
+  rendered=m.render==="done"?n:41;}
+document.getElementById("chips").addEventListener("click",e=>{const g=e.target.closest("[data-go]");if(g)showTab(g.dataset.go);});
+window.onMockState=(s)=>{paintChips(s);
+  showTab({voices:"voices",corrections:"corrections",export:"export",keep:"export",exported:"export"}[s]||"cue");
+  document.querySelectorAll('input[data-r="pd"]').forEach(r=>r.checked=(s==="keep"||s==="exported"));
+  document.body.dataset.onair=(s==="exported"||s==="first-run"||s==="import-error")?"false":"true";
+  document.querySelectorAll(".playerbar .lamp").forEach(l=>l.classList.toggle("off",document.body.dataset.onair==="false"));
+  if(s==="shortcuts")document.getElementById("shortcuts").hidden=false;
+  requestAnimationFrame(()=>{drawDial();drawRibbon();});};
+drawRibbon();
+})();
+</script>
+<script>
+(()=>{const C=[[18,0],[56,0],[54,1],[2,1],[35,0],[7,1],[12,1],[28,1],[20,1],[17,1],[3,1],[23,1],[2,1],[39,1],[4,1],[16,1],[3,1],[20,0],[56,0],[44,0],[26,0],[22,1],[2,1],[58,1],[3,1],[38,0],[27,1],[7,1],[13,0],[64,1],[1,1],[42,1],[1,1],[49,1],[14,1],[31,1],[3,1],[38,0],[31,0],[6,1],[10,1],[15,1],[22,1],[33,1],[5,1],[32,0],[30,0],[55,1],[4,1],[15,0],[55,0],[29,0],[41,0],[24,1],[13,1],[50,1],[3,1],[24,0],[55,1],[5,1],[51,0],[63,0],[63,1],[8,1],[35,1],[6,1],[16,0],[44,0],[25,1],[2,1],[42,1],[9,1],[33,0],[24,0],[8,0],[56,1],[4,1],[17,0],[43,0],[39,1],[2,1],[46,0],[50,1],[4,1],[46,0],[19,1],[4,1],[42,1],[5,0],[16,1],[29,0],[51,1],[6,1],[20,0],[44,0],[18,0],[47,0],[25,0],[45,0],[55,0],[35,1],[4,1],[37,1],[46,1],[10,0],[57,0],[33,0],[29,1],[4,1],[18,0],[6,1],[6,1],[12,0],[13,1],[2,1],[11,0],[40,1],[11,0]];const r=155/60;let t=0;const seg=C.map(([w,p])=>{const d=w/r,s=t;t+=d+(p?0.6:0.3);return [s,d];});
+window.drawRibbons=()=>{for(const svg of document.querySelectorAll("[data-ribbon]")){const played=+svg.dataset.played,ren=+svg.dataset.rendered,W=1000,H=30;svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+let o="";for(const [s,d] of seg){const x=s/t*W,w=Math.max(.8,d/t*W-.6);const cls=s>ren?"seg unrendered":s>played?"seg ahead":"seg";o+=`<rect class="${cls}" x="${x.toFixed(1)}" y="9" width="${w.toFixed(1)}" height="12" rx="1"/>`;}
+if(ren<t){const rx=ren/t*W;o+=`<line class="renderhead" x1="${rx}" x2="${rx}" y1="5" y2="25" vector-effect="non-scaling-stroke"/>`;}
+const nx=played/t*W;o+=`<line class="needle" x1="${nx}" x2="${nx}" y1="2" y2="28" vector-effect="non-scaling-stroke"/>`;svg.innerHTML=o;}};drawRibbons();})();
+// Shared mock behaviour: state switcher, theme, shortcuts, the living logo wave.
+(() => {
+  const q = new URLSearchParams(location.search);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches || q.has("still");
+  window.DIAL_REDUCED = reduce;
+  if (q.has("still")) document.documentElement.classList.add("still");
+  const states = window.MOCK_STATES || [];
+  const root = document.documentElement;
+  if (q.get("theme") === "daylight" || q.get("theme") === "night") root.dataset.theme = q.get("theme");
+
+  function setState(s) {
+    document.body.dataset.state = s;
+    for (const el of document.querySelectorAll("[data-when]")) el.hidden = !el.dataset.when.split(" ").includes(s);
+    for (const el of document.querySelectorAll("[data-not]")) el.hidden = el.dataset.not.split(" ").includes(s);
+    const sel = document.getElementById("mock-state");
+    if (sel) sel.value = s;
+    if (window.onMockState) window.onMockState(s);
+  }
+  window.setMockState = setState;
+
+  if (!q.has("clean") && states.length) {
+    const bar = document.createElement("div");
+    bar.className = "mockbar";
+    bar.setAttribute("aria-label", "Mock controls, not part of the design");
+    bar.innerHTML = `<span>Mock</span><select id="mock-state" aria-label="State">${states.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select><select id="mock-theme" aria-label="Theme"><option value="">Device theme</option><option value="night">Night</option><option value="daylight">Daylight</option></select>`;
+    document.body.append(bar);
+    bar.querySelector("#mock-state").addEventListener("change", (e) => setState(e.target.value));
+    const th = bar.querySelector("#mock-theme");
+    th.value = root.dataset.theme || "";
+    th.addEventListener("change", (e) => { if (e.target.value) root.dataset.theme = e.target.value; else delete root.dataset.theme; });
+  }
+  setState(q.get("state") || (states[0] && states[0][0]) || "default");
+
+  // Shortcuts: ? opens the map, Esc closes, / focuses search where the room has one.
+  const dlg = document.getElementById("shortcuts");
+  const open = () => { if (dlg) { dlg.hidden = false; dlg.querySelector("button")?.focus(); } };
+  const close = () => { if (dlg) dlg.hidden = true; };
+  document.querySelectorAll("[data-open-shortcuts]").forEach((b) => b.addEventListener("click", open));
+  dlg?.addEventListener("click", (e) => { if (e.target === dlg || e.target.closest("[data-close]")) close(); });
+  addEventListener("keydown", (e) => {
+    if (e.target.closest("input, textarea, select")) return;
+    if (e.key === "?") { e.preventDefault(); open(); }
+    else if (e.key === "Escape") close();
+    else if (e.key === "/") { const s = document.querySelector("[data-search]"); if (s) { e.preventDefault(); s.focus(); } }
+    else if (e.key === " " && window.onMockSpace) { e.preventDefault(); window.onMockSpace(); }
+  });
+  if (q.get("dialog") === "shortcuts") open();
+
+  // The living wave inside the arch: moves in the app, holds still with reduced motion.
+  const waves = [...document.querySelectorAll(".arch .live")];
+  function archWave(t) {
+    let d = "";
+    for (let i = 0; i <= 80; i++) {
+      const u = i / 80, x = 20 + i;
+      const e = Math.sin(Math.PI * u) * (0.62 + 0.38 * Math.sin(2 * Math.PI * u * 1.5 + 0.7 + t * 1.3));
+      const y = 94 + 22 * e * Math.sin(2 * Math.PI * 6 * u - t * 2.4);
+      d += (i ? " L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+    }
+    for (const w of waves) w.setAttribute("d", d);
+  }
+  archWave(1.1);
+  if (!reduce && waves.length) {
+    let last = 0;
+    const loop = (ms) => { if (ms - last > 50) { archWave(ms / 1000); last = ms; } requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+})();
+
+</script>
+</body>
+</html>
