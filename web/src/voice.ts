@@ -78,11 +78,13 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
   // so that fetch never happens. A cached voice that fails its pin is dropped.
   const voiceKey = (id: string) => hfVoiceKey(manifest.repo, id);
   const voices = await caches.open(KOKORO_VOICES_CACHE);
-  // A voice this build no longer pins (a cast changed) is never used again: free its space.
-  for (const stale of unpinnedVoiceKeys((await voices.keys()).map((r) => r.url), manifest.repo, manifest.voices)) await voices.delete(stale);
   const runtimeKey = runtimeCacheKey(manifest);
   const cast = [...new Set(wanted)];
   for (const id of cast) if (!Object.hasOwn(manifest.voices, id)) throw new Error(`voice: ${id} is not pinned`);
+  // Only once this manifest is known to pin every wanted voice (so it is not an
+  // older one that would fail anyway): a voice it does not pin is never used
+  // again, so free its space.
+  for (const stale of unpinnedVoiceKeys((await voices.keys()).map((r) => r.url), manifest.repo, manifest.voices)) await voices.delete(stale);
   const heldVoices = new Set<string>();
   for (const id of cast) {
     if (await dropIfUnpinned(voices, voiceKey(id), manifest.voices[id]!)) heldVoices.add(id);

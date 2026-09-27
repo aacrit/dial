@@ -3,7 +3,7 @@
 // (am_michael, af_heart). The rules are in web/src/engine/cast.ts's header.
 
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -255,9 +255,9 @@ describe("minor parts share voices by colouring the alternation graph", () => {
     expect(pairs).toBe(13);
     const used = new Set([...got.values()].map((c) => c.voice));
     expect([...used].sort()).toEqual(["af_alloy", "af_aoede", "af_bella", "af_kore", "af_nova", "af_sarah", "am_fenrir", "am_puck"]);
-    for (const c of got.values()) {
+    for (const [name, c] of got) {
       expect(c.reason.clash).toBeUndefined();
-      for (const other of c.reason.sharedWith) expect(alt.get([c.reason.sharedWith[0]!, other].sort().join("\u0000")) ?? 0).toBe(0);
+      for (const other of c.reason.sharedWith) expect(alt.get([name, other].sort().join("\u0000")) ?? 0, `${name} ${other}`).toBe(0);
     }
     // The minor parts (under 2%) are among the sharers, and none drops below the grade filter.
     const minor = [...got].filter(([, c]) => c.reason.minor);
@@ -424,13 +424,25 @@ describe("a voice no longer cast leaves the device", () => {
 });
 
 describe("the page ships only what casting reads of the voice table", () => {
-  it("the built scripts hold the projected fields and none of the measured table's others", async () => {
-    const { CAST_FIELDS, projectVoices } = await import("../scripts/lib/voice-table.mjs");
+  it("the virtual module the build serves holds the projected fields and none of the table's others", async () => {
+    const { CAST_FIELDS, projectVoices, voiceTable } = await import("../scripts/lib/voice-table.mjs");
+    const plugin = voiceTable() as { resolveId(id: string): string | undefined; load(this: object, id: string): string | undefined };
+    const resolved = plugin.resolveId("virtual:dial-voice-table")!;
+    expect(resolved).toBeDefined();
+    expect(plugin.resolveId("./other")).toBeUndefined();
+    const code = plugin.load.call({}, resolved)!;
+    expect(code.startsWith("export const voices = ")).toBe(true);
+    const shipped = JSON.parse(code.slice("export const voices = ".length).trim().replace(/;$/, "")) as Record<string, unknown>[];
+    for (const row of shipped) expect(Object.keys(row)).toEqual(CAST_FIELDS);
+    expect(shipped.map((r) => r.id)).toEqual(TABLE.map((v) => v.id));
     const table = JSON.parse(readFileSync(path.join(root, "design/voices.json"), "utf8"));
-    const projected = projectVoices(table) as Record<string, unknown>[];
-    for (const row of projected) expect(Object.keys(row)).toEqual(CAST_FIELDS);
-    expect(projected.map((r) => r.id)).toEqual(TABLE.map((v) => v.id));
+    expect(shipped).toEqual(projectVoices(table));
+    for (const unused of ["loudness_dbfs", "pause_to_speech", "render_rtf", "file_sha256", "provenance", "hexgrad", "training_duration"]) expect(code, unused).not.toContain(unused);
+  });
+
+  it("the built scripts, where built, agree (npm run build first: the gate builds before it tests)", () => {
     const assets = path.join(root, "dist", "assets");
+    expect(existsSync(assets), "dist/assets is missing: run npm run build (the gate does) before this test").toBe(true);
     const js = readdirSync(assets).filter((f) => f.endsWith(".js")).map((f) => readFileSync(path.join(assets, f), "utf8")).join("\n");
     expect(js).toContain("wpm_as_played");
     for (const unused of ["loudness_dbfs", "pause_to_speech", "render_rtf", "measured_source_data", "training_duration"]) expect(js, unused).not.toContain(unused);
