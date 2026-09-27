@@ -89,6 +89,24 @@ export class Scheduler<H> {
     void this.feed();
   }
 
+  /**
+   * Lines 0 to n-1 are known by their lengths (from Dial's recording) but
+   * have no samples on this device; playback starts at line n, which is made
+   * next. Used when a recording this browser cannot decode is made on the
+   * device from the line the listener had reached. Nothing is scheduled here.
+   */
+  seed(lines: readonly { speech: number; pause: number }[]): void {
+    lines.forEach((l, i) => {
+      this.speech[i] = l.speech;
+      this.lengths[i] = l.speech + l.pause;
+      this.at[i] = i === 0 ? 0 : this.at[i - 1]! + this.lengths[i - 1]!;
+    });
+    this.made = lines.length;
+    this.nextIndex = lines.length;
+    this.from = this.madeSeconds;
+    this.cued = lines.length;
+  }
+
   /** Every line is made. */
   renderFinished(): void {
     this.renderDone = true;

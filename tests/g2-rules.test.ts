@@ -89,7 +89,7 @@ describe("the meter never outlives the work", () => {
   });
 
   it("a failure hides the meter and marks the status as an error", () => {
-    const stopped = /const stopped = \(line: string\) => \{([\s\S]*?)\n {4}\};/.exec(main)?.[1];
+    const stopped = /const stopped = \(line: string, resumeAt\?: number\) => \{([\s\S]*?)\n {4}\};/.exec(main)?.[1];
     expect(stopped).toBeDefined();
     expect(stopped).toContain("meter.hidden = true");
     // Plain words, never the raw engine text, announced as an error.
@@ -144,7 +144,8 @@ describe("the lamp is lit only while a render or playback is live", () => {
     // every line made, all scheduled, none playing. Each source's own end reports to it; it calls complete once.
     expect(main).toMatch(/node\.onended = done;/);
     expect(main).toMatch(/complete: \(\) => ended\(\),/);
-    expect(block("ended")).toMatch(/if \(session === own && own\.live\) \{\s*offAir\(\);/);
+    // What was heard counts before it goes off air (CoS decision A).
+    expect(block("ended")).toMatch(/if \(session === own && own\.live\) \{\s*\/\/[^\n]*\n\s*own\.tally\(\);\s*offAir\(\);/);
     expect(main).toMatch(/msg\.type === "done"\) \{[\s\S]*?own\.renderDone = true;[\s\S]*?setLamp\(\);[\s\S]*?sched\.renderFinished\(\);/);
   });
 

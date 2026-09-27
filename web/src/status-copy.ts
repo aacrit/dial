@@ -85,14 +85,24 @@ export function progressLine(p: Progress & { prepared?: boolean }): string {
 
 // ---- Dial's prepared recording ---------------------------------------------
 // Played from files Dial made in advance and this site serves: nothing is
-// made on the device, and nothing is sent while it plays (the one count,
-// chapter_rendered, is sent once the listen has reached its end).
+// made on the device, and the words and the audio are never sent. The one
+// count, chapter_rendered, is sent once 80% of the work has been heard.
 
 /** Under Tune in, for a work whose prepared recording this page can play. */
 export const PLAYS_AT_ONCE = "Plays at once: Dial made this recording in advance.";
 
-/** The small secondary link beside it: today's render, made on the device. */
-export const MAKE_IT_HERE = "Or make it on this device (the voice downloads once)";
+/** The small secondary link beside it: today's render, made on the device. Once the voice could not be kept, it says it downloads each time. */
+export function makeItHere(voiceKept: boolean): string {
+  return voiceKept ? "Or make it on this device (the voice downloads once)" : "Or make it on this device (the voice downloads each time)";
+}
+
+/** Said when a part of Dial's recording cannot be decoded here, as the listen carries on made on the device from the line on air. */
+export const RECORDING_UNPLAYABLE = "This browser can't play Dial's recording, so it's being made on this device.";
+
+/** The button offered when Dial's recording stopped (a part did not arrive, twice): carry on from the line on air. */
+export function resumeAtLine(line: number): string {
+  return `Resume at line ${line}`;
+}
 
 /** "Jowett's": the translator's surname, possessive. */
 function translatorsWords(translator: string): string {
@@ -116,7 +126,7 @@ export function preparedTuningLine(title: string): string {
 
 /** The first line is playing. */
 export function preparedOnAirLine(translator: string): string {
-  return `Playing a recording Dial made in advance from ${translatorsWords(translator)} words. Nothing is made or sent while you listen.`;
+  return `Playing a recording Dial made in advance from ${translatorsWords(translator)} words. Nothing is made while you listen, and the words and the audio never leave this device.`;
 }
 
 /** A skip went past the end: the broadcast is over, but nothing was heard to the end. */

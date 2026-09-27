@@ -17,6 +17,9 @@ export const RECORDING_FORMAT = 1;
 /** The rate Kokoro speaks at; line lengths are whole samples at this rate. */
 export const RECORDING_RATE = 24000;
 
+/** The only names a part may have: the page fetches /recordings/<slug>/<file>, so nothing else is ever put in that path. */
+export const PART_FILE = /^part\d+\.webm$/;
+
 export interface RecordingPart {
   /** File name under /recordings/<slug>/. */
   file: string;
@@ -98,8 +101,10 @@ export async function expectedDigest(cues: readonly { start: number; end: number
  * and silences), with parts that tile the lines. Returns the reason it
  * cannot, or null when it can.
  */
-export function indexProblem(index: RecordingIndex, expected: { digest: string; lines: number; castVersion: string }): string | null {
+export function indexProblem(index: RecordingIndex, expected: { slug: string; digest: string; lines: number; castVersion: string }): string | null {
   if (index.format !== RECORDING_FORMAT) return `format ${index.format}`;
+  if (index.slug !== expected.slug) return `the index is for ${JSON.stringify(index.slug)}, not ${expected.slug}`;
+  if (index.sampleRate !== RECORDING_RATE) return `sample rate ${index.sampleRate}, not ${RECORDING_RATE}`;
   if (index.engine.cast !== expected.castVersion) return `cast engine ${index.engine.cast}, this page ${expected.castVersion}`;
   if (index.lines.length !== expected.lines) return `${index.lines.length} lines, the text has ${expected.lines}`;
   if (index.digest !== expected.digest) return "the lines differ from this text's";
@@ -111,6 +116,7 @@ export function indexProblem(index: RecordingIndex, expected: { digest: string; 
   if (at !== index.samples) return "the lines do not add up to the recording";
   let from = 0;
   for (const p of index.parts) {
+    if (!PART_FILE.test(p.file)) return `a part is named ${JSON.stringify(p.file)}`;
     if (p.from !== from || p.to <= p.from) return "the parts do not tile the lines";
     from = p.to;
   }

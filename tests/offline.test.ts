@@ -175,7 +175,7 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(store).toContain("const helper = \"serviceWorker\" in navigator ? navigator.serviceWorker.controller : null;");
     expect(store).toContain("resolve({ ok: e.data?.ok === true, key: typeof e.data?.key === \"string\" ? e.data.key : null });");
     expect(store).toContain('return askHelper("shell-status", timeoutMs);');
-    expect(read("web/src/offline/ui.ts")).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, hooks.recordingPins()));");
+    expect(read("web/src/offline/ui.ts")).toContain("const saved = savedState(plan, await shellState(), pageOfflineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, BUILT_RECORDINGS));");
   });
 
   it("the save row shows only where the helper also serves the render worker's requests", () => {
@@ -254,7 +254,7 @@ describe("save and remove", () => {
     expect(store).toMatch(/export async function removeWork\(m: VoiceManifest, slug: string, todayCasts: ReadonlyMap<string, readonly string\[\]>\): Promise<void> \{\s*const records = await savedVoiceRecords\(\);/);
     // Each refresh widens a saved work's record to cover today's cast.
     // (A work saved with its prepared recording records no voices, so its record is never widened.)
-    expect(read("web/src/offline/ui.ts")).toMatch(/if \(!rec\) await coverVoiceRecord\(slug, voices\);\s*const plan = rec \? await recordingPlanFor\(manifest, rec, textBytes\) : await planFor/);
+    expect(read("web/src/offline/ui.ts")).toMatch(/if \(!rec\) await coverVoiceRecord\(slug, voices\);\s*let plan: AnyPlan = rec \? await recordingPlanFor\(manifest, rec, textBytes\) : await planFor/);
   });
 
   it("recast: A saved with voice c, B saved before a recast that now needs c; removing A keeps c", () => {
@@ -503,7 +503,7 @@ describe("the offline-compatibility key", () => {
     // Matching data and helper.
     expect(savedState(plan, oldHelper, offlineKey(oldPins, "1"))).toBe("saved");
     const ui = read("web/src/offline/ui.ts");
-    expect(ui).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, hooks.recordingPins()));");
+    expect(ui).toContain("const saved = savedState(plan, await shellState(), pageOfflineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, BUILT_RECORDINGS));");
     expect(ui).not.toContain("PAGE_KEY");
   });
 

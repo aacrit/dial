@@ -21,12 +21,14 @@
     "@fontsource/fraunces": "5.3.0",
     "@fontsource/inter": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
-    "ffmpeg-static": "5.3.0",
     "typescript": "7.0.2",
     "vite": "8.3.1",
     "vitest": "5.0.1",
     "wrangler": "4.139.0",
     "yaml": "2.9.1"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "5.3.0"
   },
   "dependencies": {
     "kokoro-js": "1.2.1"

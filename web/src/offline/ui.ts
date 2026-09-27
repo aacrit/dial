@@ -27,10 +27,12 @@ import {
   savingLine,
   sizeLine,
   workVoices,
+  isSaved,
   type AnyPlan,
 } from "./plan";
 import { CAST_ENGINE_VERSION } from "../engine/cast-version";
-import { offlineKey, pinsOf } from "./routes";
+import { BUILT_RECORDINGS } from "../recording/source";
+import { pageOfflineKey, pinsOf } from "./routes";
 import {
   coverVoiceRecord,
   isPersisted,
@@ -40,6 +42,7 @@ import {
   recordingPlanFor,
   removeWork,
   requestPersistence,
+  savedVoiceRecords,
   saveRecording,
   saveWork,
   savedSlugs,
@@ -68,8 +71,6 @@ export interface OfflineHooks {
    * its prepared recording when this build has one that matches the text.
    */
   textOf(slug: string): { source: string; voices: readonly string[]; recording?: RecordingSave } | undefined;
-  /** The prepared recordings' pins (each work's index SHA-256), for the offline key. */
-  recordingPins(): Readonly<Record<string, string>>;
 }
 
 /** Splits "48.2 of 114.6 MB" into text and data-face numerals. */
@@ -204,9 +205,14 @@ export function mountOffline(hooks: OfflineHooks) {
       const rec = text.recording;
       // A saved work's record keeps covering today's cast (a recast may add a voice).
       if (!rec) await coverVoiceRecord(slug, voices);
-      const plan = rec ? await recordingPlanFor(manifest, rec, textBytes) : await planFor(manifest, slug, voices, textBytes);
-      // The key of the data actually saved: the manifests this page read (the site's online, the saved copies offline).
-      const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, hooks.recordingPins()));
+      let plan: AnyPlan = rec ? await recordingPlanFor(manifest, rec, textBytes) : await planFor(manifest, slug, voices, textBytes);
+      // A work saved before it had a recording, with its voice, is still saved: offline it plays made on the device from that voice.
+      if (rec && !isSaved(plan, true) && ((await savedVoiceRecords()).get(slug)?.length ?? 0) > 0) {
+        const withVoice = await planFor(manifest, slug, voices, textBytes);
+        if (isSaved(withVoice, true)) plan = withVoice;
+      }
+      // The key of the data actually saved: the voice manifest this page read (the site's online, the saved copy offline) and the recordings' pins compiled into this page.
+      const saved = savedState(plan, await shellState(), pageOfflineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, BUILT_RECORDINGS));
       if (saved === "older") states.set(slug, { kind: "older" });
       else if (saved === "saved" && "kind" in plan) {
         states.set(slug, { kind: "saved", bytes: recordingOnDevice(plan), persisted: await isPersisted(), recording: true });
@@ -269,11 +275,12 @@ export function mountOffline(hooks: OfflineHooks) {
   const remove_ = async (w: Work) => {
     if (!manifest) return;
     // Today's cast of every other work whose text is here: a voice one of them needs is never removed.
-    // A work that plays its prepared recording needs none.
+    // A work saved with its prepared recording (its record says no voices) needs none; one saved with its voice keeps it.
+    const records = await savedVoiceRecords();
     const today = new Map<string, readonly string[]>();
     for (const slug of await savedSlugs()) {
       const t = slug === w.slug ? undefined : hooks.textOf(slug);
-      if (t) today.set(slug, t.recording ? [] : workVoices(t.voices));
+      if (t) today.set(slug, records.get(slug)?.length === 0 ? [] : workVoices(t.voices));
     }
     await removeWork(manifest.manifest, w.slug, today);
     states.delete(w.slug);

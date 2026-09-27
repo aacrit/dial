@@ -53,13 +53,29 @@ export function wavName(station: string, title: string): string {
 /** Where a broadcast's audio comes from: Dial's prepared recording, or made on this device. */
 export type ListenKind = "prepared" | "made";
 
+/** Share of a work's running time a listener must hear for the listen to count (CoS decision A, 2026-09-27). */
+export const HEARD_SHARE = 0.8;
+
 /**
- * chapter_rendered, the success event, once per listen (founder, G2 round
- * 1): a work made on this device counts when its last line is made; Dial's
- * prepared recording counts when the listen reaches its end. Never both,
- * and never twice: `sent` is whether this listen has already counted.
+ * The seconds heard between two readings of the listener's place: the
+ * advance of their place in the work, but only where it moved as the audio
+ * clock did. A seek (a jump further than the clock moved, or backwards)
+ * and a pause (the clock stopped) add nothing. `slack` absorbs rounding
+ * between the clock and the schedule.
  */
-export function countsAsRendered(kind: ListenKind, moment: "all-made" | "ended", sent: boolean): boolean {
-  if (sent) return false;
-  return kind === "made" ? moment === "all-made" : moment === "ended";
+export function heardStep(prevPos: number, pos: number, clockDelta: number, slack = 0.25): number {
+  if (!(clockDelta > 0)) return 0;
+  const d = pos - prevPos;
+  if (!(d > 0) || d > clockDelta + slack) return 0;
+  return d;
+}
+
+/**
+ * chapter_rendered, the success event, once per listen, on either path
+ * (Dial's prepared recording or made on this device): when the listener
+ * has heard at least HEARD_SHARE of the work's running time, counted as
+ * audio played, never as audio seeked over. `sent`: this listen already counted.
+ */
+export function countsAsListen(heardSeconds: number, totalSeconds: number, sent: boolean): boolean {
+  return !sent && totalSeconds > 0 && heardSeconds >= HEARD_SHARE * totalSeconds;
 }

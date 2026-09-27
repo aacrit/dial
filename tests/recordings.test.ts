@@ -8,10 +8,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { WORKS } from "../web/src/catalogue";
-import { countsAsRendered } from "../web/src/broadcast-state";
+import { HEARD_SHARE, countsAsListen, heardStep } from "../web/src/broadcast-state";
 import { CAST_ENGINE_VERSION, tryCast } from "../web/src/engine/cast";
 import { segment } from "../web/src/engine/segment";
 import {
@@ -30,7 +30,7 @@ import {
   seekTo,
   type RecordingIndex,
 } from "../web/src/recording/timing";
-import { MAX_DECODED_PARTS, Recording, recordingPins } from "../web/src/recording/source";
+import { BUILT_RECORDINGS, MAX_DECODED_PARTS, PART_RETRY_MS, Recording, RecordingDecodeError, isDecodeError, playableRecordings, recordingPins } from "../web/src/recording/source";
 import {
   NO_VOICES,
   isSaved,
@@ -44,8 +44,8 @@ import {
   voicesToRemove,
   type RecordingPlan,
 } from "../web/src/offline/plan";
-import { offlineKey, route } from "../web/src/offline/routes";
-import { preparedDoneLine, preparedSkippedLine, preparedOnAirLine, progressLine, recordingStopLine, PLAYS_AT_ONCE, MAKE_IT_HERE } from "../web/src/status-copy";
+import { offlineKey, pageOfflineKey, route } from "../web/src/offline/routes";
+import { preparedDoneLine, preparedSkippedLine, preparedOnAirLine, progressLine, recordingStopLine, resumeAtLine, makeItHere, PLAYS_AT_ONCE, RECORDING_UNPLAYABLE } from "../web/src/status-copy";
 import { bookplateHtml, madeOn, recordingSentence } from "../web/src/render";
 import { assetUrl, indexMatchesLock, lockFrom, lockProblems, privateIndexEntries, releaseTag } from "../scripts/lib/recordings-lock.mjs";
 import { stage } from "../scripts/fetch-recordings.mjs";
@@ -137,7 +137,7 @@ describe("the timing index", () => {
 
   it("an index stands in for a render made here only when it is sound and its lines are the text's", () => {
     const idx = fakeIndex([{ speech: 100, pause: 10 }, { speech: 200, pause: 20 }], 1);
-    const want = { digest: "d", lines: 2, castVersion: CAST_ENGINE_VERSION };
+    const want = { slug: "cave", digest: "d", lines: 2, castVersion: CAST_ENGINE_VERSION };
     expect(indexProblem(idx, want)).toBeNull();
     expect(indexProblem({ ...idx, digest: "other" }, want)).toMatch(/differ/);
     expect(indexProblem(idx, { ...want, lines: 3 })).toMatch(/2 lines, the text has 3/);
@@ -147,6 +147,12 @@ describe("the timing index", () => {
     expect(indexProblem({ ...idx, lines: [idx.lines[0]!, { ...idx.lines[1]!, at: 5 }] }, want)).toMatch(/follow/);
     expect(indexProblem({ ...idx, parts: [idx.parts[0]!] }, want)).toMatch(/cover/);
     expect(indexProblem({ ...idx, parts: [idx.parts[1]!, idx.parts[0]!] }, want)).toMatch(/tile/);
+    // Validated before anything is fetched from it: the work it is for, its rate, and every part's name.
+    expect(indexProblem({ ...idx, slug: "crito" }, want)).toMatch(/for "crito", not cave/);
+    expect(indexProblem({ ...idx, sampleRate: 48000 }, want)).toMatch(/sample rate 48000/);
+    for (const bad of ["../index.json", "part0.webm?x", "part.webm", "PART0.webm", "part0.ogg"]) {
+      expect(indexProblem({ ...idx, parts: [{ ...idx.parts[0]!, file: bad }, idx.parts[1]!] }, want), bad).toMatch(/a part is named/);
+    }
     expect(recordingBytes(idx, 5)).toBe(25);
   });
 
@@ -191,6 +197,7 @@ describe("the prepared recording as a source of lines", () => {
         const b = partBytes(Number(file.match(/\d+/)![0]));
         return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
       },
+      0,
     );
 
   it("gives each line's speech as 16-bit samples at 24 kHz, from its own part, and fetches the next part ahead", async () => {
@@ -202,12 +209,19 @@ describe("the prepared recording as a source of lines", () => {
     expect(s).toBeInstanceOf(Int16Array);
     expect(s.length).toBe(2400);
     expect(s[0]).toBe(Math.trunc(0.2 * 0x7fff));
-    // Line 2 opens part 1, so part 2 is fetched ahead.
     await new Promise((r) => setTimeout(r, 0));
-    expect(fetched).toEqual(["part1.webm", "part2.webm"]);
+    expect(new Set(fetched)).toEqual(new Set(["part1.webm", "part2.webm"]));
     // A part is fetched once, however many of its lines are asked for.
     await rec.samples(3);
     expect(fetched.filter((f) => f === "part1.webm")).toHaveLength(1);
+  });
+
+  it("prefetches the next part from any line of a part, so a seek into the middle of one does not stall at the next", async () => {
+    const fetched: string[] = [];
+    // Line 5 is the second line of part 2: part 3 is asked for too.
+    await make(fetched).samples(5);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(new Set(fetched)).toEqual(new Set(["part2.webm", "part3.webm"]));
   });
 
   it("holds only a few decoded parts, so a long work never sits whole in memory", async () => {
@@ -216,35 +230,50 @@ describe("the prepared recording as a source of lines", () => {
     expect(rec.held).toBeLessThanOrEqual(MAX_DECODED_PARTS);
   });
 
-  it("refuses a part that does not match its pin, and asks again afresh after a failure", async () => {
+  it("a part that fails is tried once more before it fails; a part that does not match its pin never plays", async () => {
     const fetched: string[] = [];
     const bad = new Recording("cave", idx, { bytes: 1, sha256: "i" }, async () => new Float32Array(10), async (file) => {
       fetched.push(file);
       return new TextEncoder().encode("tampered").buffer;
-    });
+    }, 0);
     await expect(bad.samples(0)).rejects.toThrow(/did not match its pin/);
-    await expect(bad.samples(0)).rejects.toThrow(/did not match its pin/);
+    // Once and once more: two fetches of part 0 for one ask.
     expect(fetched.filter((f) => f === "part0.webm")).toHaveLength(2);
-    await expect(make([], true).samples(0)).rejects.toThrow(/decode/);
+    // A blip: the first fetch fails, the retry arrives, and the line plays.
+    let calls = 0;
+    const blip = new Recording("cave", idx, { bytes: 1, sha256: "i" }, async () => new Float32Array(2 * 2640), async (file) => {
+      if (file === "part0.webm" && calls++ === 0) throw new TypeError("Failed to fetch");
+      const b = partBytes(Number(file.match(/\d+/)![0]));
+      return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+    }, 0);
+    expect((await blip.samples(0)).length).toBe(2400);
+    expect(PART_RETRY_MS).toBeGreaterThan(0);
+  });
+
+  it("a part this browser cannot decode is a decode error, which the page answers by making the work here", async () => {
+    const err = await make([], true).samples(0).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(RecordingDecodeError);
+    expect(isDecodeError(err)).toBe(true);
+    expect(isDecodeError(new TypeError("Failed to fetch"))).toBe(false);
+    expect(isDecodeError(new Error("recording: a part did not match its pin"))).toBe(false);
+    expect(isDecodeError(new DOMException("x", "EncodingError"))).toBe(true);
   });
 
   it("the copy for a recording that stops names what happened and the fix", () => {
     expect(recordingStopLine("recording part part3.webm: 503")).toMatch(/could not send its recording/);
     expect(recordingStopLine("TypeError: Failed to fetch")).toMatch(/Check your connection/);
     expect(recordingStopLine("Error: recording: a part did not match its pin")).toMatch(/arrived damaged/);
-    expect(recordingStopLine("EncodingError: Unable to decode audio data")).toMatch(/make it on this device instead/i);
     expect(recordingStopLine("weird")).toMatch(/stopped unexpectedly/);
+    expect(resumeAtLine(64)).toBe("Resume at line 64");
   });
 });
 
 describe("a prepared recording plays through the one scheduler, and seeks across the whole work", () => {
-  it("every line goes to the scheduler at once, fully made, so a seek anywhere lands and the end fires once", async () => {
-    const idx = fakeIndex(Array.from({ length: 6 }, () => ({ speech: 24000 * 10, pause: 24000 })), 2);
-    const rec = new Recording("cave", idx, { bytes: 1, sha256: "i" }, async () => new Float32Array(0), async () => new ArrayBuffer(0));
+  const fake = () => {
     let now = 0;
     let completed = 0;
     const asked: number[] = [];
-    const sched = new Scheduler<number>(rec.lineCount, {
+    const sched = new Scheduler<number>(6, {
       now: () => now,
       samples: (i) => {
         asked.push(i);
@@ -254,6 +283,13 @@ describe("a prepared recording plays through the one scheduler, and seeks across
       stop: () => undefined,
       complete: () => completed++,
     });
+    return { sched, asked, completed: () => completed, tick: (s: number) => (now += s) };
+  };
+
+  it("every line goes to the scheduler at once, fully made, so a seek anywhere lands and the end fires once", async () => {
+    const idx = fakeIndex(Array.from({ length: 6 }, () => ({ speech: 24000 * 10, pause: 24000 })), 2);
+    const rec = new Recording("cave", idx, { bytes: 1, sha256: "i" }, async () => new Float32Array(0), async () => new ArrayBuffer(0));
+    const { sched, asked, completed } = fake();
     for (let i = 0; i < rec.lineCount; i++) sched.add(i, rec.line(i).speech, rec.line(i).pause);
     sched.renderFinished();
     expect(sched.madeSeconds).toBeCloseTo(66, 6);
@@ -265,55 +301,112 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     expect(asked).toContain(5);
     // Past the end, the listen is over, once.
     expect(sched.seek(1e6)!.finished).toBe(true);
-    expect(completed).toBe(1);
+    expect(completed()).toBe(1);
+  });
+
+  it("made here from a later line: the earlier lines keep the recording's lengths, and playback starts at that line", async () => {
+    const { sched, asked } = fake();
+    sched.seed([
+      { speech: 10, pause: 1 },
+      { speech: 10, pause: 1 },
+    ]);
+    expect(sched.made).toBe(2);
+    expect(sched.madeSeconds).toBeCloseTo(22, 6);
+    expect(sched.position()).toBeCloseTo(22, 6);
+    expect(asked).toEqual([]);
+    // Line 2 is made next, at its place in the work, and it is the first put on the clock.
+    sched.add(2, 10, 1);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(asked).toEqual([2]);
+    expect(sched.at[2]).toBeCloseTo(22, 6);
   });
 
   it("the page gives the scheduler every line of the recording, fully made, and its samples from the recording", () => {
     const main = read("web/src/main.ts");
-    expect(main).toMatch(/if \(rec\) \{[\s\S]*?for \(let i = 0; i < rec\.lineCount; i\+\+\) \{\s*const l = rec\.line\(i\);\s*sched\.add\(i, l\.speech, l\.pause\);[\s\S]*?own\.renderDone = true;[\s\S]*?sched\.renderFinished\(\);\s*return;/);
+    expect(main).toMatch(/if \(rec\) \{[\s\S]*?for \(let i = 0; i < rec\.lineCount; i\+\+\) \{\s*const l = rec\.line\(i\);\s*sched\.add\(i, l\.speech, l\.pause\);[\s\S]*?own\.renderDone = true;[\s\S]*?sched\.renderFinished\(\);/);
     expect(main).toMatch(/if \(rec\) \{\s*return rec\.samples\(i\)\.catch\(/);
     expect(main).toContain("let sampleRate = rec ? RECORDING_RATE : 24_000;");
     // One analyser for both paths: the wave, meters and eye read the recording like a render.
     expect(main.match(/audio\.createAnalyser\(\)/g)).toHaveLength(1);
   });
+
+  it("a decode failure carries the listen on, made here from the line on air, saying why; any other failure offers Resume at line N", () => {
+    const main = read("web/src/main.ts");
+    expect(main).toMatch(/if \(isDecodeError\(err\)\) makeHereInstead\(\);\s*\/\/[^\n]*\n\s*else stopped\(recordingStopLine\([^\n]*\), Math\.max\(0, own\.line\)\);/);
+    const instead = /const makeHereInstead = \(\) => \{([\s\S]*?)\n {4}\};/.exec(main)![1]!;
+    expect(instead).toContain("recordingsPlayable = false;");
+    expect(instead).toMatch(/start\(work, "made", \{ fromLine: at, lengths, heard: own\.heard, counted: own\.counted, reason: RECORDING_UNPLAYABLE \}\);/);
+    expect(RECORDING_UNPLAYABLE).toBe("This browser can't play Dial's recording, so it's being made on this device.");
+    // The reason leads what is said while the voice warms.
+    expect(main).toContain("announce(rec ? preparedTuningLine(work.title) : `${lead}Warming the voice.`);");
+    // The worker makes only the lines from there on; the partial file is never offered as the work.
+    expect(read("web/src/narrate.worker.ts")).toMatch(/for \(let i = from; i < cues\.length; i\+\+\)/);
+    expect(main).toContain("downloadUrl = own.file && !seeded.length ? URL.createObjectURL(own.file) : null;");
+    // Resume at line N carries the same listen on.
+    expect(main).toMatch(/resumeLine\.onclick = \(\) => start\(work, "prepared", \{ fromLine: resumeAt, heard, counted \}\);/);
+  });
 });
 
-describe("chapter_rendered: once per listen, on either path (founder, G2 round 1)", () => {
-  it("a work made here counts when its last line is made; a prepared recording when its listen reaches the end", () => {
-    expect(countsAsRendered("made", "all-made", false)).toBe(true);
-    expect(countsAsRendered("made", "ended", false)).toBe(false);
-    expect(countsAsRendered("prepared", "ended", false)).toBe(true);
-    expect(countsAsRendered("prepared", "all-made", false)).toBe(false);
-    // Never twice for one listen.
-    for (const k of ["made", "prepared"] as const) for (const m of ["all-made", "ended"] as const) expect(countsAsRendered(k, m, true)).toBe(false);
+describe("chapter_rendered: once per listen, when 80% is heard, on either path (CoS decision A)", () => {
+  it("only audio played counts as heard: a pause adds nothing, and a seek over the work adds nothing", () => {
+    // Playing: the place moves as the clock does.
+    expect(heardStep(10, 10.016, 0.016)).toBeCloseTo(0.016, 9);
+    // A hidden tab: no frames for a minute, and the minute was heard.
+    expect(heardStep(10, 70, 60)).toBe(60);
+    // Paused: the clock stopped.
+    expect(heardStep(10, 10, 0)).toBe(0);
+    // A seek forward: the place jumped further than the clock moved.
+    expect(heardStep(10, 400, 0.016)).toBe(0);
+    // A seek back.
+    expect(heardStep(400, 10, 0.016)).toBe(0);
+    // Waiting for a line still being made: the clock moves, the place does not.
+    expect(heardStep(10, 10, 3)).toBe(0);
   });
 
-  it("the page sends it only through count(), once per session, at done for a render and at ended for a recording", () => {
+  it("a listen counts at 80% of the running time, once; skipping to near the end is not a listen", () => {
+    expect(HEARD_SHARE).toBe(0.8);
+    expect(countsAsListen(799, 1000, false)).toBe(false);
+    expect(countsAsListen(800, 1000, false)).toBe(true);
+    expect(countsAsListen(1000, 1000, true)).toBe(false);
+    expect(countsAsListen(0, 0, false)).toBe(false);
+    // Skip to 95% and play to the end: 5% heard.
+    let heard = heardStep(0, 950, 0.016);
+    for (let t = 950; t < 1000; t += 0.5) heard += heardStep(t, t + 0.5, 0.5);
+    expect(heard).toBeCloseTo(50, 6);
+    expect(countsAsListen(heard, 1000, false)).toBe(false);
+  });
+
+  it("the page tallies what is heard every frame, every feeder tick, around each seek and at the end, and sends it once", () => {
     const main = read("web/src/main.ts");
-    // reportCoreSuccess is defined once and called only inside count().
+    // reportCoreSuccess is defined once and called only from the tally.
     expect(main.match(/reportCoreSuccess\(\)/g)).toHaveLength(2);
-    expect(main).toMatch(/const count = \(moment: "all-made" \| "ended"\) => \{\s*if \(!countsAsRendered\(own\.kind, moment, own\.counted\)\) return;\s*own\.counted = true;\s*reportCoreSuccess\(\);/);
-    expect(main).toMatch(/msg\.type === "done"\) \{[\s\S]*?count\("all-made"\);/);
-    expect(main).toMatch(/const ended = \(\) => \{[\s\S]*?if \(!own\.seeking\) count\("ended"\);/);
-    // A session starts uncounted, and knows which path it is on.
-    expect(main).toMatch(/kind: rec \? "prepared" : "made",\s*counted: false,\s*seeking: false,/);
-    // A skip past the end ends the broadcast but is not a listen reaching its end: seekAndSay marks the seek around the scheduler's call.
-    expect(main).toMatch(/s\.seeking = true;\s*let target[^\n]*\n\s*try \{\s*target = s\.sched\.seek\(t\);\s*\} finally \{\s*s\.seeking = false;/);
+    expect(main).toMatch(/own\.heard \+= heardStep\(own\.lastPos, pos, clockNow - own\.lastClock\);/);
+    expect(main).toMatch(/if \(countsAsListen\(own\.heard, own\.strip\.total, own\.counted\)\) \{\s*own\.counted = true;\s*reportCoreSuccess\(\);/);
+    expect(main).toMatch(/if \(audio\.state === "running"\) void sched\.feed\(\);\s*own\.tally\(\);/);
+    expect(main).toMatch(/paintPlayhead\(\);\s*own\.tally\(\);\s*own\.frame = requestAnimationFrame\(follow\);/);
+    expect(main).toMatch(/const seekAndSay = \(s: Session, t: number\) => \{\s*\/\/[^\n]*\n\s*s\.tally\(\);/);
+    expect(main).toMatch(/s\.lastPos = s\.sched\.at\[target\.index\]! \+ target\.offset;/);
+    // Neither "all made" nor the end sends it by itself.
+    const done = main.slice(main.indexOf('} else if (msg.type === "done") {'), main.indexOf("sched.renderFinished();\n      } else {"));
+    expect(done).not.toMatch(/reportCoreSuccess|countsAsListen/);
+    // A listen carried on across a restart keeps what it heard, and counts once.
+    expect(main).toMatch(/counted: opts\.counted \?\? false,\s*heard: opts\.heard \?\? 0,/);
   });
 });
 
 describe("Save for offline with a prepared recording", () => {
   const parts = [
-    { file: "part0.webm", bytes: 400_000 },
-    { file: "part1.webm", bytes: 350_000 },
+    { file: "part0.webm", bytes: 400_000, sha256: "a".repeat(64) },
+    { file: "part1.webm", bytes: 350_000, sha256: "b".repeat(64) },
   ];
-  const files = recordingFiles("cave", parts, 30_000, { recordingsBytes: 900, voiceManifestBytes: 2_000 });
+  const files = recordingFiles("cave", parts, { bytes: 30_000, sha256: "c".repeat(64) }, { bytes: 2_000, sha256: "d".repeat(64) });
 
-  it("keeps the parts, the index, the recordings list and the voice manifest, with their true sizes, and no voice", () => {
-    expect(files.map((f) => f.path)).toEqual(["/recordings/cave/part0.webm", "/recordings/cave/part1.webm", "/recordings/cave/index.json", "/recordings/manifest.json", "/voice/manifest.json"]);
+  it("keeps the parts, the index and the voice manifest, with their true sizes and pins, and no voice", () => {
+    expect(files.map((f) => f.path)).toEqual(["/recordings/cave/part0.webm", "/recordings/cave/part1.webm", "/recordings/cave/index.json", "/voice/manifest.json"]);
+    expect(files.map((f) => f.sha256)).toEqual(["a", "b", "c", "d"].map((x) => x.repeat(64)));
     expect(files.some((f) => /\/voice\/(voices|models)\/|\/ort\//.test(f.path))).toBe(false);
     const plan: RecordingPlan = { kind: "recording", textBytes: 29_000, textSaved: false, files: files.map((f) => ({ ...f, kept: false })) };
-    expect(planTotal(plan)).toBe(29_000 + 400_000 + 350_000 + 30_000 + 900 + 2_000);
+    expect(planTotal(plan)).toBe(29_000 + 400_000 + 350_000 + 30_000 + 2_000);
     expect(sizeLine(plan)).toBe("0.8 MB: the recording Dial made in advance, and its text. No voice download.");
     expect(isSaved(plan, true)).toBe(false);
     const done = { ...plan, textSaved: true, files: plan.files.map((f) => ({ ...f, kept: true })) };
@@ -323,9 +416,8 @@ describe("Save for offline with a prepared recording", () => {
     expect(recordingOnDevice(done)).toBe(planTotal(plan));
     expect(recordingSavedLine(recordingOnDevice(done), true)).toBe("Plays in Dial with no connection. 0.8 MB on this device: the recording Dial made in advance, with no voice download.");
     expect(recordingSavedLine(1, false)).toContain("may clear it if the device runs short of space");
-    // Only the small lists missing: said as such, in kilobytes.
     const lists = { ...done, files: done.files.map((f) => (f.path.startsWith("/recordings/cave/") ? f : { ...f, kept: false })) };
-    expect(sizeLine(lists)).toBe("3 kB: the rest of what the recording needs offline. No voice download.");
+    expect(sizeLine(lists)).toBe("2 kB: the rest of what the recording needs offline. No voice download.");
   });
 
   it("Remove deletes the work's own parts and index, never another work's or the shared lists", () => {
@@ -335,40 +427,155 @@ describe("Save for offline with a prepared recording", () => {
     expect(store).toMatch(/await cache\.delete\(workKey\(slug\)\);\s*\/\/[^\n]*\n\s*for \(const key of recordingKeysOf\(/);
   });
 
-  it("a work saved with its recording records no voices, so it keeps none and asks for none", () => {
+  it("a work saved with its recording records no voices; one saved with its voice before T5 keeps its voice and still reads as saved", () => {
     expect(parseVoices(NO_VOICES)).toEqual([]);
     expect(read("web/src/offline/store.ts")).toContain("[VOICES_HEADER]: NO_VOICES");
-    // Removing a voice-saved work: the recording-saved one needs no voice, so the voice goes.
     const saved = new Map<string, readonly string[] | null>([
       ["crito", ["am_fenrir"]],
       ["cave", []],
     ]);
     expect(voicesToRemove("crito", saved, new Map([["cave", []]]))).toEqual(["am_fenrir"]);
     expect(voicesToRemove("cave", saved, new Map([["crito", ["am_fenrir"]]]))).toEqual([]);
-    expect(read("web/src/offline/ui.ts")).toContain("if (t) today.set(slug, t.recording ? [] : workVoices(t.voices));");
+    const ui = read("web/src/offline/ui.ts");
+    // Today's needs come from the saved record: a recording-saved work needs no voice; a voice-saved one keeps its cast's.
+    expect(ui).toContain("if (t) today.set(slug, records.get(slug)?.length === 0 ? [] : workVoices(t.voices));");
+    // A work with a recording that was saved with its voice (before T5) is still saved: it plays offline from the voice.
+    expect(ui).toMatch(/if \(rec && !isSaved\(plan, true\) && \(\(await savedVoiceRecords\(\)\)\.get\(slug\)\?\.length \?\? 0\) > 0\) \{\s*const withVoice = await planFor\(manifest, slug, voices, textBytes\);\s*if \(isSaved\(withVoice, true\)\) plan = withVoice;/);
   });
 
   it("the offline helper serves a saved recording's files, and only those paths, from the saved cache", () => {
     const origin = "https://dial.voidvision.org";
     const at = (p: string) => route(new URL(p, origin), "GET", origin);
-    expect(at("/recordings/manifest.json")).toBe("saved");
     expect(at("/recordings/cave/index.json")).toBe("saved");
     expect(at("/recordings/cave/part12.webm")).toBe("saved");
     expect(at("/recordings/cave/other.bin")).toBe("ignore");
     expect(at("/recordings/")).toBe("ignore");
     expect(route(new URL("/recordings/cave/part0.webm", "https://elsewhere.example"), "GET", origin)).toBe("ignore");
   });
+});
 
-  it("the offline key includes the recordings' pins; with none it is the key it was before", () => {
-    const pins = { sha256: "a".repeat(64), runtimeSha256: "b".repeat(64), voices: { am_michael: "m" } };
+describe("the page's offline key comes from the recordings compiled into it, never a fetched list", () => {
+  const pins = { sha256: "a".repeat(64), runtimeSha256: "b".repeat(64), voices: { am_michael: "m" } };
+  const built = { format: 1, tag: "recordings-2-2026-09-26", works: { cave: { index: "c1", bytes: 1, parts: 1, seconds: 1, made: "2026-09-26", cast: "2", model: "", device: "" } } };
+
+  it("the key includes the recordings' pins; with none it is the key it was before", () => {
     const before = offlineKey(pins, "2");
     expect(offlineKey(pins, "2", {})).toBe(before);
     const k = offlineKey(pins, "2", { cave: "c1", crito: "k1" });
     expect(k).not.toBe(before);
     expect(offlineKey(pins, "2", { crito: "k1", cave: "c1" })).toBe(k);
     expect(offlineKey(pins, "2", { cave: "c2", crito: "k1" })).not.toBe(k);
-    expect(recordingPins({ format: 1, tag: "t", works: { cave: { index: "c1", bytes: 1, parts: 1, seconds: 1, made: "", cast: "2", model: "", device: "" } } })).toEqual({ cave: "c1" });
-    expect(recordingPins(null)).toEqual({});
+    expect(recordingPins(built)).toEqual({ cave: "c1" });
+  });
+
+  it("the page's key is the helper's: the same compiled pins whether this browser can play them or not, online or offline", () => {
+    // The helper compiles its pins from the same staged list (scripts/build.mjs stagedRecordingPins).
+    const helper = offlineKey(pins, "2", recordingPins(built));
+    expect(pageOfflineKey(pins, "2", built)).toBe(helper);
+    // A browser that cannot play Opus in WebM plays none of them, and still has the helper's key.
+    expect(playableRecordings(built, false)).toEqual({});
+    expect(playableRecordings(built, true)).toBe(built.works);
+    expect(pageOfflineKey(pins, "2", built)).toBe(helper);
+    // Offline with no saved list: there is no list to fetch; the key does not depend on one.
+    const ui = read("web/src/offline/ui.ts");
+    expect(ui).toContain("pageOfflineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, BUILT_RECORDINGS)");
+    expect(read("web/src/recording/source.ts")).not.toMatch(/fetch\("\/recordings\/manifest\.json"\)/);
+    for (const f of ["web/src/main.ts", "web/src/offline/ui.ts", "web/src/offline/store.ts"]) expect(read(f), f).not.toMatch(/recordings\/manifest\.json/);
+  });
+
+  it("the build compiles the staged list into the page and the same pins into the helper", () => {
+    expect(read("web/vite.config.ts")).toContain("define: { __RECORDINGS__: JSON.stringify(builtRecordings()) },");
+    expect(read("scripts/build.mjs")).toContain("await buildServiceWorker(tag, shell, readVoicePins(), stagedRecordingPins());");
+    // Built without a staged list (these tests), the page has none.
+    expect(BUILT_RECORDINGS.works).toEqual({});
+  });
+});
+
+describe("kept means the kept bytes hash to this build's pin", () => {
+  // A small Cache Storage and helper, so the store runs here as it does in a browser.
+  class FakeCache {
+    readonly m = new Map<string, { body: ArrayBuffer; headers: Headers }>();
+    async match(k: string | Request) {
+      const hit = this.m.get(typeof k === "string" ? k : new URL(k.url).pathname);
+      return hit ? new Response(hit.body.slice(0), { headers: hit.headers }) : undefined;
+    }
+    async put(k: string, r: Response) {
+      this.m.set(k, { body: await r.arrayBuffer(), headers: r.headers });
+    }
+    async delete(k: string) {
+      return this.m.delete(k);
+    }
+    async keys() {
+      return [...this.m.keys()].map((k) => new Request(`https://dial.test${k}`));
+    }
+  }
+  const stores = new Map<string, FakeCache>();
+  const cachesStub = { open: async (n: string) => stores.get(n) ?? (stores.set(n, new FakeCache()), stores.get(n)!) };
+  const g = { caches: cachesStub };
+  afterAll(() => vi.unstubAllGlobals());
+  const setUp = (served: Map<string, Uint8Array>, fetched: string[]) => {
+    stores.clear();
+    vi.stubGlobal("caches", cachesStub);
+    vi.stubGlobal("navigator", {
+      serviceWorker: {
+        controller: {
+          postMessage: (_m: unknown, [port]: MessagePort[]) => port!.postMessage({ ok: true, key: "k" }),
+        },
+      },
+    });
+    vi.stubGlobal("fetch", async (p: string) => {
+      fetched.push(p);
+      const body = served.get(p);
+      return body ? new Response(body.slice(0)) : new Response("", { status: 404 });
+    });
+  };
+  const bytes = (s: string) => new TextEncoder().encode(s);
+  const release = (tag: string) => {
+    const part = bytes(`${tag} audio`);
+    const idx = fakeIndex([{ speech: 10, pause: 1 }], 1);
+    idx.parts[0] = { ...idx.parts[0]!, bytes: part.length, sha256: sha256(Buffer.from(part)) };
+    const indexBody = bytes(JSON.stringify({ ...idx, tag }));
+    return { part, idx, indexBody, save: { slug: "cave", index: idx, indexBytes: indexBody.length, indexSha256: sha256(Buffer.from(indexBody)) } };
+  };
+  const man = { manifest: {} as never, bytes: 2, text: "{}" };
+
+  it("a work saved from one release is not kept under the next, and saving again fetches only what changed", async () => {
+    const store = await import("../web/src/offline/store");
+    const r1 = release("r1");
+    const fetched: string[] = [];
+    setUp(new Map([["/recordings/cave/part0.webm", r1.part], ["/recordings/cave/index.json", r1.indexBody]]), fetched);
+    await store.saveRecording(man, r1.save, "text", new AbortController().signal, () => undefined);
+    const p1 = await store.recordingPlanFor(man, r1.save, 4);
+    expect(p1.files.every((f) => f.kept)).toBe(true);
+    expect(isSaved(p1, true)).toBe(true);
+
+    // The next release: a new index and a new part at the same paths.
+    const r2 = release("r2");
+    const fetched2: string[] = [];
+    const cache = stores.get("dial-saved")!;
+    setUp(new Map([["/recordings/cave/part0.webm", r2.part], ["/recordings/cave/index.json", r2.indexBody]]), fetched2);
+    stores.set("dial-saved", cache);
+    const p2 = await store.recordingPlanFor(man, r2.save, 4);
+    // The old bytes are still at those paths, but they are not the pinned ones: not kept, not saved.
+    expect(p2.files.filter((f) => f.path.startsWith("/recordings/")).every((f) => !f.kept)).toBe(true);
+    expect(p2.files.find((f) => f.path === "/voice/manifest.json")!.kept).toBe(true);
+    expect(isSaved(p2, true)).toBe(false);
+    await store.saveRecording(man, r2.save, "text", new AbortController().signal, () => undefined);
+    // Only the changed files were fetched again; the voice manifest kept as pinned was not.
+    expect(fetched2.sort()).toEqual(["/recordings/cave/index.json", "/recordings/cave/part0.webm"]);
+    expect(isSaved(await store.recordingPlanFor(man, r2.save, 4), true)).toBe(true);
+  });
+
+  it("a kept copy damaged in storage is not kept", async () => {
+    const store = await import("../web/src/offline/store");
+    const r = release("r3");
+    setUp(new Map([["/recordings/cave/part0.webm", r.part], ["/recordings/cave/index.json", r.indexBody]]), []);
+    const cache = (await (g.caches as { open(n: string): Promise<FakeCache> }).open("dial-saved"))!;
+    await cache.put("/recordings/cave/part0.webm", new Response(bytes("not the audio")));
+    const f = { path: "/recordings/cave/part0.webm", bytes: r.part.length, sha256: r.idx.parts[0]!.sha256 };
+    expect(await store.keptAsPinned(cache as unknown as Cache, f)).toBe(false);
+    await cache.put("/recordings/cave/part0.webm", new Response(r.part.slice(0)));
+    expect(await store.keptAsPinned(cache as unknown as Cache, f)).toBe(true);
   });
 });
 
@@ -527,7 +734,7 @@ describe("the committed lock, the staged recordings and the contract", () => {
       const cues = segment(read(`web/public/works/${slug}.txt`));
       const c = tryCast(cues, w.cast)!;
       const index = JSON.parse(readFileSync(path.join(staged, slug, "index.json"), "utf8")) as RecordingIndex;
-      expect(indexProblem(index, { digest: await expectedDigest(cues, c.voices), lines: cues.length, castVersion: CAST_ENGINE_VERSION }), slug).toBeNull();
+      expect(indexProblem(index, { slug, digest: await expectedDigest(cues, c.voices), lines: cues.length, castVersion: CAST_ENGINE_VERSION }), slug).toBeNull();
       // The same pause table as the tab: each line's silence in samples.
       index.lines.forEach((l, i) => expect(l.pause, `${slug} line ${i + 1}`).toBe(Math.round((cues[i]!.pauseAfterMs / 1000) * RECORDING_RATE)));
       for (const p of index.parts) expect(p.bytes, `${slug}/${p.file}`).toBeLessThan(20 * 1024 * 1024);
@@ -550,19 +757,29 @@ describe("the Seal logs a prepared recording's requests like any other", () => {
 describe("the words for a prepared recording", () => {
   it("under Tune in, on air, and at the end", () => {
     expect(PLAYS_AT_ONCE).toBe("Plays at once: Dial made this recording in advance.");
-    expect(MAKE_IT_HERE).toMatch(/^Or make it on this device/);
-    expect(preparedOnAirLine("Benjamin Jowett")).toBe("Playing a recording Dial made in advance from Jowett's words. Nothing is made or sent while you listen.");
+    // The link says what making it here costs: once, or each time where the voice could not be kept.
+    expect(makeItHere(true)).toBe("Or make it on this device (the voice downloads once)");
+    expect(makeItHere(false)).toBe("Or make it on this device (the voice downloads each time)");
+    expect(read("web/src/main.ts")).toContain("makeHere.textContent = makeItHere(voiceKept);");
+    // True in every state: the count is sent while it plays (at 80% heard), so the line never says nothing is sent.
+    expect(preparedOnAirLine("Benjamin Jowett")).toBe("Playing a recording Dial made in advance from Jowett's words. Nothing is made while you listen, and the words and the audio never leave this device.");
     expect(preparedDoneLine("Crito", 1265)).toBe("Played Dial's recording of Crito to the end, 21:05.");
     // A skip past the end never claims the work was heard to its end.
     expect(preparedSkippedLine("Crito")).toBe("Skipped to the end of Dial's recording of Crito.");
     expect(progressLine({ title: "Crito", heard: 3, made: 252, total: 252, paused: false, renderDone: true, prepared: true })).toBe("On air: Crito, line 3 of 252.");
-    for (const s of [PLAYS_AT_ONCE, MAKE_IT_HERE, preparedOnAirLine("George Long"), preparedDoneLine("x", 1)]) expect(s).not.toMatch(/—|render/);
+    for (const s of [PLAYS_AT_ONCE, makeItHere(true), makeItHere(false), RECORDING_UNPLAYABLE, preparedOnAirLine("George Long"), preparedDoneLine("x", 1)]) expect(s).not.toMatch(/—|render/);
   });
 
   it("the Bookplate says the recording was made with Kokoro-82M, when, with which engine, and that the words are verbatim", () => {
     const w = WORKS[0]!;
     expect(madeOn("2026-09-27")).toBe("27 September 2026");
     expect(madeOn("junk")).toBe("junk");
+    // The date made is the maker's local day, never the UTC one (a render late in the evening in California is not dated tomorrow).
+    const render = read("scripts/render-recordings.mjs");
+    expect(render).toMatch(/export function localDate\(d = new Date\(\)\) \{\s*return `\$\{d\.getFullYear\(\)\}-/);
+    expect(render).toContain("const today = () => localDate();");
+    expect(render).not.toMatch(/toISOString\(\)\.slice\(0, 10\)/);
+    for (const w of Object.values(JSON.parse(read("recordings.lock.json")).works as Record<string, unknown>)) expect(w).toBeTruthy();
     const s = recordingSentence(w, { made: "2026-09-27", cast: "2" }).replace(/<[^>]+>/g, "");
     expect(s).toBe(
       "Dial's recording was made in advance with Kokoro-82M, an open speech model, on 27 September 2026, engine version 2, by the same fixed rules your device uses when you make it there. AI-voiced; the words are Jowett's, verbatim, exactly as printed.",

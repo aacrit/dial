@@ -14,7 +14,7 @@ Files:
 - The timed device test runs the first time the device makes speech, right after the voice arrives. It does not run on a first visit.
 - The countdown plans on 80% of measured speed. Above a 2-minute wait, Dial offers the prepared recording.
 - On the Broadcast, the Tune knob changes station; scrubbing stays on the progress strip and J/K/L.
-- A finished listen of the prepared recording counts toward `chapter_rendered` (G2 round 1).
+- A listen counts toward `chapter_rendered` once the listener has heard 80% of the work, on either path, the prepared recording or made on the device (G2 round 1; amended by CoS decision A, 2026-09-27: heard, never seeked over).
 - Rendering is Kokoro everywhere, with no TTS API. Prepared recordings are rendered once with Kokoro, and the Studio renders on the device only.
 
 State ids (every one works with `?state=`; the first is the default):
@@ -362,7 +362,7 @@ Events: `work_opened` fires when Tune in is pressed on a work, once per work per
 | Bookplate open (`bookplate`) | The phone Bookplate sheet over the player. |
 | Silence cue (transient) | The VU falls to zero and the arch's wave flattens for exactly the cue's duration. No text. |
 
-The prepared recording and the in-tab render both count `chapter_rendered` at the end of a completed listen (founder decision, G2 round 1).
+The prepared recording and the in-tab render both count `chapter_rendered` once per listen, when the listener has heard 80% of the work's running time, measured as audio played, not seeked over (founder decision, G2 round 1; CoS decision A, 2026-09-27). A part of the prepared recording this browser cannot decode carries the listen on, made on this device from the line on air: "This browser can't play Dial's recording, so it's being made on this device." (CoS decision B, 2026-09-27).
 
 ---
 

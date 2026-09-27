@@ -56,7 +56,11 @@ export const BITRATE = 48000;
 export const PART_SECONDS = 60;
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");
 const pkgVersion = (name) => JSON.parse(readFileSync(path.join(repoRoot, "node_modules", name, "package.json"), "utf8")).version;
-const today = () => new Date().toISOString().slice(0, 10);
+/** Today in this machine's local time, YYYY-MM-DD: the day the maker made it, which the Bookplate prints (never the UTC date). */
+export function localDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const today = () => localDate();
 const r3 = (x) => Math.round(x * 1000) / 1000;
 
 function args() {
@@ -177,8 +181,14 @@ export function encodeOpus(samples, file) {
 }
 
 function ffmpegPath() {
-  const bin = createRequire(import.meta.url)("ffmpeg-static");
-  if (!bin || !existsSync(bin)) throw new Error("render-recordings: ffmpeg-static is not installed (npm ci)");
+  // An optional dependency: the gate never needs it, and its binary download may fail on a machine that only builds.
+  let bin;
+  try {
+    bin = createRequire(import.meta.url)("ffmpeg-static");
+  } catch {
+    bin = null;
+  }
+  if (!bin || !existsSync(bin)) throw new Error("render-recordings: ffmpeg-static is not installed. It is an optional build tool: run npm install --include=optional (its postinstall downloads the ffmpeg binary), then render again.");
   return bin;
 }
 
@@ -251,7 +261,7 @@ async function renderWork(work, device, threads, dir) {
     parts,
     lines: idxLines,
   };
-  const problem = T.indexProblem(index, { digest: lines.digest, lines: lines.cues.length, castVersion: CAST_ENGINE_VERSION });
+  const problem = T.indexProblem(index, { slug: work.slug, digest: lines.digest, lines: lines.cues.length, castVersion: CAST_ENGINE_VERSION });
   if (problem) throw new Error(`render-recordings: ${work.slug} index is not sound: ${problem}`);
   const indexText = JSON.stringify(index) + "\n";
   writeFileSync(path.join(dir, "index.json"), indexText);

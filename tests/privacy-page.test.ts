@@ -82,12 +82,12 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the counts switch: off means no count at all, feedback still goes; each count is named for what it counts", () => {
-    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no work played to the end (made on this device, or Dial's recording heard to its end). A feedback message you choose to send still goes, because you sent it.");
+    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no listen (a work heard for at least 80% of its length, made on this device or Dial's recording). A feedback message you choose to send still goes, because you sent it.");
     expect(text).not.toMatch(/finished listen/);
-    expect(text).toContain("Nothing is made or sent while it plays; reaching the end counts as one work played to the end");
+    expect(text).toContain("Once you have heard 80% of a work, one listen is counted");
     const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-    expect(seal).toContain("Totals per day of page views, works tuned in, and works played to the end (made on this device, or Dial's recording heard to its end), and nothing more.");
-    // Paired with the code: the three counts the page sends, and chapter_rendered once per listen: every line made here, or Dial's recording heard to its end (tests/recordings.test.ts).
+    expect(seal).toContain("Totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more.");
+    // Paired with the code: the three counts the page sends, and chapter_rendered once per listen, when 80% is heard on either path (broadcast-state.ts countsAsListen; tests/recordings.test.ts).
     const sent = new Set<string>();
     for (const f of (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((x) => x.endsWith(".ts"))) {
       for (const m of read(`web/src/${f}`).matchAll(/sendEvent\("([a-z_]+)"\)/g)) sent.add(m[1]!);
@@ -95,8 +95,10 @@ describe("web/privacy.html, claim by claim", () => {
     expect([...sent].sort()).toEqual(["chapter_rendered", "page_view", "work_opened"]);
     const main0 = read("web/src/main.ts");
     const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("sched.renderFinished();\n      } else {"));
-    expect(done).toContain('count("all-made");');
+    // Not at "all made": only a listen that has heard 80% counts (CoS decision A).
+    expect(done).not.toMatch(/reportCoreSuccess|count\(/);
     expect([...main0.matchAll(/reportCoreSuccess\(\);/g)]).toHaveLength(1);
+    expect(main0).toMatch(/if \(countsAsListen\(own\.heard, own\.strip\.total, own\.counted\)\) \{\s*own\.counted = true;\s*reportCoreSuccess\(\);/);
     // Paired with tests/seal.test.ts, which runs sendEvent with the switch off; the feedback form does not consult it.
     const main = read("web/src/main.ts");
     const feedback = main.slice(main.indexOf("function setupFeedback"));
@@ -149,7 +151,7 @@ describe("web/privacy.html, claim by claim", () => {
 
   // T5: Dial's prepared recordings.
   it("a prepared recording is downloaded from this site as it plays, and kept only if the work is saved", () => {
-    expect(text).toContain("A work with a recording Dial made in advance plays that recording. It is downloaded from this site, a part at a time as you listen, and Dial keeps it on your device only if you save the work for offline.");
+    expect(text).toContain("A work with a recording Dial made in advance plays that recording. It is downloaded from this site, a part at a time as you listen, and Dial keeps it in its own storage only if you save the work for offline.");
     // Downloads only, from this origin: the allowlist names /recordings/, and sends stay the counts and feedback.
     const allow = JSON.parse(read("privacy-allowlist.json"));
     expect(allow.downloads).toContain("/recordings/");
@@ -164,12 +166,13 @@ describe("web/privacy.html, claim by claim", () => {
     expect(read("web/src/sw.ts")).toContain("const had = res.ok ? await cache.match(key) : undefined;");
   });
 
-  it("nothing is made or sent while a prepared recording plays; the count goes up at the end", () => {
-    expect(text).toContain("Nothing is made or sent while it plays; reaching the end counts as one work played to the end");
+  it("nothing is made while a prepared recording plays; one listen is counted once 80% is heard", async () => {
+    expect(text).toContain("Nothing is made on your device while it plays, and the words and the audio are never sent anywhere. Once you have heard 80% of a work, one listen is counted");
     const main = read("web/src/main.ts");
-    // No render worker for a prepared recording, and its one count is sent from ended(), after the last line.
+    // No render worker for a prepared recording.
     expect(main).toContain('const worker = rec ? null : new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });');
-    expect(main).toMatch(/const ended = \(\) => \{[\s\S]*?if \(!own\.seeking\) count\("ended"\);/);
+    const { HEARD_SHARE } = await import("../web/src/broadcast-state");
+    expect(HEARD_SHARE).toBe(0.8);
   });
 
   it("the shell (about 3 MB) is kept for every visitor, and the model and runtime stay after the last Remove", () => {

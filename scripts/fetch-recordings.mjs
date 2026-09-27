@@ -65,7 +65,8 @@ async function obtain(lock, slug, pin, from, fetchImpl, cache) {
     console.log(`fetch-recordings: downloading ${pin.asset}`);
     let res;
     try {
-      res = await fetchImpl(pin.url);
+      // A stalled download fails the build after a minute instead of hanging it.
+      res = await fetchImpl(pin.url, { signal: AbortSignal.timeout(60_000) });
     } catch (err) {
       throw new Error(`fetch-recordings: ${pin.url} could not be fetched (${err.message ?? err})`);
     }

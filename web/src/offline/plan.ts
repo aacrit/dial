@@ -97,14 +97,20 @@ export function savePlan(
 // ---- A work with a prepared recording ---------------------------------------
 // It saves the recording Dial made in advance (its parts and timing index),
 // its text (the read-along and the check that the recording is of these
-// words), the recordings list and the voice manifest (both small; offline
-// they give the page the pins its offline key is made of). No voice: the
-// 115 MB model is not downloaded for it.
+// words) and the voice manifest (small; offline it gives the page the voice
+// pins its offline key is made of; the recordings' pins are compiled into
+// the page). No voice: the 115 MB model is not downloaded for it. A file
+// counts as kept only when its kept bytes hash to its pin in this build.
 
-/** One file a saved recording keeps, by the path it is served at. */
-export interface KeptFile {
+/** One file a saved recording keeps, by the path it is served at, with the SHA-256 its kept bytes must have. */
+export interface PinnedFile {
   path: string;
   bytes: number;
+  sha256: string;
+}
+
+export interface KeptFile extends PinnedFile {
+  /** Kept on this device, and its kept bytes hash to `sha256`. */
   kept: boolean;
 }
 
@@ -115,18 +121,21 @@ export interface RecordingPlan {
   files: KeptFile[];
 }
 
-/** The files a saved recording keeps, with their true sizes: its parts and index (from the index), the recordings list and the voice manifest (as fetched). */
+/**
+ * The files a saved recording keeps, with their true sizes and pins: its
+ * parts (from the index), the index (its compiled pin) and the voice
+ * manifest (as fetched now: a saved copy of an older one is not kept).
+ */
 export function recordingFiles(
   slug: string,
-  parts: readonly { file: string; bytes: number }[],
-  indexBytes: number,
-  lists: { recordingsBytes: number; voiceManifestBytes: number },
-): { path: string; bytes: number }[] {
+  parts: readonly { file: string; bytes: number; sha256: string }[],
+  index: { bytes: number; sha256: string },
+  voiceManifest: { bytes: number; sha256: string },
+): PinnedFile[] {
   return [
-    ...parts.map((p) => ({ path: `/recordings/${slug}/${p.file}`, bytes: p.bytes })),
-    { path: `/recordings/${slug}/index.json`, bytes: indexBytes },
-    { path: "/recordings/manifest.json", bytes: lists.recordingsBytes },
-    { path: "/voice/manifest.json", bytes: lists.voiceManifestBytes },
+    ...parts.map((p) => ({ path: `/recordings/${slug}/${p.file}`, bytes: p.bytes, sha256: p.sha256 })),
+    { path: `/recordings/${slug}/index.json`, bytes: index.bytes, sha256: index.sha256 },
+    { path: "/voice/manifest.json", bytes: voiceManifest.bytes, sha256: voiceManifest.sha256 },
   ];
 }
 

@@ -3,19 +3,22 @@
 // 24 kHz, then its silence from the pause table), so the one scheduler,
 // wave, meters, lamp, read-along and script sheet play either.
 //
-// Every file comes from this origin (Law 1: /recordings/ is in
-// privacy-allowlist.json) and is checked before it is used: the index
-// against the pin in /recordings/manifest.json, each part against the
-// index. The index is used only when every line's hash is the one this page
+// Which works have one, and each index's pin, are compiled into the page at
+// build (BUILT_RECORDINGS, from the staged list scripts/fetch-recordings.mjs
+// writes), exactly as the offline helper compiles them into its key: the page
+// never learns them from a fetched list. Every file comes from this origin
+// (Law 1: /recordings/ is in privacy-allowlist.json) and is checked before it
+// is used: the index against its compiled pin, each part against the index.
+// The index is used only when every line's hash is the one this page
 // computes from the text and its cast (timing.ts indexProblem), so the words
-// heard are the words shown. Parts are fetched as playback reaches them and
+// heard are the words shown. Parts are fetched as playback nears them and
 // decoded to 24 kHz; only a few decoded parts are held at a time.
 
 import { sha256Hex } from "../voice-files";
 import { CAST_ENGINE_VERSION } from "../engine/cast-version";
-import { RECORDING_RATE, expectedDigest, indexProblem, lineSlice, partOfLine, type RecordingIndex } from "./timing";
+import { PART_FILE, RECORDING_RATE, expectedDigest, indexProblem, lineSlice, partOfLine, type RecordingIndex } from "./timing";
 
-/** /recordings/manifest.json (scripts/fetch-recordings.mjs): what this build serves. */
+/** One work's entry in the staged list (scripts/fetch-recordings.mjs). */
 export interface RecordingEntry {
   /** The index's SHA-256. */
   index: string;
@@ -23,7 +26,7 @@ export interface RecordingEntry {
   bytes: number;
   parts: number;
   seconds: number;
-  /** The day it was made, YYYY-MM-DD. */
+  /** The day it was made, YYYY-MM-DD, in the maker's local time. */
   made: string;
   cast: string;
   model: string;
@@ -36,26 +39,24 @@ export interface RecordingsManifest {
   works: Record<string, RecordingEntry>;
 }
 
-/** Each work's index pin, for the offline key. */
-export function recordingPins(m: RecordingsManifest | null): Record<string, string> {
-  return m ? Object.fromEntries(Object.entries(m.works).map(([slug, w]) => [slug, w.index])) : {};
+declare const __RECORDINGS__: RecordingsManifest | undefined;
+
+/** This build's prepared recordings, compiled in (web/vite.config.ts). None where the page was built without them (the tests). */
+export const BUILT_RECORDINGS: RecordingsManifest = typeof __RECORDINGS__ === "undefined" || !__RECORDINGS__ ? { format: 1, tag: "", works: {} } : __RECORDINGS__;
+
+/** Each work's index pin, for the offline key: from the compiled list, so it is the same online, offline, and whether or not this browser can play them. */
+export function recordingPins(m: RecordingsManifest): Record<string, string> {
+  return Object.fromEntries(Object.entries(m.works).map(([slug, w]) => [slug, w.index]));
 }
 
-/** What this build serves; null when it cannot be read (offline with nothing saved), and then every work is made on the device. */
-export async function readRecordings(): Promise<{ manifest: RecordingsManifest; text: string; bytes: number } | null> {
-  try {
-    const res = await fetch("/recordings/manifest.json");
-    if (!res.ok) return null;
-    const text = await res.text();
-    const manifest = JSON.parse(text) as RecordingsManifest;
-    if (manifest.format !== 1 || typeof manifest.works !== "object" || !manifest.works) return null;
-    return { manifest, text, bytes: new TextEncoder().encode(text).byteLength };
-  } catch {
-    return null;
-  }
+/** The recordings this page may try to play: none where this browser cannot play Opus in WebM, so every work is made on the device. */
+export function playableRecordings(m: RecordingsManifest, canPlay: boolean): Record<string, RecordingEntry> {
+  return canPlay ? m.works : {};
 }
 
 export const MAX_DECODED_PARTS = 3;
+/** A part that fails to arrive is asked for once more after this pause, before the broadcast stops. */
+export const PART_RETRY_MS = 800;
 
 /** Whether this browser can play Opus in WebM, the recordings' format. Where it cannot, every work is made on the device. */
 export function canPlayRecordings(): boolean {
@@ -64,6 +65,16 @@ export function canPlayRecordings(): boolean {
   } catch {
     return false;
   }
+}
+
+/** A part that arrived intact but that this browser could not decode (the error the page answers by making the work on the device). */
+export class RecordingDecodeError extends Error {
+  override name = "RecordingDecodeError";
+}
+
+/** Whether a failure is this browser failing to decode the audio, not the network or a pin. */
+export function isDecodeError(err: unknown): boolean {
+  return err instanceof RecordingDecodeError || (err instanceof Error && (err.name === "EncodingError" || err.name === "RecordingDecodeError"));
 }
 
 /** Decodes a part to mono samples at 24 kHz. Replaced in tests. */
@@ -85,6 +96,8 @@ function toInt16(samples: Float32Array): Int16Array<ArrayBuffer> {
   return out;
 }
 
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export class Recording {
   private readonly decoded = new Map<number, Promise<Float32Array>>();
 
@@ -95,6 +108,7 @@ export class Recording {
     readonly indexFile: { bytes: number; sha256: string },
     private readonly decode: Decoder = decodeAt24k,
     private readonly fetchPart: (file: string) => Promise<ArrayBuffer> = (file) => fetchRecordingPart(slug, file),
+    private readonly retryMs = PART_RETRY_MS,
   ) {}
 
   get lineCount(): number {
@@ -112,6 +126,23 @@ export class Recording {
     return this.index.samples / this.index.sampleRate;
   }
 
+  /** A part's bytes, checked against its pin; a failure is tried once more after a short pause. */
+  private async fetched(p: number): Promise<ArrayBuffer> {
+    const pin = this.index.parts[p]!;
+    if (!PART_FILE.test(pin.file)) throw new Error(`recording: a part is named ${JSON.stringify(pin.file)}`);
+    const once = async () => {
+      const bytes = await this.fetchPart(pin.file);
+      if (bytes.byteLength !== pin.bytes || (await sha256Hex(bytes)) !== pin.sha256) throw new Error("recording: a part did not match its pin");
+      return bytes;
+    };
+    try {
+      return await once();
+    } catch {
+      await wait(this.retryMs);
+      return once();
+    }
+  }
+
   /** Fetches, checks and decodes part p, once; the oldest decoded parts beyond MAX_DECODED_PARTS are let go. */
   private part(p: number): Promise<Float32Array> {
     let hit = this.decoded.get(p);
@@ -121,10 +152,12 @@ export class Recording {
       this.decoded.set(p, hit);
       return hit;
     }
-    const pin = this.index.parts[p]!;
-    hit = this.fetchPart(pin.file).then(async (bytes) => {
-      if (bytes.byteLength !== pin.bytes || (await sha256Hex(bytes)) !== pin.sha256) throw new Error("recording: a part did not match its pin");
-      return this.decode(bytes);
+    hit = this.fetched(p).then(async (bytes) => {
+      try {
+        return await this.decode(bytes);
+      } catch (err) {
+        throw new RecordingDecodeError(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+      }
     });
     // A failed part is not held, so asking again fetches it again.
     hit.catch(() => this.decoded.delete(p));
@@ -137,10 +170,10 @@ export class Recording {
   async samples(i: number): Promise<Int16Array<ArrayBuffer>> {
     const p = partOfLine(this.index, i);
     if (p < 0) throw new Error(`recording: no part holds line ${i + 1}`);
+    // The next part starts downloading while this one plays, whichever of its lines is asked for (a seek lands anywhere).
+    if (p + 1 < this.index.parts.length) void this.part(p + 1).catch(() => undefined);
     const audio = await this.part(p);
     const { from, frames } = lineSlice(this.index, i, RECORDING_RATE, audio.length);
-    // The next part starts downloading while this one plays.
-    if (i === this.index.parts[p]!.from && p + 1 < this.index.parts.length) void this.part(p + 1).catch(() => undefined);
     return toInt16(audio.subarray(from, from + frames));
   }
 
@@ -158,8 +191,8 @@ async function fetchRecordingPart(slug: string, file: string): Promise<ArrayBuff
 
 /**
  * Opens a work's prepared recording, or says why it cannot stand in for a
- * render made here: the index must match its pin, and its lines the text's
- * cues and cast exactly. `null` problem means the recording is usable.
+ * render made here: the index must match its compiled pin, and its lines
+ * the text's cues and cast exactly. `null` problem means the recording is usable.
  */
 export async function openRecording(
   slug: string,
@@ -172,7 +205,7 @@ export async function openRecording(
   const buf = await res.arrayBuffer();
   if ((await sha256Hex(buf)) !== entry.index) return { recording: null, problem: "the index did not match its pin" };
   const index = JSON.parse(new TextDecoder().decode(buf)) as RecordingIndex;
-  const problem = indexProblem(index, { digest: await expectedDigest(cues, voices), lines: cues.length, castVersion: CAST_ENGINE_VERSION });
+  const problem = indexProblem(index, { slug, digest: await expectedDigest(cues, voices), lines: cues.length, castVersion: CAST_ENGINE_VERSION });
   if (problem) return { recording: null, problem };
   return { recording: new Recording(slug, index, { bytes: buf.byteLength, sha256: entry.index }), problem: null };
 }

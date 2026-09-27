@@ -240,7 +240,7 @@ describe("work_opened: once per station per page load, within the ceilings' shar
 
   it("the page sends it only when Tune in starts a work, through firstOpen; tuning and browsing send nothing (founder, 2026-09-26)", () => {
     expect([...main.matchAll(/sendEvent\("work_opened"\)/g)].length).toBe(1);
-    const start = /const start = \(work: Work, kind: ListenKind\) => \{([\s\S]*?)\n {2}\};/.exec(main)?.[1];
+    const start = /const start = \(work: Work, kind: ListenKind, opts[^\n]*\) => \{([\s\S]*?)\n {2}\};/.exec(main)?.[1];
     // A work that could not be cast (or a prepared recording that is not there) cannot start, so it is never counted as opened.
     expect(start).toMatch(
       /^\s*const text = [^\n]*\n\s*const cast = text\.cast;\n\s*if \(!cast\) return;\n\s*const rec = [^\n]*\n\s*if \(kind === "prepared" && !rec\) return;\n\s*\/\/[^\n]*\n\s*if \(firstOpen\(opened, work\.slug\)\) sendEvent\("work_opened"\);/,
@@ -294,8 +294,8 @@ describe("the broadcast's rules", () => {
   });
 
   it("one object URL at a time, and the previous finished file stays until the new one is made", () => {
-    expect(main).toMatch(/if \(downloadUrl\) URL\.revokeObjectURL\(downloadUrl\);\s*downloadUrl = own\.wav \? URL\.createObjectURL\(/);
-    const start = /const start = \(work: Work, kind: ListenKind\) => \{([\s\S]*?)\n {2}\};/.exec(main)![1]!;
+    expect(main).toMatch(/if \(downloadUrl\) URL\.revokeObjectURL\(downloadUrl\);\s*own\.file = own\.wav \? new Blob\([^\n]*\n\s*\/\/[^\n]*\n\s*downloadUrl = own\.file && !seeded\.length \? URL\.createObjectURL\(own\.file\) : null;/);
+    const start = /const start = \(work: Work, kind: ListenKind, opts[^\n]*\) => \{([\s\S]*?)\n {2}\};/.exec(main)![1]!;
     const beforeDone = start.slice(0, start.indexOf('msg.type === "done"'));
     expect(beforeDone).not.toMatch(/revokeObjectURL|download\.hidden = true|removeAttribute\("href"\)/);
   });

@@ -13,5 +13,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # The prepared recordings, pinned by recordings.lock.json, are downloaded once per lock (scripts/fetch-recordings.mjs checks every byte).
+      - uses: actions/cache@v4
+        with:
+          path: .cache/recordings
+          key: recordings-${{ hashFiles('recordings.lock.json') }}
       - run: npm install
       - run: npm run gate

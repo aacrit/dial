@@ -14,8 +14,8 @@
 // - the app shell, which the offline helper keeps (web/src/sw.ts).
 //
 // A work with a prepared recording saves that instead of the voice: its
-// parts and timing index (each checked against its pin), the recordings
-// list and the voice manifest, in the saved cache; its text records no
+// parts and timing index (each checked against its pin) and the voice
+// manifest, in the saved cache; its text records no
 // voices ("none"). Remove deletes its text and its recording's files.
 //
 // Each saved text records its work's voices (VOICES_HEADER), as cast when
@@ -26,7 +26,7 @@
 import type { VoiceManifest } from "../voice";
 import { runtimeCacheKey, runtimeCacheName, voiceCacheName, type Held } from "../voice-cache";
 import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
-import { NO_VOICES, offlineExtras, recordingKeysOf, parseVoices, recordingFiles, savePlan, unionVoices, voicesToRemove, type RecordingPlan, type SavePlan } from "./plan";
+import { NO_VOICES, offlineExtras, recordingKeysOf, parseVoices, recordingFiles, savePlan, unionVoices, voicesToRemove, type PinnedFile, type RecordingPlan, type SavePlan } from "./plan";
 import type { RecordingIndex } from "../recording/timing";
 import { SAVED_CACHE } from "./routes";
 
@@ -36,7 +36,6 @@ export const VOICES_HEADER = "x-dial-voices";
 
 const workKey = (slug: string) => `/works/${slug}.txt`;
 const MANIFEST_KEY = "/voice/manifest.json";
-const RECORDINGS_KEY = "/recordings/manifest.json";
 
 /** Whether this browser can keep works for offline at all: Cache Storage and an offline helper. */
 export function canSaveOffline(): boolean {
@@ -302,36 +301,45 @@ export async function saveWork(man: Manifest, slug: string, text: string, voices
 
 // ---- A work with a prepared recording ---------------------------------------
 
-/** What saving a prepared recording needs, from what is in the saved cache. */
+/** What saving a prepared recording needs. */
 export interface RecordingSave {
   slug: string;
   index: RecordingIndex;
-  /** The index file's bytes as served, and its pin. */
+  /** The index file's size as served, and its pin compiled into this page. */
   indexBytes: number;
   indexSha256: string;
-  /** /recordings/manifest.json as fetched. */
-  recordingsText: string;
 }
 
-function filesOf(man: Manifest, r: RecordingSave): { path: string; bytes: number }[] {
-  return recordingFiles(r.slug, r.index.parts, r.indexBytes, {
-    recordingsBytes: new TextEncoder().encode(r.recordingsText).byteLength,
-    voiceManifestBytes: man.bytes,
-  });
+async function filesOf(man: Manifest, r: RecordingSave): Promise<PinnedFile[]> {
+  return recordingFiles(r.slug, r.index.parts, { bytes: r.indexBytes, sha256: r.indexSha256 }, { bytes: man.bytes, sha256: await sha256Hex(new TextEncoder().encode(man.text).buffer) });
+}
+
+/** path@pin for every file already read back and found to hash to its pin, this visit. A changed pin is a new key, so it is read again. */
+const verified = new Set<string>();
+
+/** Whether `f` is kept and its kept bytes hash to its pin (read once per path and pin). A copy that does not match is not kept. */
+export async function keptAsPinned(cache: Cache, f: PinnedFile): Promise<boolean> {
+  const hit = await cache.match(f.path);
+  if (!hit) return false;
+  const key = `${f.path}@${f.sha256}`;
+  if (verified.has(key)) return true;
+  const ok = (await sha256Hex(await hit.arrayBuffer())) === f.sha256;
+  if (ok) verified.add(key);
+  return ok;
 }
 
 export async function recordingPlanFor(man: Manifest, r: RecordingSave, textBytes: number): Promise<RecordingPlan> {
   const saved = await caches.open(SAVED_CACHE);
   const files = [];
-  for (const f of filesOf(man, r)) files.push({ ...f, kept: !!(await saved.match(f.path)) });
+  for (const f of await filesOf(man, r)) files.push({ ...f, kept: await keptAsPinned(saved, f) });
   return { kind: "recording", textBytes, textSaved: !!(await saved.match(workKey(r.slug))), files };
 }
 
 /**
  * Saves a work's prepared recording for offline: the app's own files first,
- * then every file not yet kept (each part checked against the index, the
- * index against its pin), then the text last, so a cancelled or failed save
- * never leaves a work marked saved.
+ * then every file not kept as pinned (a missing one, or one kept from
+ * another release, is fetched again and checked against its pin), then the
+ * text last, so a cancelled or failed save never leaves a work marked saved.
  */
 export async function saveRecording(man: Manifest, r: RecordingSave, text: string, signal: AbortSignal, onProgress: (loaded: number) => void): Promise<void> {
   let loaded = 0;
@@ -342,26 +350,20 @@ export async function saveRecording(man: Manifest, r: RecordingSave, text: strin
   if (!(await ensureShell())) throw new Error("ShellError: the app's own files could not be kept");
   signal.throwIfAborted();
   const saved = await caches.open(SAVED_CACHE);
-  const pins = new Map<string, string>(r.index.parts.map((p) => [`/recordings/${r.slug}/${p.file}`, p.sha256]));
-  pins.set(`/recordings/${r.slug}/index.json`, r.indexSha256);
-  for (const f of filesOf(man, r)) {
+  for (const f of await filesOf(man, r)) {
     signal.throwIfAborted();
-    if (await saved.match(f.path)) continue;
+    if (await keptAsPinned(saved, f)) continue;
     if (f.path === MANIFEST_KEY) {
       count(f.bytes);
       await put(saved, MANIFEST_KEY, new Response(man.text, { headers: { "content-type": "application/json" } }));
       continue;
     }
-    if (f.path === RECORDINGS_KEY) {
-      count(f.bytes);
-      await put(saved, RECORDINGS_KEY, new Response(r.recordingsText, { headers: { "content-type": "application/json" } }));
-      continue;
-    }
     const res = await fetch(`/recordings/${f.path.slice("/recordings/".length)}`, { signal });
     if (!res.ok) throw new Error(`recording file: ${res.status}`);
     const buf = await readCounted(res, count);
-    if ((await sha256Hex(buf)) !== pins.get(f.path)) throw new Error("recording: a file did not match its pin");
+    if ((await sha256Hex(buf)) !== f.sha256) throw new Error("recording: a file did not match its pin");
     await put(saved, f.path, new Response(buf, { headers: { "content-type": res.headers.get("content-type") ?? "application/octet-stream" } }));
+    verified.add(`${f.path}@${f.sha256}`);
   }
   signal.throwIfAborted();
   const textBytes = new TextEncoder().encode(text).byteLength;

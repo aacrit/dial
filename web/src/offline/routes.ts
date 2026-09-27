@@ -79,6 +79,17 @@ export function offlineKey(pins: VoicePinSet | null, castVersion: string, record
   return h.toString(16).padStart(8, "0");
 }
 
+/**
+ * The page's offline key: the voice pins it read (the site's online, the
+ * saved copy offline), and the recordings' pins compiled into it at build
+ * (recording/source.ts BUILT_RECORDINGS), never a fetched list. So the key
+ * is the same online and offline, and whether or not this browser can play
+ * the recordings, as the helper's is.
+ */
+export function pageOfflineKey(pins: VoicePinSet | null, castVersion: string, built: { works: Readonly<Record<string, { index: string }>> }): string | null {
+  return offlineKey(pins, castVersion, Object.fromEntries(Object.entries(built.works).map(([slug, w]) => [slug, w.index])));
+}
+
 /** The shell cache for one build. */
 export function shellCacheName(buildTag: string): string {
   return `${SHELL_CACHE_PREFIX}${buildTag}`;
