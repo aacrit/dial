@@ -1,4 +1,4 @@
-# Dial: design spec (G2 round 2: the device is the hero)
+# Dial: design spec (G2 round 2 with the no-scroll amendment)
 
 Studio designer, 2026-09-26. Covers the four charter surfaces: Repertory `/`, Broadcast `/play/<work>`, Studio `/studio`, Seal `/seal` (with `/verify`). `/privacy.html` exists and is not redesigned here.
 
@@ -7,7 +7,7 @@ Grammar is Ink & Momentum (Fraunces, Inter, JetBrains Mono with `tabular-nums`, 
 Files:
 - `design/tokens.css`: the only colour file. Seven source hexes; everything else derived.
 - `design/mocks/device-motion.html` (**R2**): the interactive physics prototype.
-- `design/mocks/{repertory,broadcast,studio,seal}.html`: self-contained mocks. Each has a state switcher (top right; bottom right on a phone). `?state=<id>` opens a state, `?theme=daylight|night` pins a theme, `?clean` hides the switcher, `?still` freezes motion for screenshots.
+- `design/mocks/{repertory,broadcast,studio}.html`: self-contained mocks (the Radio, On air, the Studio). `seal.html` is removed with the /seal page. Each has a state switcher (top right; bottom right on a phone). `?state=<id>` opens a state, `?theme=daylight|night` pins a theme, `?clean` hides the switcher, `?still` freezes motion for screenshots.
 - `design/mocks/shots/<surface>-<width>.png`: 375, 768, 1280 and 1920 px, dark theme, default state. The default state of every surface is a **first visit**: nothing playing, nothing loaded.
 
 **Founder decisions on round 2 (2026-09-26, in chat):**
@@ -24,6 +24,61 @@ State ids (every one works with `?state=`; the first is the default):
 | Broadcast | `first-run`, `playing`, `saving`, `saved`, `device-test`, `warming`, `countdown`, `rendering`, `holding`, `no-webgpu`, `slow`, `paused`, `rendered`, `offline`, `error`, `bookplate`, `script` |
 | Studio | `first-run`, `structuring`, `import-error`, `workspace`, `voices`, `corrections`, `export`, `keep`, `keep-pd`, `exported`, `warming`, `slow`, `holding`, `over-limit` |
 | Seal | `first-visit`, `sealed`, `counts-off`, `blocked`, `warming`, `bench-running`, `bench-results`, `bench-no-webgpu`, `verify-found`, `verify-match`, `verify-nomatch`, `verify-none`, `verify-unreadable` |
+
+---
+
+## 00. No-scroll panels (G2 amendment, 2026-09-27)
+
+**Founder sign-off (2026-09-27, in chat):**
+- The design is approved as mocked.
+- On a phone, tapping Script makes the script fill The work panel, with a close key. The other widgets come back when it closes.
+- Moving between rooms (Radio, Studio) is in the top bar. The band selector moves between panels.
+- Large screens (1920 and up) use a single panel whenever everything fits, and fall back to snap panels only if a room needs more.
+
+
+**Founder:** "sticking to the retro concept. If this can be a 'no scroll' app/web interface in all resolutions, that would be amazing. Multi widgeted page / scroll to next page if needed but not right or left." On the Seal: "every request looks too geeky with all the file names… doesn't deserve its own page". This section overrides earlier layout sections where they differ. The round-2 radio, the physics, both themes, the founder's defaults and the copy rules stand.
+
+### Rules
+1. **Panels.** A room is one or more full-viewport panels: `height: 100dvh`, padded by the safe-area insets, snapped with `scroll-snap-type: y mandatory` and `scroll-snap-stop: always` on the scroll container (`.panels`), never on `body`, which is `overflow: hidden`. A room with one panel does not snap.
+2. **Never sideways.** No element may make the page wider than the viewport. Rows that can grow wrap or shrink (`min-width: 0` on every flex and grid child that holds text).
+3. **Long content scrolls inside its own widget**, never the page: the script, the Bookplate, the request list, and the work's description at small heights. Inner scrollers use `overscroll-behavior: contain`, so a flick in a widget does not jump panels.
+4. **The device fits.** On the device panel the dial takes whatever height is left: the dial box is a size container, and the dial window is `width: min(100cqw, 160cqh)` (its aspect is 400 : 250). The other parts have fixed heights per breakpoint, so nothing is below the fold.
+5. **The band selector** replaces the page's scroll bar and the phone's bottom tab bar. It is a radio's band switch: a plate engraved "Band", one push key per panel ("Radio", "The work") with a lamp that is amber on the current panel. Pressing a key scrolls to that panel (instantly under reduced motion). The rooms move to the top bar ("Radio", "Studio", with the living-wave underline).
+6. **No `/seal` page** (charter amendment, founder-approved). The Seal is a widget on the work panel, and every "check it on the Seal" link goes to that widget (`/?panel=work`). The speed test moves to the radio's gauge (T7).
+
+### Panel map
+| Viewport | Radio (`/`, idle) and On air (`/`, playing) | Studio |
+|---|---|---|
+| 375 × 812 (phone) | **P1 Radio:** dial (about 350 × 219), station line, glass (eye, valve, gauge with "Test this device"; on air: eye, valve, Voice and Music meters), read-along (live and next line), Tune in (idle) or ribbon (on air), knobs and keys. **P2 The work:** The work (title, 3-line description, words, voices), Keep it, Script/Bookplate (fills the rest, scrolls inside), Seal. Band: bottom, 44 px | One screen: the import card, or the chapter card, rights and export |
+| 768 × 1024 (tablet) | P1 as the phone, the device capped at 680 px wide. P2 two columns: The work, Keep it and Seal on the left; Script/Bookplate the full height on the right | Two panes: manuscript and cue sheet, the Tuning Dial in a sheet |
+| 1280 × 800 | **P1:** landscape device, the dial left (1.15 fr), everything else right. **P2:** three columns: Keep it over The work; Script/Bookplate; Seal. Band: a vertical plate at the right edge | Three panes; each pane scrolls inside |
+| 1280 × 720 | As 1280 × 800; the credit line and the previous read-along line drop | As above |
+| 1920 × 1080 | **One panel, no snapping, no band:** the device (up to 1,320 px) with a 440 px widget column on the right: The work, Keep it, Script/Bookplate (flex), Seal. Extra width goes to the dial's 1° ticks, never to line length | Three panes |
+| 740 × 360 (phone on its side) | **P1:** the dial left, a tight column right: title, glass (instruments without labels), one read-along line, Tune in or ribbon, 42 px knobs, 44 px keys. **P2:** three columns: Keep it (buttons only) over The work (scrolls); Script/Bookplate; Seal. Band: right edge | One screen: the import card, the tab bar at 44 px |
+
+### Widgets (height, what grows)
+| Widget | Contents | Height rule |
+|---|---|---|
+| The work | Eyebrow "The work", title, description, words · voices · "Public domain worldwide", "Bring your own chapter to the Studio" | Auto; the description clamps at 3 lines on a phone and scrolls inside at short heights |
+| Keep it | Save for offline (and its states: Saving…, Saved for offline, Remove), Download the file | About 130 px; at 740 × 360 the size lines drop and the buttons stack |
+| Script / Bookplate | Two tabs. Script: the verbatim text, the live line in amber on air. Bookplate: catalogue number (`514 · 001`), source, public domain, voices, corrections, direction, LibriVox | Takes the remaining height (`minmax(0, 1fr)`); always scrolls inside |
+| Seal | A small magic eye; "**Sealed.** Nothing you hear or make leaves this device."; "Today Dial sent 2 anonymous counts." (counts off: "Counts are off. Nothing has been sent since 21:26."); the switch "Send anonymous counts"; "Show every request" | About 170 px collapsed. "Show every request" (collapsed by default) opens inside the widget: "Everything this page fetched from dial.voidvision.org, and the counts it sent. Nothing went anywhere else. Check it yourself in your browser's developer tools, Network tab." then the request list (time, path with a plain name under it, size; sent counts marked "Sent"), scrolling inside. On a phone the open Seal covers the work panel's widgets until "Hide the requests"; on a tablet it fills its row; in landscape it fills its column. No file names in the default view |
+| Speed (on the radio's glass, T7) | The gauge; label "Speed not tested"; key "Test this device". Testing: "Testing this device: one short sentence, about 3 s. If the voice is not saved yet, it downloads first (115 MB, once)." Tested: "4.1× · GPU" and "This device makes speech 4.1× faster than it plays, on its graphics chip. Works it makes start after a 10 s lead and never pause." The key becomes "Test again" | Part of the glass row; no height of its own |
+
+On air, the gauge shows only while the device is making the recording (rendering, countdown, holding); while Dial's own recording plays, the glass shows the eye, the valve and the meters. On the idle radio the meters are hidden, because nothing is playing.
+
+### Mock states (`?state=`)
+- Radio (`repertory.html`, default `first-run`): `first-run`, `testing`, `tested`, `saving`, `saved`, `requests`, `counts-off`.
+- On air (`broadcast.html`, default `playing`): `playing`, `paused`, `countdown`, `rendering`, `holding`, `saving`, `saved`, `requests`, `counts-off`.
+- Studio: as section 4. `?panel=work` opens the work panel.
+
+### Test rule for T8
+At every listed viewport (375 × 812, 768 × 1024, 1280 × 800, 1920 × 1080, 740 × 360, 1280 × 720), for every room and every state above:
+- `document.documentElement.scrollWidth <= innerWidth`;
+- each panel's content fits within 100dvh: for every part of the panel (the device's parts, each widget), `getBoundingClientRect().bottom <= panel.bottom - panel padding-bottom`;
+- where a widget's content is longer, only that widget's own scroller moves.
+
+The mocks were checked this way on 2026-09-27: every room fits at all six viewports, with "Show every request" open and closed.
 
 ---
 
