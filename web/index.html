@@ -6,6 +6,10 @@
     <meta name="build" content="__BUILD__" />
     <meta name="description" content="Dial: public-domain philosophy performed as radio theatre, made on your device. Tune the dial between three works." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 21V11a8 8 0 0 1 16 0v10' fill='none' stroke='currentColor' stroke-width='1.6'/%3E%3Ccircle cx='12' cy='14' r='1.6' fill='currentColor'/%3E%3C/svg%3E" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="token(--color-bg)" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Dial" />
     <link rel="stylesheet" href="../design/tokens.css" />
     <link rel="stylesheet" href="./src/style.css" />
     <title>Dial</title>
@@ -104,6 +108,36 @@
       </section>
 
       <div class="below">
+        <div class="notice" id="offline-note" hidden>
+          <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16" /><path d="M8.5 18H17a3.5 3.5 0 0 0 1.2-6.8A6 6 0 0 0 10 7.2" /><path d="M6.2 9.6A4.5 4.5 0 0 0 7 18" /></svg>
+          <p id="offline-note-text" role="status"></p>
+        </div>
+
+        <section class="card install" id="install-card" aria-labelledby="install-h" hidden>
+          <h2 id="install-h">Keep Dial on this device</h2>
+          <p class="muted">Install it to open from your home screen, with lock-screen controls. Works you save for offline stay with it.</p>
+          <div class="install-actions">
+            <button type="button" class="btn" id="install-yes">Install</button>
+            <button type="button" class="btn quiet" id="install-no">Not now</button>
+          </div>
+        </section>
+
+        <section class="card install" id="ios-card" aria-labelledby="ios-h" hidden>
+          <h2 id="ios-h">Add Dial to your Home Screen</h2>
+          <ol class="steps">
+            <li>In Safari, tap Share: the square with an arrow pointing up.</li>
+            <li>Scroll down and tap Add to Home Screen.</li>
+            <li>Tap Add.</li>
+          </ol>
+          <p class="muted install-note">From the Home Screen, Dial keeps your saved works and shows lock-screen controls. In a Safari tab, iPhone can clear saved works if you do not open Dial for a week.</p>
+          <div class="install-actions">
+            <button type="button" class="btn quiet" id="ios-no">Not now</button>
+          </div>
+        </section>
+
+        <div class="save" id="save-row" hidden></div>
+        <p class="visually-hidden" id="save-status" role="status" aria-live="polite"></p>
+
         <details class="drill bookplate">
           <summary>Bookplate</summary>
           <div class="drill-body"><dl id="bookplate"></dl></div>

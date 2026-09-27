@@ -29,6 +29,9 @@ import {
   switchQuestion,
 } from "./status-copy";
 import type { FromWorker, ToWorker } from "./narrate.worker";
+import { WORK_NOT_ON_DEVICE } from "./offline/plan";
+import { registerOfflineHelper } from "./offline/store";
+import { mountOffline } from "./offline/ui";
 
 function sendEvent(name: string): void {
   fetch("/e", {
@@ -141,12 +144,15 @@ function setupRadio(): void {
     device.dataset.realm = w.slug;
     paintAvail();
     paintTuneIn();
+    offline?.station();
   };
 
   /** The line under Tune in: a station whose voices could not be cast says so, and only that station. */
   const paintAvail = () => {
     const text = texts.get(WORKS[radio.tuned()]!.slug);
-    avail.textContent = text && !text.cast ? CAST_FAILED : madeHere(voiceKept);
+    // Offline, a work whose text is not on this device cannot play, and says so.
+    if (!text && offline?.isOffline()) avail.textContent = WORK_NOT_ON_DEVICE;
+    else avail.textContent = text && !text.cast ? CAST_FAILED : madeHere(voiceKept);
   };
 
   const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone };
@@ -259,6 +265,15 @@ function setupRadio(): void {
   });
   mounted = true;
 
+  // Save for offline and the install cards follow the tuned station.
+  const offline: ReturnType<typeof mountOffline> | null = mountOffline({
+    tuned: () => WORKS[radio.tuned()]!,
+    textOf: (slug) => {
+      const t = texts.get(slug);
+      return t?.cast ? { source: t.source, voices: t.cast.voices } : undefined;
+    },
+  });
+
   // ---- asking before a broadcast still being made is stopped ---------------
   let pending: Work | null = null;
   const hideAsk = () => {
@@ -329,6 +344,7 @@ function setupRadio(): void {
     let playing = 0;
 
     raWho.textContent = `On air: ${work.title}`;
+    setMediaSession(work);
     // The size and the meter's max arrive with the manifest (its totalBytes);
     // until then the meter is indeterminate and the line states no size.
     meter.hidden = false;
@@ -361,6 +377,8 @@ function setupRadio(): void {
       if (session === own && own.live && own.renderDone && playing === 0) {
         offAir();
         announce(renderedLine(work.title, cues.length, own.seconds, own.kept));
+        // A completed listen: where the browser allows, offer to install Dial.
+        offline?.listened();
       }
     };
 
@@ -466,7 +484,9 @@ function setupRadio(): void {
     rescueFocus(retry);
     retry.hidden = true;
     radio.setPower(0);
-    Promise.all(
+    // Each work arrives on its own: offline, the saved ones load from this
+    // device and only the others are unavailable.
+    Promise.allSettled(
       WORKS.map((w) =>
         fetch(`/works/${w.slug}.txt`).then((r) => {
           if (!r.ok) throw new Error(`status ${r.status}`);
@@ -477,24 +497,42 @@ function setupRadio(): void {
           });
         }),
       ),
-    )
-      .then((loaded) => {
-        for (const [slug, text] of loaded) texts.set(slug, text);
-        device.dataset.state = "ready";
-        note.hidden = true;
-        radio.setPower(1);
-        showStation();
-      })
-      .catch((err: unknown) => {
+    ).then((results) => {
+      for (const r of results) if (r.status === "fulfilled") texts.set(r.value[0], r.value[1]);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (results.every((r) => r.status === "rejected") && failed) {
         device.dataset.state = "error";
+        const err: unknown = failed.reason;
         note.textContent = err instanceof Error && err.message.startsWith("status ") ? STATIONS_SERVER : stationsUnreached(location.host);
         retry.hidden = false;
-      });
+        return;
+      }
+      device.dataset.state = "ready";
+      note.hidden = true;
+      // Online, a work that did not arrive can be fetched again.
+      retry.hidden = !failed || !!offline?.isOffline();
+      radio.setPower(1);
+      showStation();
+    });
   };
   retry.addEventListener("click", load);
 
   showStation();
   load();
+}
+
+/** Lock-screen and headset controls name the work on air (Media Session, where the browser has it). */
+function setMediaSession(work: Work): void {
+  if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: work.title,
+    artist: work.author,
+    album: "Dial",
+    artwork: [{ src: "/icons/dial-512.png", sizes: "512x512", type: "image/png" }],
+  });
+  const press = () => document.getElementById("pause")?.click();
+  navigator.mediaSession.setActionHandler("play", press);
+  navigator.mediaSession.setActionHandler("pause", press);
 }
 
 function setupFeedback(): void {
@@ -536,3 +574,4 @@ watchReducedMotion();
 sendEvent("page_view");
 setupRadio();
 setupFeedback();
+registerOfflineHelper();

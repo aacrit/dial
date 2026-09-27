@@ -43,6 +43,54 @@ describe("web/privacy.html, claim by claim", () => {
     // tests/no-network.test.ts checks every fetch in web/src against privacy-allowlist.json.
   });
 
+  // T4: Save for offline. Its claims sit in their own section of the page.
+  it("Save for offline keeps the text, the voice and the page files in cache storage, and saving sends nothing", async () => {
+    expect(text).toContain(`"Save for offline" keeps a work's text, the voice it needs and this site's own page files in your browser's cache storage on this device`);
+    expect(text).toContain("Saving only downloads this site's own files: nothing about what you save is sent.");
+    const store = read("web/src/offline/store.ts");
+    expect(store).toContain("await put(saved, workKey(slug), new Response(text");
+    expect(store).toMatch(/await put\(kv, hfVoiceKey\(m\.repo, id\)/);
+    expect(store).not.toMatch(/method:\s*"POST"|sendBeacon/);
+    expect(read("web/src/sw.ts")).toContain("await cache.put(path, await clean(res));");
+    // Every fetch in store.ts is an allowlisted download (tests/no-network.test.ts, tests/offline.test.ts).
+    expect(JSON.parse(read("privacy-allowlist.json")).sends).toEqual(["/e", "/feedback"]);
+  });
+
+  it("the offline helper never stores the daily counts or feedback", async () => {
+    expect(text).toContain("It never stores the daily counts or feedback, and it sends nothing of its own.");
+    const { route } = await import("../web/src/offline/routes");
+    const origin = "https://dial.voidvision.org";
+    for (const p of ["/e", "/feedback"]) for (const m of ["GET", "POST"]) expect(route(new URL(p, origin), m, origin)).toBe("ignore");
+  });
+
+  it("Remove deletes the work's text and any voice no other saved work uses; the model stays", async () => {
+    expect(text).toContain("Remove deletes that work's text and any voice no other saved work uses. The voice model stays, because every work uses it");
+    const { voicesToRemove } = await import("../web/src/offline/plan");
+    const saved = new Map([["cave", ["bm_george"]], ["crito", ["bm_george", "bm_fable"]]]);
+    expect(voicesToRemove("crito", saved)).toEqual(["bm_fable"]);
+    const store = read("web/src/offline/store.ts");
+    expect(store).toMatch(/await cache\.delete\(workKey\(slug\)\);[\s\S]*for \(const id of voicesToRemove\(slug, saved\)\) await kv\.delete/);
+    expect(store.slice(store.indexOf("export async function removeWork"))).not.toMatch(/voiceCacheName|runtimeCacheName/);
+  });
+
+  it("persistent storage is asked for on the first save, and a refusal is stated where it applies", async () => {
+    expect(text).toContain("On the first save, Dial asks the browser to keep saved works (persistent storage); if the browser declines, it may clear them when the device runs short of space.");
+    expect(text).toContain("On iPhone and iPad, in a Safari tab, saved works can be cleared if you do not open Dial for a week.");
+    expect(read("web/src/offline/store.ts")).toContain("return await s.persist();");
+    expect(read("web/src/offline/ui.ts")).toMatch(/if \(firstSave\) await requestPersistence\(\);/);
+    const { savedLine } = await import("../web/src/offline/plan");
+    expect(savedLine(1, false)).toContain("may clear it if the device runs short of space");
+  });
+
+  it("Not now on the install card is kept in cache storage for 30 days and never sent", async () => {
+    expect(text).toContain("that date is kept in the same cache storage so the card stays hidden for thirty days. It is never sent.");
+    const install = read("web/src/offline/install.ts");
+    expect(install).toMatch(/await \(await caches\.open\(DEVICE_CACHE\)\)\.put\(NOT_NOW_KEY/);
+    expect(install).not.toMatch(/fetch\(/);
+    const { INSTALL_SNOOZE_DAYS } = await import("../web/src/offline/install");
+    expect(INSTALL_SNOOZE_DAYS).toBe(30);
+  });
+
   it("counts as daily totals: /e takes exactly one field and only increments a day count", () => {
     expect(text).toContain("counts how many times a small set of named events happen each day");
     expect(read("worker/src/index.ts")).toContain('keys.length !== 1 || keys[0] !== "name"');

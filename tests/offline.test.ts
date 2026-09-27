@@ -1,0 +1,352 @@
+// T4: Save for offline, the offline helper and the installable app.
+// The helper's routing, the save and remove sets and the save row's words
+// are pure functions, held here without a browser; the helper's own
+// requests, the app manifest's colours and the contract are checked from
+// source and the build.
+
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
+import { SECURITY_HEADERS } from "../scripts/lib/csp.mjs";
+import { iconFiles, nightTokens, resolveHex, stampTokens } from "../scripts/lib/pwa.mjs";
+import { WORKS } from "../web/src/catalogue";
+import { tryCast } from "../web/src/engine/cast";
+import { segment } from "../web/src/engine/segment";
+import { INSTALL_SNOOZE_DAYS, installCard, isIosSafari, type InstallInput } from "../web/src/offline/install";
+import {
+  OFFLINE_NOTICE,
+  WORK_NOT_ON_DEVICE,
+  isSaved,
+  kilobytes,
+  offlineExtras,
+  onDeviceBytes,
+  planTotal,
+  saveFailedLine,
+  savePlan,
+  savedLine,
+  savingLine,
+  sizeLine,
+  voicesToRemove,
+  workVoices,
+} from "../web/src/offline/plan";
+import { SAVED_CACHE, isNeverCached, pageHeaders, route, shellCacheName, shellKey, shellPaths, staleShellCaches } from "../web/src/offline/routes";
+import type { Held, SizedManifest } from "../web/src/voice-cache";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const read = (f: string) => readFileSync(path.join(root, f), "utf8");
+const ORIGIN = "https://dial.voidvision.org";
+const at = (p: string) => new URL(p, ORIGIN);
+
+describe("the offline helper's routing", () => {
+  it("never answers or caches the Worker's routes or its own script, so offline they fail as they would without it", () => {
+    for (const p of ["/e", "/feedback", "/healthz", "/api/licence", "/sw.js"]) {
+      expect(isNeverCached(p), p).toBe(true);
+      expect(route(at(p), "GET", ORIGIN), p).toBe("ignore");
+    }
+    expect(route(at("/e"), "POST", ORIGIN)).toBe("ignore");
+    expect(route(at("/feedback"), "POST", ORIGIN)).toBe("ignore");
+    // Not a prefix match on unrelated paths.
+    expect(isNeverCached("/eels.html")).toBe(false);
+  });
+
+  it("answers only this origin's GET requests", () => {
+    expect(route(new URL("https://huggingface.co/x/resolve/main/voices/a.bin"), "GET", ORIGIN)).toBe("ignore");
+    expect(route(new URL("https://example.com/"), "GET", ORIGIN, "navigate")).toBe("ignore");
+    expect(route(at("/"), "POST", ORIGIN, "navigate")).toBe("ignore");
+  });
+
+  it("serves pages network first, the shell from its cache, and saved works from the saved cache offline", () => {
+    expect(route(at("/"), "GET", ORIGIN, "navigate")).toBe("page");
+    expect(route(at("/privacy"), "GET", ORIGIN, "navigate")).toBe("page");
+    expect(route(at("/privacy.html"), "GET", ORIGIN)).toBe("page");
+    expect(route(at("/assets/main-abc.js"), "GET", ORIGIN)).toBe("shell");
+    expect(route(at("/assets/inter-latin-400-normal-x.woff2"), "GET", ORIGIN)).toBe("shell");
+    expect(route(at("/manifest.webmanifest"), "GET", ORIGIN)).toBe("shell");
+    expect(route(at("/works/cave.txt"), "GET", ORIGIN)).toBe("saved");
+    expect(route(at("/voice/manifest.json"), "GET", ORIGIN)).toBe("saved");
+    expect(route(at("/ort/ort-wasm-simd-threaded.jsep.mjs"), "GET", ORIGIN)).toBe("saved");
+    // The big files are the page's own to keep (voice.ts, offline/store.ts), never the helper's.
+    for (const p of ["/voice/models/r/onnx/model_quantized.part0", "/voice/voices/bm_george.bin", "/ort/ort-wasm-simd-threaded.jsep.wasm", "/works/../sw.js"]) {
+      expect(route(at(p), "GET", ORIGIN), p).not.toBe("shell");
+    }
+  });
+
+  it("names the shell cache for the build and purges every other build's on activate, and no other cache", () => {
+    expect(shellCacheName("release/2026.09.26-3")).toBe("dial-shell-release/2026.09.26-3");
+    const names = ["dial-shell-abc1234", "dial-shell-def5678", SAVED_CACHE, "kokoro-voices", "dial-voice-1939", "dial-device"];
+    expect(staleShellCaches(names, "def5678")).toEqual(["dial-shell-abc1234"]);
+    expect(staleShellCaches(names, "new")).toEqual(["dial-shell-abc1234", "dial-shell-def5678"]);
+  });
+
+  it("the shell is the pages, scripts, styles, fonts, manifest and icons: never the voice, the texts, the runtime's .wasm or the helper", () => {
+    const files = [
+      "index.html",
+      "privacy.html",
+      "assets/main-a.js",
+      "assets/narrate.worker-b.js",
+      "assets/style-c.css",
+      "assets/inter-d.woff2",
+      "assets/ort-wasm-simd-threaded.jsep-e.wasm",
+      "manifest.webmanifest",
+      "icons/dial-192.png",
+      "voice/manifest.json",
+      "voice/voices/bm_george.bin",
+      "ort/ort-wasm-simd-threaded.jsep.mjs",
+      "works/cave.txt",
+      "_headers",
+      "build-tag.txt",
+      "sw.js",
+      "assets/main-a.js.map",
+    ];
+    expect(shellPaths(files)).toEqual(["/", "/assets/inter-d.woff2", "/assets/main-a.js", "/assets/narrate.worker-b.js", "/assets/style-c.css", "/icons/dial-192.png", "/manifest.webmanifest", "/privacy"]);
+    expect(shellKey("/index.html")).toBe("/");
+    expect(shellKey("/privacy.html")).toBe("/privacy");
+  });
+
+  it("a page answered from the cache keeps cross-origin isolation and the security headers", () => {
+    const h = pageHeaders(new Headers({ "content-type": "text/html" }));
+    expect(h.get("cross-origin-opener-policy")).toBe("same-origin");
+    expect(h.get("cross-origin-embedder-policy")).toBe("require-corp");
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) expect(h.get(k)).toBe(v);
+    expect(h.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(h.get("content-type")).toBe("text/html");
+  });
+});
+
+describe("Law 1: the offline helper fetches only this origin's own files", () => {
+  const sw = read("web/src/sw.ts");
+
+  it("its only requests are the page's own (after routing) and the shell's paths", () => {
+    const calls = [...sw.matchAll(/\bfetch\(([^)]*)\)/g)].map((m) => m[1]!.trim());
+    expect(calls.length).toBeGreaterThan(0);
+    for (const c of calls) expect(["request", 'path, { cache: "reload" }'], c).toContain(c);
+    // The shell's paths come from the build's list; the page's request only after route() said this origin.
+    expect(sw).toMatch(/for \(const path of __SHELL__\)/);
+    expect(sw).toMatch(/const r = route\(new URL\(request\.url\), request\.method, sw\.location\.origin, request\.mode\);\s*if \(r === "ignore"\) return;/);
+    expect(sw).not.toMatch(/sendBeacon|WebSocket|EventSource|XMLHttpRequest|method:\s*"POST"/);
+  });
+
+  it("the built helper's shell list names only same-origin paths", () => {
+    const built = path.join(root, "dist", "sw.js");
+    if (!existsSync(built)) return; // the gate builds before it tests
+    const list = /`(\/[^`]*)`\.split\(`,`\)/.exec(readFileSync(built, "utf8"))?.[1];
+    expect(list).toBeDefined();
+    for (const p of list!.split(",")) {
+      expect(p.startsWith("/") && !p.startsWith("//"), p).toBe(true);
+      expect(p, p).not.toMatch(/^\/(voice|ort|works)\/|\.wasm$|^\/sw\.js$|^\/e$|^\/feedback$/);
+    }
+    expect(list!.split(",")).toContain("/");
+  });
+
+  it("saving fetches only allowlisted downloads, and sends nothing", () => {
+    const store = read("web/src/offline/store.ts");
+    expect(store).not.toMatch(/method:\s*"POST"|sendBeacon/);
+    const allow = JSON.parse(read("privacy-allowlist.json")) as { sends: string[]; downloads: string[] };
+    expect(allow.sends).toEqual(["/e", "/feedback"]);
+    for (const m of store.matchAll(/\bfetch\(\s*[`"]([^`"$]*)/g)) expect(allow.downloads.some((d) => m[1]!.startsWith(d)) || m[1] === "/voice/manifest.json", m[1]).toBe(true);
+  });
+});
+
+// A manifest shaped like scripts/fetch-voice.mjs writes it.
+const M: SizedManifest = {
+  repo: "r",
+  model: "onnx/model_quantized.onnx",
+  parts: ["model_quantized.part0", "model_quantized.part1"],
+  sizes: {
+    "/voice/models/r/onnx/model_quantized.part0": 50_000_000,
+    "/voice/models/r/onnx/model_quantized.part1": 42_400_000,
+    "/voice/models/r/config.json": 2_000,
+    "/voice/models/r/tokenizer.json": 3_000,
+    "/ort/ort-wasm-simd-threaded.jsep.mjs": 50_000,
+    "/ort/ort-wasm-simd-threaded.jsep.wasm": 21_550_000,
+    "/voice/voices/bm_george.bin": 522_000,
+    "/voice/voices/bm_fable.bin": 522_000,
+    "/voice/voices/bm_lewis.bin": 522_000,
+  },
+};
+const EXTRAS = [
+  { path: "/voice/manifest.json", bytes: 2_100 },
+  { path: "/ort/ort-wasm-simd-threaded.jsep.mjs", bytes: 50_000 },
+];
+const nothing: Held = { model: false, modelFiles: new Set(), runtime: false, voices: new Set() };
+const everything = (voices: string[]): Held => ({ model: true, modelFiles: new Set(["/voice/models/r/config.json", "/voice/models/r/tokenizer.json"]), runtime: true, voices: new Set(voices) });
+
+describe("save and remove", () => {
+  const castOf = (slug: string) => {
+    const w = WORKS.find((x) => x.slug === slug)!;
+    const c = tryCast(segment(read(`web/public/works/${slug}.txt`)), w.cast)!;
+    return workVoices(c.voices);
+  };
+
+  it("a voice two saved works share survives removing one of them", () => {
+    const saved = new Map([
+      ["cave", ["bm_george"]],
+      ["meditations", ["bm_george"]],
+      ["crito", ["bm_george", "bm_fable", "bm_lewis"]],
+    ]);
+    expect(voicesToRemove("cave", saved)).toEqual([]);
+    expect(voicesToRemove("crito", saved)).toEqual(["bm_fable", "bm_lewis"]);
+    saved.delete("meditations");
+    saved.delete("crito");
+    expect(voicesToRemove("cave", saved)).toEqual(["bm_george"]);
+  });
+
+  it("the real works: removing the Cave keeps the narrator the Meditations still use", () => {
+    const saved = new Map([
+      ["cave", castOf("cave")],
+      ["meditations", castOf("meditations")],
+    ]);
+    const shared = castOf("cave").filter((v) => castOf("meditations").includes(v));
+    expect(shared.length).toBeGreaterThan(0);
+    for (const v of shared) expect(voicesToRemove("cave", saved)).not.toContain(v);
+  });
+
+  it("the extras an offline Tune in needs are the voice manifest and the runtime's script, not its .wasm", () => {
+    expect(offlineExtras(M)).toEqual(["/voice/manifest.json", "/ort/ort-wasm-simd-threaded.jsep.mjs"]);
+  });
+
+  it("a work is saved only when its text, every voice byte and the app's files are all on this device", () => {
+    const voices = ["bm_george"];
+    const full = savePlan(M, voices, everything(voices), 17_000, true, []);
+    expect(isSaved(full, true)).toBe(true);
+    expect(isSaved(full, false)).toBe(false);
+    expect(isSaved(savePlan(M, voices, everything([]), 17_000, true, []), true)).toBe(false);
+    expect(isSaved(savePlan(M, voices, everything(voices), 17_000, false, []), true)).toBe(false);
+    expect(isSaved(savePlan(M, voices, everything(voices), 17_000, true, [{ path: "/voice/manifest.json", bytes: 2_000 }]), true)).toBe(false);
+  });
+});
+
+describe("the save row's words, from measured bytes", () => {
+  const voices = ["bm_george"];
+
+  it("nothing held: the text's size plus the whole voice, once, from neededBytes plus the extras", () => {
+    const p = savePlan(M, voices, nothing, 29_400, false, EXTRAS);
+    // The runtime's script is counted once: with /ort/ while the runtime is not held.
+    expect(p.voiceBytes).toBe(50_000_000 + 42_400_000 + 2_000 + 3_000 + 50_000 + 21_550_000 + 522_000 + 2_100);
+    expect(sizeLine(p)).toBe("29 kB of text, plus the voice, once (about 115 MB).");
+    expect(planTotal(p)).toBe(p.voiceBytes + 29_400);
+  });
+
+  it("the model held but not this work's voices: only they are named", () => {
+    const p = savePlan(M, ["bm_george", "bm_fable", "bm_lewis"], everything(["bm_george"]), 30_000, false, []);
+    expect(sizeLine(p)).toBe("30 kB of text, plus this work's voices (about 1 MB). The rest of the voice is already on this device.");
+  });
+
+  it("the whole voice held: only the text", () => {
+    expect(sizeLine(savePlan(M, voices, everything(voices), 13_200, false, []))).toBe("13 kB of text. The voice is already on this device.");
+    expect(sizeLine(savePlan(M, voices, everything(voices), 13_200, false, EXTRAS))).toBe("13 kB of text, plus 52 kB the voice needs offline. The voice is already on this device.");
+  });
+
+  it("saving counts toward its true total; saved states its bytes and the persistence answer", () => {
+    expect(savingLine(48_200_000, 114_600_000)).toBe("Saving… 48.2 of 114.6 MB");
+    expect(savingLine(200, 100)).toBe("Saving… 0.0 of 0.0 MB");
+    const bytes = onDeviceBytes(M, voices, 17_000, EXTRAS);
+    expect(bytes).toBe(17_000 + 92_400_000 + 5_000 + 21_600_000 + 522_000 + 2_100);
+    expect(savedLine(bytes, true)).toBe("Plays in Dial with no connection. 114.5 MB on this device, the voice shared by every saved work.");
+    expect(savedLine(bytes, false)).toContain("This browser may clear it if the device runs short of space.");
+    expect(kilobytes(10)).toBe("1 kB");
+  });
+
+  it("offline copy is the spec's, and failures are plain words with the fix", () => {
+    expect(OFFLINE_NOTICE).toBe("Offline. Works saved on this device play as usual. The others need a connection.");
+    expect(WORK_NOT_ON_DEVICE).toMatch(/^This work isn't saved on this device\./);
+    expect(saveFailedLine("QuotaExceededError: x")).toMatch(/no room on this device/);
+    expect(saveFailedLine("TypeError: Failed to fetch")).toMatch(/Check your connection/);
+    expect(saveFailedLine("Error: voice part model_quantized.part2: 503")).toMatch(/could not send/);
+  });
+
+  it("Save for offline and Download as an audio file stay two labelled things", () => {
+    const html = read("web/index.html");
+    expect(html).toContain(">Download as an audio file</a>");
+    expect(read("web/src/offline/ui.ts")).toContain('"Save for offline"');
+    expect(html).not.toMatch(/Save for offline[^<]*download/i);
+  });
+});
+
+describe("installing Dial", () => {
+  const base: InstallInput = { listened: true, standalone: false, promptAvailable: false, iosSafari: false, notNowAt: null, now: Date.UTC(2026, 8, 26) };
+
+  it("shows Install only where the browser offered the prompt, and only after a completed listen", () => {
+    expect(installCard({ ...base, promptAvailable: true })).toBe("prompt");
+    expect(installCard({ ...base, promptAvailable: true, listened: false })).toBeNull();
+    expect(installCard(base)).toBeNull();
+    expect(installCard({ ...base, promptAvailable: true, standalone: true })).toBeNull();
+  });
+
+  it("on iPhone and iPad Safari, the Home Screen steps instead, with no Install button", () => {
+    expect(installCard({ ...base, iosSafari: true })).toBe("ios");
+    const html = read("web/index.html");
+    const ios = /<section class="card install" id="ios-card"[\s\S]*?<\/section>/.exec(html)![0];
+    expect(ios).not.toContain(">Install<");
+    expect(ios).toContain("Scroll down and tap Add to Home Screen.");
+    expect(ios).toContain("iPhone can clear saved works if you do not open Dial for a week");
+  });
+
+  it("Not now hides it for 30 days", () => {
+    const day = 86_400_000;
+    expect(INSTALL_SNOOZE_DAYS).toBe(30);
+    expect(installCard({ ...base, promptAvailable: true, notNowAt: base.now - 29 * day })).toBeNull();
+    expect(installCard({ ...base, promptAvailable: true, notNowAt: base.now - 30 * day })).toBe("prompt");
+  });
+
+  it("detects iPhone and iPad Safari, not other iOS browsers", () => {
+    const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+    expect(isIosSafari(iphone, 5)).toBe(true);
+    expect(isIosSafari("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", 5)).toBe(true);
+    expect(isIosSafari("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", 0)).toBe(false);
+    expect(isIosSafari(iphone.replace("Version/18.0", "CriOS/130.0"), 5)).toBe(false);
+  });
+});
+
+describe("the app manifest and icons", () => {
+  const tokens = nightTokens(read("design/tokens.css"));
+
+  it("takes its colours from tokens.css through the build: the template holds no colour of its own", () => {
+    const template = read("web/public/manifest.webmanifest");
+    expect(template).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(|oklch\(/);
+    const stamped = JSON.parse(stampTokens(template, tokens)) as Record<string, unknown>;
+    expect(stamped.name).toBe("Dial");
+    expect(stamped.short_name).toBe("Dial");
+    expect(stamped.display).toBe("standalone");
+    expect(stamped.theme_color).toBe(resolveHex(tokens, "--hex-walnut"));
+    expect(stamped.background_color).toBe(stamped.theme_color);
+    expect(read("web/index.html")).toContain('<meta name="theme-color" content="token(--color-bg)" />');
+    expect(() => stampTokens("token(--no-such-token)", tokens)).toThrow(/does not resolve/);
+  });
+
+  it("the icons are the arch logomark, made at build time as SVG and PNG (never committed)", () => {
+    const files = iconFiles(tokens);
+    expect(files["dial.svg"]!.toString()).toContain("A52 52 0 0 1 112 62");
+    for (const f of ["dial-192.png", "dial-512.png", "dial-maskable-512.png", "apple-touch-icon.png"]) {
+      expect(files[f]!.subarray(1, 4).toString(), f).toBe("PNG");
+    }
+    expect(files["dial-512.png"]!.readUInt32BE(16)).toBe(512);
+    expect(readdirSync(path.join(root, "web", "public")).filter((f) => /\.(png|svg)$/.test(f))).toEqual([]);
+    const manifest = JSON.parse(read("web/public/manifest.webmanifest")) as { icons: { src: string; purpose?: string }[] };
+    expect(manifest.icons.map((i) => i.src.replace("/icons/", ""))).toEqual(["dial.svg", "dial-192.png", "dial-512.png", "dial-maskable-512.png"]);
+    expect(manifest.icons.some((i) => i.purpose === "maskable")).toBe(true);
+  });
+
+  it("the build wrote the stamped manifest and icons into dist", () => {
+    if (!existsSync(path.join(root, "dist", "manifest.webmanifest"))) return;
+    const built = JSON.parse(readFileSync(path.join(root, "dist", "manifest.webmanifest"), "utf8")) as { theme_color: string };
+    expect(built.theme_color).toBe(resolveHex(tokens, "--color-bg"));
+    for (const f of ["dial.svg", "dial-192.png", "dial-512.png", "dial-maskable-512.png", "apple-touch-icon.png"]) expect(existsSync(path.join(root, "dist", "icons", f)), f).toBe(true);
+    expect(readFileSync(path.join(root, "dist", "index.html"), "utf8")).toContain(`<meta name="theme-color" content="${built.theme_color}" />`);
+  });
+});
+
+describe("the contract checks the installable app and the offline helper", () => {
+  const checks = (parseYaml(read("contract.yaml")) as { checks: { type: string; path?: string; expect?: number }[] }).checks;
+  it("/manifest.webmanifest and /sw.js return 200", () => {
+    for (const p of ["/manifest.webmanifest", "/sw.js"]) {
+      expect(checks.some((c) => c.type === "status" && c.path === p && c.expect === 200), p).toBe(true);
+    }
+  });
+  it("the page registers the helper for the whole site from main.ts", () => {
+    expect(read("web/src/main.ts")).toMatch(/^registerOfflineHelper\(\);$/m);
+    expect(read("web/src/offline/store.ts")).toContain('navigator.serviceWorker.register("/sw.js", { scope: "/" })');
+  });
+});

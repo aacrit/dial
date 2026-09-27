@@ -140,6 +140,33 @@ checks:
     path: /ort/ort-wasm-simd-threaded.jsep.mjs
     expect: 200
 
+  # T4: the installable app and the offline helper (web/src/sw.ts, built
+  # to dist/sw.js), both static files from this origin.
+  - name: the app manifest is served
+    type: status
+    path: /manifest.webmanifest
+    expect: 200
+
+  - name: the app manifest names Dial
+    type: contains
+    path: /manifest.webmanifest
+    text: "\"short_name\": \"Dial\""
+
+  - name: the app icon is served
+    type: status
+    path: /icons/dial-192.png
+    expect: 200
+
+  - name: the offline helper is served
+    type: status
+    path: /sw.js
+    expect: 200
+
+  - name: the offline helper never answers the count or feedback routes
+    type: contains
+    path: /sw.js
+    text: "/feedback"
+
   - name: homepage is cross-origin isolated (threaded render)
     type: header
     path: /

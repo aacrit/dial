@@ -267,10 +267,11 @@ describe("true copy: the first voice download", () => {
     expect(main).toMatch(/warmingLine\(msg\.total, msg\.need, work\.called, msg\.missingVoices\)/);
   });
 
-  it("the page makes no offline claim before offline exists", () => {
-    for (const [name, src] of [["index.html", indexHtml], ["privacy.html", privacyHtml], ["main.ts", main]] as const) {
-      expect(src, name).not.toMatch(/offline/i);
-    }
+  it("the page's offline claims ship with the offline helper that makes them true (T4)", () => {
+    // Offline exists from T4: the helper is registered from main.ts and built to dist/sw.js.
+    expect(main).toMatch(/^registerOfflineHelper\(\);$/m);
+    expect(read("scripts/build.mjs")).toContain("await buildServiceWorker(tag, shell);");
+    expect(privacyHtml).toContain("Saved for offline");
   });
 });
 
