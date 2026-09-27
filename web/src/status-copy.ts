@@ -113,3 +113,27 @@ export function stationsUnreached(host: string): string {
 export const CAST_FAILED = "Dial could not cast this work's voices.";
 
 export const STATIONS_SERVER = "The stations did not load. Dial could not send the works. Try again later.";
+
+// ---- Scrubbing (the progress strip, J/K/L and [ ]) --------------------------
+
+/** A seek past what is made: it stops at the last made line, and says so. */
+export function notMadeYet(made: number, total: number): string {
+  return `Not made yet. This device has made ${made} of ${total} lines so far, so it plays from line ${made}.`;
+}
+
+/** A line in the script that is not made yet was chosen. */
+export function lineNotMadeYet(line: number, made: number): string {
+  return `Line ${line} is not made yet. This device has made ${made} so far.`;
+}
+
+/** The progress strip's reading: "01:27 of about 20:12. Line 9 of 118. Made up to 04:10." */
+export function stripText(position: number, total: number, exact: boolean, line: number, lines: number, made: number, renderDone: boolean): string {
+  const of = `${clock(position)} of ${exact ? "" : "about "}${clock(total)}. Line ${Math.max(1, line)} of ${lines}.`;
+  return renderDone ? of : `${of} Made up to ${clock(made)}.`;
+}
+
+/** The script sheet's note: whose words, and what a chosen line does. */
+export function scriptNote(translator: string, playable: boolean): string {
+  const whose = `${translator.split(" ").at(-1)}'s words, exactly as printed.`;
+  return playable ? `${whose} Choose a line to play from it.` : `${whose} Tune in to play from a line.`;
+}

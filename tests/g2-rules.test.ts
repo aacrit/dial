@@ -56,6 +56,12 @@ describe("tally is a lamp only", () => {
   it("tally is never a text colour or a ground for text anywhere in the stylesheet", () => {
     for (const [sel, body] of rules) {
       if (!body.includes("--color-tally")) continue;
+      // T3: the strip's render head is a lamp too (design/spec.md 1.1): an SVG line's stroke, never text.
+      if (sel === ".ribbon .renderhead") {
+        expect(decl(body, "stroke")).toBe("var(--color-tally)");
+        expect(body.replace(/stroke\s*:\s*var\(--color-tally\)/, "")).not.toContain("--color-tally");
+        continue;
+      }
       // Only a text-less pseudo-element lamp may carry tally.
       expect(sel, sel).toMatch(/::(before|after)$/);
       expect(decl(body, "content"), sel).toBe('""');
@@ -131,9 +137,12 @@ describe("the lamp is lit only while a render or playback is live", () => {
   });
 
   it("the lamp is re-read when every line is made, and goes off when the last scheduled line ends", () => {
-    expect(main).toMatch(/node\.onended = \(\) => \{\s*playing--;\s*ended\(\);/);
-    expect(block("ended")).toMatch(/own\.renderDone && playing === 0\) \{\s*offAir\(\);/);
-    expect(main).toMatch(/msg\.type === "done"\) \{[\s\S]*?own\.renderDone = true;[\s\S]*?setLamp\(\);[\s\S]*?ended\(\);/);
+    // T3: the scheduler (web/src/player/scheduler.ts, tested in tests/scheduler.test.ts) decides the end:
+    // every line made, all scheduled, none playing. Each source's own end reports to it; it calls complete once.
+    expect(main).toMatch(/node\.onended = done;/);
+    expect(main).toMatch(/complete: \(\) => ended\(\),/);
+    expect(block("ended")).toMatch(/if \(session === own && own\.live\) \{\s*offAir\(\);/);
+    expect(main).toMatch(/msg\.type === "done"\) \{[\s\S]*?own\.renderDone = true;[\s\S]*?setLamp\(\);[\s\S]*?sched\.renderFinished\(\);/);
   });
 
   it("pausing and resuming re-read the lamp, and so does every audio state change", () => {

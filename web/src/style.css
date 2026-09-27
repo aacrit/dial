@@ -160,6 +160,11 @@ body[data-on-air="true"] #tune-in.is-on-air::before {
   text-decoration: none;
 }
 
+/* The rooms and the keyboard key sit together on the right. */
+.masthead .rooms {
+  margin-left: auto;
+}
+
 .brand .arch {
   height: 28px;
   width: auto;
@@ -1648,6 +1653,406 @@ textarea:focus {
 
 /* Phone: the faceplate is the screen. Window, station line, Tune in, keys
    and knobs in the bottom third for thumbs, then the glass display. */
+/* ---- The Broadcast: the same radio on air (T3) ------------------------------ */
+
+/* The keyboard's key, in the masthead and the shortcuts sheet. */
+.keycap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-cream);
+  font: 500 0.8rem/1 var(--font-data);
+}
+
+button.keycap {
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Each room shows its own parts: presets on the Repertory, transport and strip on the Broadcast. */
+body:not([data-room="broadcast"]) .transport,
+body:not([data-room="broadcast"]) .dev-ribbon,
+body:not([data-room="broadcast"]) .meters,
+body:not([data-room="broadcast"]) .ra-sheets,
+body[data-room="broadcast"] [data-presets],
+body[data-room="broadcast"] .rep-head,
+body[data-room="broadcast"] .below > .bookplate {
+  display: none;
+}
+
+/* The living wave: a canvas behind the scale and the needle, in the dial's own coordinates. */
+.dialwin canvas.dw-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Voice and Music: two slim bars on the glass. Height is loudness; hue is register, by hard cut. */
+.meters {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mrow {
+  display: grid;
+  grid-template-columns: 3.8em minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  font: 500 0.6rem/1 var(--font-data);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-glass-ink-muted);
+}
+
+.mbar {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-glass-ink-faint);
+  overflow: hidden;
+}
+
+.mbar i {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background: var(--color-glass-reg-telling);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* The peak hold: a hairline at the loudest recent level. */
+.mbar b.peak {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -2px;
+  background: var(--color-glass-ink);
+  z-index: 2;
+}
+
+/* The in-range band, -23 to -18 dBFS on a 0 to -40 scale (player/levels.ts bandMarks). */
+.mbar b.band {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 42.5%;
+  width: 12.5%;
+  border-left: 1px solid var(--color-glass-ink-muted);
+  border-right: 1px solid var(--color-glass-ink-muted);
+  z-index: 1;
+}
+
+.meters .il {
+  justify-self: start;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: normal;
+}
+
+.meters .il .pip {
+  width: 6px;
+  height: 6px;
+}
+
+/* The read-along's head: who is on air, then the Script and the Bookplate. */
+.ra-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ra-sheets {
+  display: flex;
+  gap: 4px;
+}
+
+.ra-btn {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--color-glass-amber);
+  font: 500 0.62rem/1 var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.ra-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The progress strip: one segment per line, heard solid, ahead faded, not made yet a ghost. */
+.dev-ribbon {
+  display: grid;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.ribbon {
+  display: block;
+  width: 100%;
+  height: 44px;
+  cursor: pointer;
+  touch-action: none;
+  outline-offset: 4px;
+}
+
+.ribbon .seg {
+  fill: var(--color-realm);
+  transition: fill var(--dur-realm-bleed) linear;
+}
+
+.ribbon .seg.ahead {
+  opacity: 0.42;
+}
+
+.ribbon .seg.unmade {
+  fill: var(--color-cream-faint);
+}
+
+/* The render head: a tally lamp line where making has reached (tally means live making). */
+.ribbon .renderhead {
+  stroke: var(--color-tally);
+  stroke-width: 1.5;
+}
+
+.ribbon .needle {
+  stroke: var(--color-filament);
+  stroke-width: 2;
+}
+
+.dev-ribbon .times {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timecode {
+  font: 400 0.8rem/1 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cream-muted);
+  white-space: nowrap;
+}
+
+#t-el {
+  color: var(--color-cream);
+}
+
+.scrub-note {
+  font-size: 0.84rem;
+  color: var(--color-cream);
+}
+
+.scrub-note:empty {
+  display: none;
+}
+
+/* Transport keys: glyph and a short label; a key that cannot act yet sits dim. */
+.key .glyph {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.key:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+  box-shadow: var(--shadow-key);
+}
+
+.transport .key {
+  min-width: 56px;
+}
+
+/* Sheets: a native modal dialog; a bottom sheet on a phone, a centred dialog from a tablet up. */
+dialog.sheet {
+  width: 100%;
+  max-width: 100%;
+  max-height: 86dvh;
+  margin: auto 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--color-surface);
+  color: var(--color-cream);
+  box-shadow: var(--shadow-hover);
+  overflow: auto;
+}
+
+dialog.sheet[open] {
+  animation: sheet-rise var(--dur-morph) var(--ease-cinematic);
+}
+
+dialog.sheet::backdrop {
+  background: var(--color-scrim);
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+.sheet-in {
+  padding: 14px 20px calc(24px + env(safe-area-inset-bottom));
+}
+
+.sheet-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: -14px;
+  padding: 6px 0;
+  background: var(--color-surface);
+}
+
+.sheet-top h2 {
+  font-size: 1.35rem;
+}
+
+.sheet-note {
+  margin: 6px 0 14px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.bookplate-dl {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.bookplate-dl dt {
+  font: 500 0.64rem/1 var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+  padding-top: 12px;
+}
+
+.bookplate-dl dd {
+  margin: 0;
+}
+
+/* The full script: the printed words, the live line amber on its glow. */
+.script {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 1.06rem;
+  line-height: 1.7;
+  max-width: var(--measure-reading);
+}
+
+.script p {
+  margin: 0 0 1em;
+}
+
+.script .sl {
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.script .sl:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--color-border);
+  text-underline-offset: 4px;
+}
+
+.script .sl.unmade {
+  color: var(--color-cream-muted);
+  cursor: default;
+}
+
+.script .sl.live {
+  color: var(--color-filament);
+  background: var(--color-filament-glow);
+}
+
+.shortcut-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 16px;
+  align-items: center;
+  margin: 8px 0 0;
+}
+
+.shortcut-list dt {
+  display: flex;
+  gap: 6px;
+}
+
+.shortcut-list dd {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+@media (min-width: 768px) {
+  dialog.sheet {
+    width: min(720px, calc(100% - 32px));
+    margin: auto;
+    border-radius: var(--radius-card);
+    max-height: calc(100dvh - 64px);
+  }
+
+  dialog.sheet.small {
+    width: min(520px, calc(100% - 32px));
+  }
+}
+
+/* The Broadcast on a phone: window, station line, glass, strip, then the keys and knobs. */
+@media (max-width: 767px) {
+  body[data-room="broadcast"] .device > .dialwin { order: 1; }
+  body[data-room="broadcast"] .device > .station-line { order: 2; }
+  body[data-room="broadcast"] .device > .display { order: 3; }
+  body[data-room="broadcast"] .device > .dev-ribbon { order: 4; }
+  body[data-room="broadcast"] .device > .tunein { order: 5; }
+  body[data-room="broadcast"] .device > .switch-ask { order: 6; }
+  body[data-room="broadcast"] .device > .onair-panel { order: 6; }
+  body[data-room="broadcast"] .device > .controls { order: 7; }
+
+  body[data-room="broadcast"] .instruments {
+    flex-wrap: wrap;
+  }
+
+  /* Phones rarely have a keyboard: the key's sheet is still one "?" away. */
+  .masthead .keycap {
+    display: none;
+  }
+
+  .transport .key {
+    min-width: 48px;
+    padding: 6px;
+  }
+}
+
 @media (max-width: 767px) {
   html:has(body.faceplate-page) {
     background: var(--color-surface);
@@ -1749,7 +2154,7 @@ textarea:focus {
 
   .device > .dialwin {
     grid-column: 1;
-    grid-row: 1 / span 6;
+    grid-row: 1 / span 8;
     align-self: center;
   }
 
