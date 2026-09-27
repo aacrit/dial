@@ -8,8 +8,8 @@ alert_at: 0.7
 quotas:
   - name: workers_requests_per_day
     ceiling: 100000
-    estimate_at_1000_users_per_day: 5000
-    notes: "Account-wide. ~5 Worker requests per visitor a day: /e events (a page view, a work_opened for each station chosen on the dial, at most 3 a page load, and a chapter_rendered when a work is finished) and occasional /feedback. Static pages, scripts, styles and fonts are served by Workers Static Assets without invoking the Worker (wrangler.jsonc's run_worker_first lists only the Worker routes), so they do not count here. Not bounded against abuse on the free plan: a refused request is still an invocation. The zone's WAF rule caps bursts (the /release skill), and the rest is an accepted risk signed at G3 (the /launch skill)."
+    estimate_at_1000_users_per_day: 8000
+    notes: "Account-wide. ~8 Worker requests per visitor a day: about 3 page loads (T12: pages run the Worker first so plain http:// is redirected to https://; no rate limit, no D1), and /e events (a page view, a work_opened for each station chosen on the dial, at most 3 a page load, and a chapter_rendered when a work is finished) and occasional /feedback. Scripts, styles, fonts, voice files and recordings are served by Workers Static Assets without invoking the Worker (wrangler.jsonc's run_worker_first lists only the Worker routes and the pages), so they do not count here. Not bounded against abuse on the free plan: a refused request is still an invocation. The zone's WAF rule caps bursts (the /release skill), and the rest is an accepted risk signed at G3 (the /launch skill)."
 
   - name: static_asset_largest_file_mib
     ceiling: 25

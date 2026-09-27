@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { handleEvent, handleFeedback, handleHealthz, isAllowedEvent, purgeOldFeedback, type Env } from "../worker/src/index";
+import { handle, handleEvent, handleFeedback, handleHealthz, isAllowedEvent, purgeOldFeedback, type Env } from "../worker/src/index";
+import { httpsRedirect } from "../worker/src/https";
 import { CLIENT_EVENTS, SERVER_ONLY_EVENTS } from "../worker/src/config";
 import { createMockD1, createMockAssets } from "./helpers/mock-d1";
 
@@ -157,5 +158,43 @@ describe("/healthz via handleHealthz", () => {
   it("prefers the build-tag.txt static asset when present", async () => {
     const res = await handleHealthz(makeEnv({ ASSETS: createMockAssets({ "build-tag.txt": "release/2026.09.24-1\n" }) }));
     expect(((await res.json()) as { build: string }).build).toBe("release/2026.09.24-1");
+  });
+});
+
+describe("plain http:// pages go to https:// (T12)", () => {
+  const page = (url: string, init: RequestInit = {}) => handle(new Request(url, init), makeEnv({ ASSETS: createMockAssets({ "": "<!doctype html>home", "play/cave": "<!doctype html>cave" }) }));
+
+  it("a page over http on a deployed host is a 301 to the same path and query on https", async () => {
+    const res = await page("http://dial.voidvision.org/play/cave?at=12");
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://dial.voidvision.org/play/cave?at=12");
+    const head = await page("http://dial.voidvision.org/", { method: "HEAD" });
+    expect(head.status).toBe(301);
+  });
+
+  it("CF-Visitor's scheme counts too, whatever the URL says", async () => {
+    const res = await page("https://dial.voidvision.org/", { headers: { "cf-visitor": '{"scheme":"http"}' } });
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://dial.voidvision.org/");
+  });
+
+  it("https, local dev, POSTs and the Worker's own routes are never redirected", async () => {
+    expect(httpsRedirect(new Request("https://dial.voidvision.org/"))).toBeNull();
+    expect(httpsRedirect(new Request("http://127.0.0.1:8787/"))).toBeNull();
+    expect(httpsRedirect(new Request("http://localhost:5173/play/cave"))).toBeNull();
+    expect(httpsRedirect(new Request("http://dial.voidvision.org/e", { method: "POST" }))).toBeNull();
+    expect(httpsRedirect(new Request("http://dial.voidvision.org/healthz"))).toBeNull();
+    expect(httpsRedirect(new Request("http://dial.voidvision.org/api/x"))).toBeNull();
+  });
+
+  it("a page on https goes straight to the assets: no rate limit, no D1", async () => {
+    let limited = 0;
+    const limiter = { limit: async () => { limited++; return { success: false }; } };
+    const { db } = createMockD1();
+    const env = makeEnv({ DB: db, ASSETS: createMockAssets({ "": "<!doctype html>home" }), RL_API: limiter, RL_EVENTS: limiter, RL_FEEDBACK: limiter } as Partial<Env>);
+    const res = await handle(new Request("https://dial.voidvision.org/"), env);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<!doctype html>home");
+    expect(limited).toBe(0);
   });
 });

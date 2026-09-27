@@ -155,9 +155,14 @@ async function runCheck(check, baseUrl, originalBase = baseUrl) {
           // Not the Worker's JSON (a WAF or proxy page): does not count.
         }
       };
+      // With `wave_gap_ms`, a pause between waves: the binding's count settles
+      // a moment after the requests that raised it, so back-to-back waves
+      // can all pass before it bites; a short gap lets it catch up.
       const wave = Math.max(1, check.concurrency ?? 1);
       for (let sent = 0; sent < check.count; sent += wave) {
+        if (sent && check.wave_gap_ms) await new Promise((resolve) => setTimeout(resolve, check.wave_gap_ms));
         await Promise.all(Array.from({ length: Math.min(wave, check.count - sent) }, one));
+        if (matched) break;
       }
       const want = check.expect_error === undefined ? `${check.expect_status}` : `${check.expect_status} with {"error":"${check.expect_error}"}`;
       return { label, pass: matched, detail: matched ? undefined : `no ${want} in ${check.count} requests (got ${[...new Set(statuses)].join(", ")})` };
@@ -171,8 +176,16 @@ async function runCheck(check, baseUrl, originalBase = baseUrl) {
       const r = await contractFetch(from, { redirect: "manual" });
       await r.arrayBuffer();
       const location = r.headers.get("location") ?? "";
-      const pass = r.status === check.expect && (check.location_starts_with === undefined || location.startsWith(check.location_starts_with));
-      return { label, pass, detail: pass ? undefined : `${from} answered ${r.status}${location ? ` to ${location}` : ""}, expected ${check.expect} to ${check.location_starts_with ?? "anywhere"}` };
+      // With `same_url_on_https`, the Location must be exactly the requested URL on https://.
+      const sameUrl = new URL(from);
+      sameUrl.protocol = "https:";
+      sameUrl.port = "";
+      const wantLocation = check.same_url_on_https ? sameUrl.toString() : check.location_starts_with;
+      const pass =
+        r.status === check.expect &&
+        (check.location_starts_with === undefined || location.startsWith(check.location_starts_with)) &&
+        (!check.same_url_on_https || location === sameUrl.toString());
+      return { label, pass, detail: pass ? undefined : `${from} answered ${r.status}${location ? ` to ${location}` : ""}, expected ${check.expect} to ${wantLocation ?? "anywhere"}` };
     }
 
     const response = await contractFetch(target);

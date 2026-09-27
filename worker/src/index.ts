@@ -17,6 +17,7 @@ import { incrementUnderCeiling, utcDay } from "./events";
 import { readJsonWithCap } from "./http";
 import { isCrossSite, isJsonContentType, LIMITER_PERIOD_SECONDS, limiterFor, rateLimitedMessage, withinRateLimit, type GuardEnv } from "./guard";
 import { API_CSP, withSecurityHeaders } from "./headers";
+import { httpsRedirect, isWorkerRoute } from "./https";
 import { PAGE_CSP_HEADER } from "../../scripts/lib/csp.mjs";
 
 export interface Env extends GuardEnv {
@@ -202,6 +203,9 @@ export function unavailableLogLine(err: unknown): string {
 
 /** The Worker's whole request path, with every failure answered as a 503 (unavailableResponse). */
 export async function handle(request: Request, env: Env): Promise<Response> {
+  // Plain http:// is sent to https:// before anything else runs (worker/src/https.ts).
+  const toHttps = httpsRedirect(request);
+  if (toHttps) return withRobots(toHttps, env);
   let res: Response;
   try {
     res = await guarded(request, env);
@@ -228,6 +232,12 @@ export function withRobots(res: Response, env: Pick<Env, "ROBOTS">): Response {
 /** Guards, then the route, then headers. */
 async function guarded(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+
+  // A page (run_worker_first lists the page paths only so plain http:// can
+  // be redirected) goes straight to Workers Static Assets: no rate limit, so
+  // the Worker adds no per-network limit to a page (the zone WAF still applies on the custom domain),
+  // and no D1.
+  if ((request.method === "GET" || request.method === "HEAD") && !isWorkerRoute(url.pathname)) return route(request, env, url);
 
   // Per-client rate limit first (worker/src/guard.ts), so refused requests
   // count against it too.
@@ -266,8 +276,8 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   }
 
   // Not a Worker route: whatever Workers Static Assets has at this path.
-  // With run_worker_first limited to the Worker's own routes, this is
-  // mostly a 404 for a path no asset matches. A page policy it carries
+  // run_worker_first lists the Worker's routes and the pages (T12), so
+  // this is a page, or a 404 for an unknown path under /play/*. A page policy it carries
   // (dist/_headers) is kept; anything without one gets the page policy.
   const asset = await env.ASSETS.fetch(request);
   return withSecurityHeaders(asset, asset.headers.get("Content-Security-Policy") ?? PAGE_CSP_HEADER);

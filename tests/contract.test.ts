@@ -228,7 +228,8 @@ describe("contract runner: deployed-only burst checks", () => {
       expect(burst.pass).toBe(true);
       // The result says where the burst ran: the summary names the base, and it did not run there.
       expect(burst.detail).toBe(`via http://127.0.0.1:${port}`);
-      expect(bursts).toBe(2);
+      // The burst stops at the first refusal: one wave of one request was enough.
+      expect(bursts).toBe(1);
 
       // A burst host serving another build is not the production Worker: the burst fails, and nothing is sent.
       otherBuild = "release/older";
@@ -373,7 +374,7 @@ describe("http:// must redirect to https:// (CoS decision I)", () => {
       answer = new Response("page", { status: 200 });
       const [bad] = await runContract({ checks: [yamlCheck()] }, "https://dial.voidvision.org");
       expect(bad.pass).toBe(false);
-      expect(bad.detail).toMatch(/answered 200, expected 301 to https:\/\/\. Waiting on the founder/);
+      expect(bad.detail).toMatch(/answered 200, expected 301 to https:\/\/\. The Worker's http:\/\/ redirect \(T12/);
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -382,12 +383,19 @@ describe("http:// must redirect to https:// (CoS decision I)", () => {
     expect(onHost("https://notvoidvision.org", "voidvision.org")).toBe(false);
   });
 
-  it("contract.yaml limits it to the production zone's host, over http, and names the Board ask when it fails", () => {
+  it("contract.yaml limits it to the production zone's host, over http, and names what answers it when it fails (T12)", () => {
     const c = yamlCheck();
     expect(c).toMatchObject({ path: "/", scheme: "http", expect: 301, location_starts_with: "https://", host_suffix: "voidvision.org" });
+    expect(c.failure_note).toMatch(/worker\/src\/https\.ts/);
     expect(c.failure_note).toMatch(/Always Use HTTPS/);
-    expect(c.failure_note).toMatch(/Board ask/);
-    expect(c.failure_note).toMatch(/G3/);
+  });
+
+  it("contract.yaml also proves the Worker's redirect on every deployed host, to the very same URL (T12)", () => {
+    const checks = loadContract(path.resolve(fileURLToPath(new URL("../contract.yaml", import.meta.url)))).checks as Record<string, unknown>[];
+    const c = checks.find((x) => x.type === "redirect" && x.same_url_on_https === true);
+    expect(c).toMatchObject({ scheme: "http", expect: 301, requires: "deployed" });
+    expect(c!.host_suffix).toBeUndefined();
+    expect(String(c!.path)).toMatch(/^\/play\/.+\?/);
   });
 });
 
@@ -428,6 +436,54 @@ describe("contract runner: requests that fail below HTTP", () => {
       expect(calls).toBe(2);
     } finally {
       globalThis.fetch = realFetch;
+    }
+  });
+});
+
+describe("contract runner: same_url_on_https (T12)", () => {
+  it("passes only on a 301 to exactly the requested URL on https://", async () => {
+    let location = "";
+    const srv = createServer((_req, res) => {
+      res.writeHead(301, { location });
+      res.end();
+    });
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    const port = (srv.address() as { port: number }).port;
+    const check = { name: "r", type: "redirect", path: "/play/cave?at=12", scheme: "http", expect: 301, same_url_on_https: true };
+    try {
+      location = "https://127.0.0.1/play/cave?at=12";
+      expect((await runContract({ checks: [check] }, `http://127.0.0.1:${port}`))[0]!.pass).toBe(true);
+      location = "https://127.0.0.1/";
+      const [wrong] = await runContract({ checks: [check] }, `http://127.0.0.1:${port}`);
+      expect(wrong!.pass).toBe(false);
+      expect(wrong!.detail).toContain("expected 301 to https://127.0.0.1/play/cave?at=12");
+    } finally {
+      srv.close();
+    }
+  });
+});
+
+describe("contract runner: burst pacing (T12)", () => {
+  it("wave_gap_ms pauses between waves, and a burst stops at its first refusal", async () => {
+    let n = 0;
+    const times: number[] = [];
+    const srv = createServer((_req, res) => {
+      n++;
+      times.push(Date.now());
+      const limited = n > 4;
+      res.writeHead(limited ? 429 : 200, { "content-type": "application/json" });
+      res.end(limited ? '{"error":"rate_limited"}' : "{}");
+    });
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const [r] = await runContract({ checks: [{ name: "b", type: "burst", path: "/", count: 40, concurrency: 2, wave_gap_ms: 150, expect_status: 429, expect_error: "rate_limited" }] }, `http://127.0.0.1:${port}`);
+      expect(r.pass).toBe(true);
+      // Waves 1 and 2 pass, wave 3 is refused and the burst stops: 6 of 40 sent.
+      expect(n).toBe(6);
+      expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(140);
+    } finally {
+      srv.close();
     }
   });
 });

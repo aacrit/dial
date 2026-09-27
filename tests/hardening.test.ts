@@ -270,12 +270,18 @@ describe("per-client rate limit (Workers Rate Limiting binding)", () => {
     expect(rateLimitedMessage("RL_API")).toBe("Too many requests from this network. Wait 10 seconds, then try again.");
   });
 
-  it("limits every Worker path: /e, /feedback, /healthz and unmatched paths", async () => {
+  it("limits every Worker route (/e, /feedback, /healthz, /api/*); a page GET goes to the assets unlimited (T12)", async () => {
     const env = mockEnv({ RL_API: fakeLimiter(0), RL_EVENTS: fakeLimiter(0), RL_FEEDBACK: fakeLimiter(0) });
     expect((await handle(post("/e", { name: "page_view" }), env)).status).toBe(429);
     expect((await handle(post("/feedback", { text: "x" }), env)).status).toBe(429);
     expect((await handle(get("/healthz"), env)).status).toBe(429);
-    expect((await handle(get("/no-such-path"), env)).status).toBe(429);
+    expect((await handle(get("/api/anything"), env)).status).toBe(429);
+    // Pages reach the Worker only so plain http:// can be redirected, and it
+    // adds no per-network limit to them. Unknown paths outside /play/* never
+    // reach the Worker in production (not_found_handling "404-page"); here the mock
+    // assets answer 404, not 429.
+    expect((await handle(get("/no-such-path"), env)).status).toBe(404);
+    expect((await handle(post("/no-such-path", {}), env)).status).toBe(429);
   });
 
   it("fails open when the binding is missing or throws, and counts the failure as rate_limiter_error (capped, no address)", async () => {
@@ -485,12 +491,14 @@ function matchesRule(rule: string, pathname: string): boolean {
 }
 
 describe("wrangler.jsonc", () => {
-  it("runs the Worker first only on its own routes, so static assets cost no invocation", () => {
+  it("runs the Worker first on its own routes and the pages (T12, http to https), never on scripts, fonts or recordings", () => {
     const rules = wranglerConfig().assets.run_worker_first;
     expect(Array.isArray(rules)).toBe(true);
     const workerFirst = (p: string) => (rules as string[]).some((r) => matchesRule(r, p));
     for (const p of ["/e", "/feedback", "/healthz", "/api/anything"]) expect(workerFirst(p), p).toBe(true);
-    for (const p of ["/", "/privacy.html", "/privacy", "/assets/index.js", "/assets/inter.woff2", "/build-tag.txt"]) expect(workerFirst(p), p).toBe(false);
+    // Every page a visitor can land on, so a plain http:// visit is redirected.
+    for (const p of ["/", "/index.html", "/privacy", "/privacy.html", "/play/cave", "/play/crito.html"]) expect(workerFirst(p), p).toBe(true);
+    for (const p of ["/assets/index.js", "/assets/inter.woff2", "/build-tag.txt", "/recordings/cave/part0.webm", "/voice/manifest.json", "/sw.js", "/ort/ort-wasm.wasm"]) expect(workerFirst(p), p).toBe(false);
   });
 
   it("the production Worker has no preview URLs, and keeps workers.dev for the contract's burst_host (T11, decision M)", () => {
