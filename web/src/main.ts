@@ -52,9 +52,9 @@ import {
 } from "./status-copy";
 import type { FromWorker, ToWorker } from "./narrate.worker";
 import { WORK_NOT_ON_DEVICE } from "./offline/plan";
-import { registerOfflineHelper, type RecordingSave } from "./offline/store";
-import { BUILT_RECORDINGS, choosePlaybackFormat, isDecodeError, openRecording, playableRecordings, type Recording } from "./recording/source";
-import { RECORDING_RATE, partOfLine } from "./recording/timing";
+import { registerOfflineHelper, savedRecordingFormat, type RecordingSave } from "./offline/store";
+import { BUILT_RECORDINGS, choosePlaybackFormat, decodeFailureAction, openRecording, playableRecordings, rememberPlaybackFormat, type Recording } from "./recording/source";
+import { RECORDING_RATE } from "./recording/timing";
 import { mountOffline } from "./offline/ui";
 import { noteSend, noteSendFailed, recordEntries, recordRequests } from "./request-recorder";
 import { sendEvent } from "./telemetry";
@@ -206,6 +206,18 @@ function setupRadio(): void {
   let format = choosePlaybackFormat();
   /** Whether this browser plays Dial's recordings at all: false once made-on-device has taken over for good (a decode failure that was not solved by the m4a retry). */
   let recordingsPlayable = true;
+  /**
+   * The Opus retry succeeding as m4a (CoS decision H): every prepared
+   * recording moves to m4a, not just the one whose part failed, so tuning
+   * to another station never repeats the same failing attempt this visit;
+   * remembered (rememberPlaybackFormat) so a later visit does not retry
+   * Opus only to fail the same way again.
+   */
+  const switchToM4a = () => {
+    format = "m4a";
+    for (const other of prepared.values()) if (other.format !== "m4a") other.retryAsM4a();
+    rememberPlaybackFormat("m4a");
+  };
   /** The Bookplate's facts about a work's prepared recording, where it plays. */
   const recordingFacts = (w: Work) => {
     const entry = prepared.has(w.slug) ? BUILT_RECORDINGS.works[w.slug] : undefined;
@@ -499,7 +511,8 @@ function setupRadio(): void {
       const t = texts.get(slug);
       if (!t?.cast) return undefined;
       const rec = prepared.get(slug);
-      const recording: RecordingSave | undefined = rec ? { slug, index: rec.index, indexBytes: rec.indexFile.bytes, indexSha256: rec.indexFile.sha256, format: rec.format } : undefined;
+      // Save for offline always writes in the browser's current format, whatever a saved copy from before a format change (or from before T5b) holds.
+      const recording: RecordingSave | undefined = rec ? { slug, index: rec.index, indexBytes: rec.indexFile.bytes, indexSha256: rec.indexFile.sha256, format } : undefined;
       return { source: t.source, voices: t.cast.voices, recording };
     },
   });
@@ -585,16 +598,14 @@ function setupRadio(): void {
      */
     const linePcm = (i: number): Int16Array | Promise<Int16Array> => {
       if (rec) {
-        // This browser cannot decode it: an Opus failure on the very first part retries once as m4a (CoS decision H); any other failure carries the listen on, made on this device from the line on air.
+        // This browser cannot decode it: a failure before anything of the recording has played retries once as m4a (CoS decision H, decodeFailureAction); any other failure carries the listen on, made on this device from the line on air.
         const onDecodeFail = (err: unknown): Int16Array | Promise<Int16Array> => {
-          if (isDecodeError(err)) {
-            if (rec.nextOnFailure(partOfLine(rec.index, i)) === "retry-m4a") {
-              rec.retryAsM4a();
-              format = "m4a";
-              return rec.samples(i).catch(onDecodeFail);
-            }
-            makeHereInstead();
+          const action = decodeFailureAction(rec, err);
+          if (action === "retry-m4a") {
+            switchToM4a();
+            return rec.samples(i).catch(onDecodeFail);
           }
+          if (action === "made-here") makeHereInstead();
           // A part that did not arrive, even on a second try: stop, and offer to carry on from the line on air.
           else stopped(recordingStopLine(err instanceof Error ? `${err.name}: ${err.message}` : String(err)), Math.max(0, own.line));
           return new Int16Array(0);
@@ -1235,7 +1246,9 @@ function setupRadio(): void {
         const text = texts.get(w.slug);
         if (!entry || !text?.cast || prepared.has(w.slug)) return;
         try {
-          const opened = await openRecording(w.slug, entry, text.cues, text.cast.voices, format);
+          // A work saved from an earlier visit (or before this browser's format changed) may hold the other encoding: play whichever is actually in the saved cache, so it still plays with no connection.
+          const openFormat = (await savedRecordingFormat(w.slug)) ?? format;
+          const opened = await openRecording(w.slug, entry, text.cues, text.cast.voices, openFormat);
           if (opened.recording) prepared.set(w.slug, opened.recording);
         } catch {
           // Its index could not be fetched (offline, not saved): made on the device.

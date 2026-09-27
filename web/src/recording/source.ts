@@ -16,7 +16,7 @@
 
 import { sha256Hex } from "../voice-files";
 import { CAST_ENGINE_VERSION } from "../engine/cast-version";
-import { M4A_PART_FILE, PART_FILE, RECORDING_RATE, expectedDigest, indexProblem, lineSlice, partOfLine, type FilePin, type RecordingIndex } from "./timing";
+import { AAC_FRAME_SAMPLES, M4A_PART_FILE, PART_FILE, RECORDING_RATE, expectedDigest, indexProblem, lineSlice, partOfLine, partSpanSamples, type FilePin, type RecordingIndex } from "./timing";
 
 /** Which encoding of Dial's prepared recording this browser plays: Opus in WebM, or AAC-LC in .m4a (T5b, for Safari). */
 export type RecordingFormat = "opus" | "m4a";
@@ -72,25 +72,72 @@ function canPlayOpusWebm(): boolean {
   }
 }
 
-/**
- * The format Dial tries first (T5b): Opus where this browser claims to
- * decode it, otherwise m4a (AAC-LC), which iPhone and desktop Safari play.
- * A claim of Opus support that turns out false on the first part falls
- * back to m4a at runtime (nextOnDecodeFailure), before made-on-device.
- */
-export function choosePlaybackFormat(): RecordingFormat {
-  return canPlayOpusWebm() ? "opus" : "m4a";
+// ---- remembering a format discovered at runtime ----------------------------
+// canPlayType's claim does not change between visits (it is the same
+// browser), but a claim that turned out false at runtime would otherwise be
+// retried, and fail again, every visit. The one thing this module keeps in
+// local storage: which encoding this browser was found to actually need,
+// written only once that is discovered (never for the ordinary case, where
+// canPlayType already answered no and there is nothing to remember). Disclosed
+// on web/privacy.html and paired there by tests/privacy-page.test.ts.
+
+export const RECORDING_FORMAT_KEY = "dial.recording-format";
+
+/** The part of Storage this module uses (telemetry.ts's own SettingStore, structurally: any browser storage with get/setItem). */
+export interface FormatStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+function formatStore(): FormatStore | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredFormat(store: FormatStore | null): RecordingFormat | null {
+  try {
+    const v = store?.getItem(RECORDING_FORMAT_KEY);
+    return v === "opus" || v === "m4a" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers a format this browser was found, at runtime, to actually need (the Opus retry succeeding as m4a), so a later visit does not try Opus only to fail again the same way. */
+export function rememberPlaybackFormat(format: RecordingFormat, store: FormatStore | null = formatStore()): void {
+  try {
+    store?.setItem(RECORDING_FORMAT_KEY, format);
+  } catch {
+    // Storage is unavailable (private mode, a full quota, disabled): tried again next visit.
+  }
 }
 
 /**
- * What a decode failure on `format`'s part `partIndex` (0-based) does next,
- * the fallback order Opus, then m4a, then made-on-device (CoS decision H):
- * only an Opus failure on the very first part retries once as m4a (a later
- * Opus part failing, or an m4a failure anywhere, hands over to made-on-device
- * directly). `alreadyRetried` is true once that one retry has been spent.
+ * The format Dial tries first (T5b): a format remembered from an earlier
+ * visit's discovery, else Opus where this browser claims to decode it,
+ * else m4a (AAC-LC), which iPhone and desktop Safari play. A claim of Opus
+ * support that turns out false on the first part falls back to m4a at
+ * runtime (nextOnDecodeFailure), before made-on-device, and is remembered
+ * (rememberPlaybackFormat) so it is not retried next visit.
  */
-export function nextOnDecodeFailure(format: RecordingFormat, partIndex: number, alreadyRetried: boolean): "retry-m4a" | "made-here" {
-  return format === "opus" && partIndex === 0 && !alreadyRetried ? "retry-m4a" : "made-here";
+export function choosePlaybackFormat(store: FormatStore | null = formatStore()): RecordingFormat {
+  return readStoredFormat(store) ?? (canPlayOpusWebm() ? "opus" : "m4a");
+}
+
+/**
+ * What a decode failure on `format` does next, the fallback order Opus,
+ * then m4a, then made-on-device (CoS decision H): only a failure before
+ * anything of this recording has decoded retries once as m4a (a failure
+ * once some part has already played, or an m4a failure at any point, hands
+ * over to made-on-device directly, since by then the listen is already
+ * under way in a format that was working). `alreadyRetried` is true once
+ * that one retry has been spent.
+ */
+export function nextOnDecodeFailure(format: RecordingFormat, hasDecodedAnyPart: boolean, alreadyRetried: boolean): "retry-m4a" | "made-here" {
+  return format === "opus" && !hasDecodedAnyPart && !alreadyRetried ? "retry-m4a" : "made-here";
 }
 
 /** A part that arrived intact but that this browser could not decode (the error the page answers by making the work on the device). */
@@ -126,8 +173,10 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class Recording {
   private readonly decoded = new Map<number, Promise<Float32Array>>();
-  /** Whether the Opus-part-0 retry (nextOnDecodeFailure) has already been spent. */
+  /** Whether the Opus retry (nextOnDecodeFailure) has already been spent. */
   private m4aRetried = false;
+  /** Whether any part of this recording has ever decoded successfully (nextOnFailure's retry is only for the very first). */
+  private anyDecoded = false;
 
   constructor(
     readonly slug: string,
@@ -190,11 +239,23 @@ export class Recording {
       return hit;
     }
     hit = this.fetched(p).then(async (bytes) => {
+      let audio: Float32Array;
       try {
-        return await this.decode(bytes);
+        audio = await this.decode(bytes);
       } catch (err) {
         throw new RecordingDecodeError(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
       }
+      // Safari defense (a total-length check only, no browser to try this against): the MP4 edit list should
+      // already trim the AAC encoder's leading priming delay, leaving only the last frame's padding as excess
+      // over the part's own span (lineSlice's clamp covers that). If this browser ignored the edit list, the
+      // decode instead carries the priming delay too, at least AAC_FRAME_SAMPLES more than the part's span; drop
+      // it, so every line still lands where the index says, not one frame (about 43 ms) early.
+      if (this.format === "m4a") {
+        const excess = audio.length - partSpanSamples(this.index, p);
+        if (excess >= AAC_FRAME_SAMPLES) audio = audio.subarray(AAC_FRAME_SAMPLES);
+      }
+      this.anyDecoded = true;
+      return audio;
     });
     // A failed part is not held, so asking again fetches it again.
     hit.catch(() => this.decoded.delete(p));
@@ -219,17 +280,31 @@ export class Recording {
     return this.decoded.size;
   }
 
-  /** What a decode failure on part `partIndex` does next (nextOnDecodeFailure), given this recording's own format and retry history. */
-  nextOnFailure(partIndex: number): "retry-m4a" | "made-here" {
-    return nextOnDecodeFailure(this.format, partIndex, this.m4aRetried);
+  /** What a decode failure does next (nextOnDecodeFailure), given this recording's own format, whether anything of it has decoded yet, and its retry history. */
+  nextOnFailure(): "retry-m4a" | "made-here" {
+    return nextOnDecodeFailure(this.format, this.anyDecoded, this.m4aRetried);
   }
 
-  /** The one Opus-part-0 retry: switches to m4a and forgets anything already fetched or decoded, so the next samples() re-fetches in the new encoding. */
+  /** The one Opus retry: switches to m4a and forgets anything already fetched or decoded, so the next samples() re-fetches in the new encoding. */
   retryAsM4a(): void {
     this.format = "m4a";
     this.m4aRetried = true;
     this.decoded.clear();
   }
+}
+
+/**
+ * What a prepared recording's failed samples() promise means (the page's
+ * own linePcm/onDecodeFail, web/src/main.ts, is a thin shell around this):
+ * a decode failure retries once as m4a (Recording.nextOnFailure) or hands
+ * over to made-on-device; anything else (a part that never arrived) stops
+ * the broadcast and offers Resume at line N. Exported and pure (besides
+ * reading `rec`'s own state) so this decision is unit-tested directly,
+ * without matching main.ts's source by regex.
+ */
+export type DecodeFailureAction = "retry-m4a" | "made-here" | "stopped";
+export function decodeFailureAction(rec: Pick<Recording, "nextOnFailure">, err: unknown): DecodeFailureAction {
+  return isDecodeError(err) ? rec.nextOnFailure() : "stopped";
 }
 
 async function fetchRecordingPart(slug: string, file: string): Promise<ArrayBuffer> {

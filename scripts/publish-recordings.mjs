@@ -66,7 +66,9 @@ async function main() {
   console.log(`publish-recordings: ${files.length} files match the lock for ${lock.tag}`);
   console.log(`publish-recordings: opus set ${(totals.opus / 1e6).toFixed(2)} MB, m4a set ${(totals.m4a / 1e6).toFixed(2)} MB (${(totals.m4a / totals.opus).toFixed(2)}x)`);
 
-  const entries = privateIndexEntries(lock, manifests);
+  // The index schema's own RECORDING_FORMAT, read from an actual staged index.json (recordings-lock.mjs privateIndexEntries).
+  const recordingFormat = JSON.parse(readFileSync(path.join(from, recordedSlugs(lock)[0], "index.json"), "utf8")).format;
+  const entries = privateIndexEntries(lock, manifests, recordingFormat);
   const outDir = path.join(repoRoot, "reports", "recordings");
   mkdirSync(outDir, { recursive: true });
   writeFileSync(path.join(outDir, "dial-private-index-entries.json"), JSON.stringify({ masters: entries }, null, 2) + "\n");

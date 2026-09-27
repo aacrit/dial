@@ -28,6 +28,7 @@ import { runtimeCacheKey, runtimeCacheName, voiceCacheName, type Held } from "..
 import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
 import { NO_VOICES, offlineExtras, recordingKeysOf, parseVoices, recordingFiles, savePlan, unionVoices, voicesToRemove, type PinnedFile, type RecordingPlan, type SavePlan } from "./plan";
 import type { RecordingIndex } from "../recording/timing";
+import type { RecordingFormat } from "../recording/source";
 import { SAVED_CACHE } from "./routes";
 
 
@@ -116,6 +117,21 @@ export async function savedSlugs(): Promise<Set<string>> {
     if (m) out.add(m[1]!);
   }
   return out;
+}
+
+/**
+ * Whichever encoding of a work's prepared recording is actually kept in the
+ * saved cache (a routing hint for opening it offline: a work saved before
+ * this browser's format changed, or from before T5b, may hold the other
+ * one). Not a pin check: Recording still verifies every file's hash as
+ * usual. `null` when neither is kept (nothing saved, or saved with a voice
+ * instead, from before T5).
+ */
+export async function savedRecordingFormat(slug: string): Promise<RecordingFormat | null> {
+  const cache = await caches.open(SAVED_CACHE);
+  if (await cache.match(`/recordings/${slug}/part0.m4a`)) return "m4a";
+  if (await cache.match(`/recordings/${slug}/part0.webm`)) return "opus";
+  return null;
 }
 
 /** What this device already holds of the voice for `voices` (presence only; the loader checks pins on every read). */

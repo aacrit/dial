@@ -173,6 +173,20 @@ export function partOfLine(index: Pick<RecordingIndex, "parts">, i: number): num
 }
 
 /**
+ * A part's own length in samples (every line it holds, speech and pause):
+ * what its decoded audio should measure, absent any encoder trimming or
+ * padding. Shared by the client's Safari defense (source.ts Recording.part,
+ * which drops a decode's excess leading samples when this browser ignored
+ * the m4a's edit list) and the transcode's own check (scripts/transcode-m4a.mjs).
+ */
+export function partSpanSamples(index: Pick<RecordingIndex, "lines" | "parts" | "samples">, partIndex: number): number {
+  const part = index.parts[partIndex]!;
+  const start = index.lines[part.from]!.at;
+  const end = part.to < index.lines.length ? index.lines[part.to]!.at : index.samples;
+  return end - start;
+}
+
+/**
  * Where line i's speech lies inside its part's decoded audio, in frames at
  * `rate` (the rate the audio was decoded to): its first frame and how many.
  * Clamped to the decoded length, which an encoder may pad or trim by a frame.

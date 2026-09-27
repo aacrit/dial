@@ -138,18 +138,25 @@ export function indexMatchesLock(index, pins) {
   return out;
 }
 
-/** The dial-private recordings/index.json entries for a lock's masters, in both encodings (its gate's schema). */
-export function privateIndexEntries(lock, manifests) {
+/**
+ * The dial-private recordings/index.json entries for a lock's masters, in
+ * both encodings (its gate's schema). `recordingFormat` is the index
+ * schema's own RECORDING_FORMAT (recording/timing.ts): the caller reads it
+ * from an actual staged index.json rather than this plain .mjs importing
+ * that .ts constant (which would need every caller of this shared module
+ * to run under Node's TypeScript strip-types transform).
+ */
+export function privateIndexEntries(lock, manifests, recordingFormat = 1) {
   const entries = [];
   for (const [slug, w] of Object.entries(lock.works)) {
     if (w.recording === false) continue;
     const m = manifests[slug];
     const voice = `Kokoro-82M q8 (${m.engine.model}), voices ${m.cast.voices.join(", ")}, made on ${m.provider === "cpu" ? "the CPU" : "the GPU (DirectML)"}`;
     for (const f of [...w.parts, w.index]) {
-      entries.push({ work: slug, file: f.asset, sha256: f.sha256, bytes: f.bytes, engine: `cast engine ${m.engine.cast}, recording format 1`, voice, asset_url: f.url, rendered_at: m.made });
+      entries.push({ work: slug, file: f.asset, sha256: f.sha256, bytes: f.bytes, engine: `cast engine ${m.engine.cast}, recording format ${recordingFormat}`, voice, asset_url: f.url, rendered_at: m.made });
     }
     for (const f of w.m4a?.parts ?? []) {
-      entries.push({ work: slug, file: f.asset, sha256: f.sha256, bytes: f.bytes, engine: `cast engine ${m.engine.cast}, recording format 1, AAC-LC ~64 kbps m4a (T5b, transcoded from the Opus master)`, voice, asset_url: f.url, rendered_at: m.made });
+      entries.push({ work: slug, file: f.asset, sha256: f.sha256, bytes: f.bytes, engine: `cast engine ${m.engine.cast}, recording format ${recordingFormat}, AAC-LC ~64 kbps m4a (T5b, transcoded from the Opus master)`, voice, asset_url: f.url, rendered_at: m.made });
     }
   }
   return entries;
