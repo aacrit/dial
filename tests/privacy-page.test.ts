@@ -169,7 +169,7 @@ describe("web/privacy.html, claim by claim", () => {
     const main = read("web/src/main.ts");
     // No render worker for a prepared recording, and its one count is sent from ended(), after the last line.
     expect(main).toContain('const worker = rec ? null : new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });');
-    expect(main).toMatch(/const ended = \(\) => \{[\s\S]*?count\("ended"\);/);
+    expect(main).toMatch(/const ended = \(\) => \{[\s\S]*?if \(!own\.seeking\) count\("ended"\);/);
   });
 
   it("the shell (about 3 MB) is kept for every visitor, and the model and runtime stay after the last Remove", () => {

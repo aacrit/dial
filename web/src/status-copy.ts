@@ -119,6 +119,11 @@ export function preparedOnAirLine(translator: string): string {
   return `Playing a recording Dial made in advance from ${translatorsWords(translator)} words. Nothing is made or sent while you listen.`;
 }
 
+/** A skip went past the end: the broadcast is over, but nothing was heard to the end. */
+export function preparedSkippedLine(title: string): string {
+  return `Skipped to the end of Dial's recording of ${title}.`;
+}
+
 /** The listen reached the end. */
 export function preparedDoneLine(title: string, seconds: number): string {
   return `Played Dial's recording of ${title} to the end, ${clock(seconds)}.`;

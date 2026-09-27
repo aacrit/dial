@@ -34,6 +34,7 @@ import {
   onAirLine,
   pausedLine,
   preparedDoneLine,
+  preparedSkippedLine,
   preparedOnAirLine,
   preparedTuningLine,
   progressLine,
@@ -87,6 +88,8 @@ interface Session {
   kind: ListenKind;
   /** chapter_rendered has been sent for this listen (broadcast-state.ts countsAsRendered). */
   counted: boolean;
+  /** A seek is moving playback: a seek past the end ends the broadcast, but is not a listen reaching its end. */
+  seeking: boolean;
   cues: Cue[];
   audio: AudioContext;
   gain: GainNode;
@@ -593,6 +596,7 @@ function setupRadio(): void {
       work,
       kind: rec ? "prepared" : "made",
       counted: false,
+      seeking: false,
       cues,
       audio,
       gain,
@@ -696,9 +700,9 @@ function setupRadio(): void {
     const ended = () => {
       if (session === own && own.live) {
         offAir();
-        announce(rec ? preparedDoneLine(work.title, own.seconds) : renderedLine(work.title, cues.length, own.seconds, own.kept));
-        // Dial's prepared recording counts once its listen reaches the end.
-        count("ended");
+        announce(rec ? (own.seeking ? preparedSkippedLine(work.title) : preparedDoneLine(work.title, own.seconds)) : renderedLine(work.title, cues.length, own.seconds, own.kept));
+        // Dial's prepared recording counts once its listen reaches the end by playing, never by a skip past it.
+        if (!own.seeking) count("ended");
         // A completed listen: where the browser allows, offer to install Dial.
         offline?.listened();
       }
@@ -831,7 +835,14 @@ function setupRadio(): void {
 
   /** Seeks within what is made. Past it (while lines are still being made) the note says so; past the end of a finished work the broadcast ends. */
   const seekAndSay = (s: Session, t: number) => {
-    const target = s.sched.seek(t);
+    // A seek past the end of a finished work ends the broadcast at once (the scheduler's complete); it is not a finished listen.
+    s.seeking = true;
+    let target: ReturnType<typeof s.sched.seek>;
+    try {
+      target = s.sched.seek(t);
+    } finally {
+      s.seeking = false;
+    }
     if (!target || target.finished) return;
     scrubNote.textContent = target.beyond && s.made < s.cues.length ? notMadeYet(s.made, s.cues.length) : "";
     lastShown = -1;

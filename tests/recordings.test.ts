@@ -45,7 +45,7 @@ import {
   type RecordingPlan,
 } from "../web/src/offline/plan";
 import { offlineKey, route } from "../web/src/offline/routes";
-import { preparedDoneLine, preparedOnAirLine, progressLine, recordingStopLine, PLAYS_AT_ONCE, MAKE_IT_HERE } from "../web/src/status-copy";
+import { preparedDoneLine, preparedSkippedLine, preparedOnAirLine, progressLine, recordingStopLine, PLAYS_AT_ONCE, MAKE_IT_HERE } from "../web/src/status-copy";
 import { bookplateHtml, madeOn, recordingSentence } from "../web/src/render";
 import { assetUrl, indexMatchesLock, lockFrom, lockProblems, privateIndexEntries, releaseTag } from "../scripts/lib/recordings-lock.mjs";
 import { stage } from "../scripts/fetch-recordings.mjs";
@@ -294,9 +294,11 @@ describe("chapter_rendered: once per listen, on either path (founder, G2 round 1
     expect(main.match(/reportCoreSuccess\(\)/g)).toHaveLength(2);
     expect(main).toMatch(/const count = \(moment: "all-made" \| "ended"\) => \{\s*if \(!countsAsRendered\(own\.kind, moment, own\.counted\)\) return;\s*own\.counted = true;\s*reportCoreSuccess\(\);/);
     expect(main).toMatch(/msg\.type === "done"\) \{[\s\S]*?count\("all-made"\);/);
-    expect(main).toMatch(/const ended = \(\) => \{[\s\S]*?count\("ended"\);/);
+    expect(main).toMatch(/const ended = \(\) => \{[\s\S]*?if \(!own\.seeking\) count\("ended"\);/);
     // A session starts uncounted, and knows which path it is on.
-    expect(main).toMatch(/kind: rec \? "prepared" : "made",\s*counted: false,/);
+    expect(main).toMatch(/kind: rec \? "prepared" : "made",\s*counted: false,\s*seeking: false,/);
+    // A skip past the end ends the broadcast but is not a listen reaching its end: seekAndSay marks the seek around the scheduler's call.
+    expect(main).toMatch(/s\.seeking = true;\s*let target[^\n]*\n\s*try \{\s*target = s\.sched\.seek\(t\);\s*\} finally \{\s*s\.seeking = false;/);
   });
 });
 
@@ -551,6 +553,8 @@ describe("the words for a prepared recording", () => {
     expect(MAKE_IT_HERE).toMatch(/^Or make it on this device/);
     expect(preparedOnAirLine("Benjamin Jowett")).toBe("Playing a recording Dial made in advance from Jowett's words. Nothing is made or sent while you listen.");
     expect(preparedDoneLine("Crito", 1265)).toBe("Played Dial's recording of Crito to the end, 21:05.");
+    // A skip past the end never claims the work was heard to its end.
+    expect(preparedSkippedLine("Crito")).toBe("Skipped to the end of Dial's recording of Crito.");
     expect(progressLine({ title: "Crito", heard: 3, made: 252, total: 252, paused: false, renderDone: true, prepared: true })).toBe("On air: Crito, line 3 of 252.");
     for (const s of [PLAYS_AT_ONCE, MAKE_IT_HERE, preparedOnAirLine("George Long"), preparedDoneLine("x", 1)]) expect(s).not.toMatch(/—|render/);
   });
