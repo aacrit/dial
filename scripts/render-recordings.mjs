@@ -323,8 +323,13 @@ async function compare({ slug, n }, threads) {
   try {
     gpu = await run("dml");
   } catch (err) {
-    console.log(`render-recordings: the DirectML provider failed: ${err.message ?? err}`);
-    return { ok: false, reason: String(err.message ?? err) };
+    // The GPU provider could not make these lines: recorded, and every work is made on the CPU.
+    const report = { slug, lines: n, ok: false, provider: "dml", reason: String(err.message ?? err), cpu: { render_seconds: r3(cpu.seconds) } };
+    mkdirSync(path.join(repoRoot, "reports", "recordings"), { recursive: true });
+    writeFileSync(path.join(repoRoot, "reports", "recordings", `compare-${slug}.json`), JSON.stringify(report, null, 1) + "
+");
+    console.log(`render-recordings: the DirectML provider failed: ${report.reason}`);
+    return report;
   }
   const rows = cpu.audio.map((a, i) => {
     const c = lineStats(a);

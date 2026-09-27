@@ -14,7 +14,7 @@ quotas:
   - name: static_asset_largest_file_mib
     ceiling: 25
     estimate_at_1000_users_per_day: 20.6
-    notes: "Workers Static Assets serves files up to 25 MiB and is free and unmetered. The voice model (92 MB) ships in 20 MiB parts (scripts/fetch-voice.mjs); the largest file is onnxruntime-web's 20.6 MiB WASM. A listener downloads about 115 MB once, then it lives in their browser's cache storage. Rendering runs on the listener's device, so no Worker or D1 cost scales with listening."
+    notes: "Workers Static Assets serves files up to 25 MiB and is free and unmetered. The voice model (92 MB) ships in 20 MiB parts (scripts/fetch-voice.mjs); the largest file is onnxruntime-web's 20.6 MiB WASM. A listener who makes a work on their device downloads about 115 MB once, then it lives in their browser's cache storage. Dial's prepared recordings (T5) are static files too: Opus parts of about a minute (under 1 MiB each, about 7 MB for the Cave), fetched as they play. Neither path invokes the Worker or touches D1, so no metered cost scales with listening."
 
   - name: d1_rows_read_per_day
     ceiling: 5000000

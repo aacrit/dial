@@ -22,6 +22,10 @@ coverage/
 *.mov
 *.mp3
 *.wav
+*.webm
+*.opus
+*.ogg
+*.m4a
 *.zip
 *.sqlite
 *.sqlite3
