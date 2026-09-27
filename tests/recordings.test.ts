@@ -521,7 +521,7 @@ describe("iPhone and desktop Safari play m4a (T5b, CoS decision H)", () => {
   it("the format never leaks: opening a work prefers whichever encoding is actually saved, and Save for offline always writes the page's current format", () => {
     const main = read("web/src/main.ts");
     // Opening: a saved work's own cached encoding wins over the page's live guess, so a stale save still plays with no connection.
-    expect(main).toContain("const openFormat = (await savedRecordingFormat(w.slug)) ?? format;");
+    expect(main).toContain("const openFormat = (await savedRecordingFormat(w.slug).catch(() => null)) ?? format;");
     expect(main).toContain("const opened = await openRecording(w.slug, entry, text.cues, text.cast.voices, openFormat);");
     // Saving: always the live page format, never a Recording instance's own (which may have been opened from a stale saved copy).
     expect(main).toContain("const recording: RecordingSave | undefined = rec ? { slug, index: rec.index, indexBytes: rec.indexFile.bytes, indexSha256: rec.indexFile.sha256, format } : undefined;");
@@ -615,10 +615,10 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     expect(main.match(/audio\.createAnalyser\(\)/g)).toHaveLength(1);
   });
 
-  it("linePcm's onDecodeFail is a thin shell around decodeFailureAction: retry-m4a switches every prepared recording and remembers it, made-here hands over, stopped offers Resume at line N", () => {
+  it("linePcm's onDecodeFail is a thin shell around decodeFailureAction: retry-m4a switches every prepared recording and remembers it only once m4a has decoded, made-here hands over, stopped offers Resume at line N", () => {
     const main = read("web/src/main.ts");
-    expect(main).toMatch(/const action = decodeFailureAction\(rec, err\);\s*if \(action === "retry-m4a"\) \{\s*switchToM4a\(\);\s*return rec\.samples\(i\)\.catch\(onDecodeFail\);\s*\}\s*if \(action === "made-here"\) makeHereInstead\(\);\s*\/\/[^\n]*\n\s*else stopped\(recordingStopLine\([^\n]*\), Math\.max\(0, own\.line\)\);/);
-    expect(main).toMatch(/const switchToM4a = \(\) => \{\s*format = "m4a";\s*for \(const other of prepared\.values\(\)\) if \(other\.format !== "m4a"\) other\.retryAsM4a\(\);\s*rememberPlaybackFormat\("m4a"\);\s*\};/);
+    expect(main).toMatch(/const action = decodeFailureAction\(rec, err\);\s*if \(action === "retry-m4a"\) \{\s*switchToM4a\(\);\s*return rec\.samples\(i\)\.then\(\(pcm\) => \{\s*rememberPlaybackFormat\("m4a"\);\s*return pcm;\s*\}, onDecodeFail\);\s*\}\s*if \(action === "made-here"\) makeHereInstead\(\);\s*\/\/[^\n]*\n\s*else stopped\(recordingStopLine\([^\n]*\), Math\.max\(0, own\.line\)\);/);
+    expect(main).toMatch(/const switchToM4a = \(\) => \{\s*format = "m4a";\s*for \(const other of prepared\.values\(\)\) if \(other\.format !== "m4a"\) other\.retryAsM4a\(\);\s*\};/);
     const instead = /const makeHereInstead = \(\) => \{([\s\S]*?)\n {4}\};/.exec(main)![1]!;
     expect(instead).toContain("recordingsPlayable = false;");
     expect(instead).toMatch(/start\(work, "made", \{ fromLine: at, lengths, heard: own\.heard, spans: own\.spans, counted: own\.counted, reason: RECORDING_UNPLAYABLE \}\);/);

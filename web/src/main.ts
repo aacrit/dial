@@ -209,14 +209,14 @@ function setupRadio(): void {
   /**
    * The Opus retry succeeding as m4a (CoS decision H): every prepared
    * recording moves to m4a, not just the one whose part failed, so tuning
-   * to another station never repeats the same failing attempt this visit;
-   * remembered (rememberPlaybackFormat) so a later visit does not retry
-   * Opus only to fail the same way again.
+   * to another station never repeats the same failing attempt this visit.
+   * Remembered (rememberPlaybackFormat) only once an m4a part has decoded, so
+   * a one-off Opus failure never moves a browser that cannot play m4a to it
+   * for good.
    */
   const switchToM4a = () => {
     format = "m4a";
     for (const other of prepared.values()) if (other.format !== "m4a") other.retryAsM4a();
-    rememberPlaybackFormat("m4a");
   };
   /** The Bookplate's facts about a work's prepared recording, where it plays. */
   const recordingFacts = (w: Work) => {
@@ -603,7 +603,10 @@ function setupRadio(): void {
           const action = decodeFailureAction(rec, err);
           if (action === "retry-m4a") {
             switchToM4a();
-            return rec.samples(i).catch(onDecodeFail);
+            return rec.samples(i).then((pcm) => {
+              rememberPlaybackFormat("m4a");
+              return pcm;
+            }, onDecodeFail);
           }
           if (action === "made-here") makeHereInstead();
           // A part that did not arrive, even on a second try: stop, and offer to carry on from the line on air.
@@ -1247,7 +1250,7 @@ function setupRadio(): void {
         if (!entry || !text?.cast || prepared.has(w.slug)) return;
         try {
           // A work saved from an earlier visit (or before this browser's format changed) may hold the other encoding: play whichever is actually in the saved cache, so it still plays with no connection.
-          const openFormat = (await savedRecordingFormat(w.slug)) ?? format;
+          const openFormat = (await savedRecordingFormat(w.slug).catch(() => null)) ?? format;
           const opened = await openRecording(w.slug, entry, text.cues, text.cast.voices, openFormat);
           if (opened.recording) prepared.set(w.slug, opened.recording);
         } catch {
