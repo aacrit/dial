@@ -12,7 +12,7 @@
 
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "./voice-files";
+import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel, unpinnedVoiceKeys } from "./voice-files";
 import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
 export interface VoiceManifest extends VoicePins, SizedManifest {
@@ -78,6 +78,8 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
   // so that fetch never happens. A cached voice that fails its pin is dropped.
   const voiceKey = (id: string) => hfVoiceKey(manifest.repo, id);
   const voices = await caches.open(KOKORO_VOICES_CACHE);
+  // A voice this build no longer pins (a cast changed) is never used again: free its space.
+  for (const stale of unpinnedVoiceKeys((await voices.keys()).map((r) => r.url), manifest.repo, manifest.voices)) await voices.delete(stale);
   const runtimeKey = runtimeCacheKey(manifest);
   const cast = [...new Set(wanted)];
   for (const id of cast) if (!Object.hasOwn(manifest.voices, id)) throw new Error(`voice: ${id} is not pinned`);

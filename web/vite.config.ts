@@ -1,10 +1,14 @@
 import { defineConfig } from "vite";
+// @ts-expect-error: a plain .mjs helper without type declarations
+import { voiceTable } from "../scripts/lib/voice-table.mjs";
 
 // Run with cwd set to web/ (scripts/build.mjs and scripts/dev.mjs both do
 // this), so `root` defaults to this directory and `outDir` below lands at
 // the repo root's dist/, matching wrangler.jsonc's assets.directory.
 export default defineConfig({
   publicDir: "public",
+  // Casting's voice table, projected to the fields it reads (engine/cast.ts).
+  plugins: [voiceTable()],
   // The render worker (src/narrate.worker.ts) is an ES module: it imports
   // the voice runtime, which loads its WASM from /ort on this origin.
   worker: { format: "es" },

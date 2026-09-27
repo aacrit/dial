@@ -159,7 +159,7 @@ describe("casting without content", () => {
     expect(byDefault.voices[0]).toBe("am_michael");
     expect(byDefault.voices.slice(1)).not.toContain("am_michael");
     expect(byDefault.narrated).toBe(true);
-    const female = cast(src, { narrator: "f" });
+    const female = cast(src, { narrator: "f", speakers: { SOCRATES: "m", CRITO: "m" } });
     expect(female.narrator).toBe("af_heart");
     expect(female.voices[0]).toBe("af_heart");
     expect(female.voices.slice(1)).not.toContain("af_heart");
@@ -171,7 +171,8 @@ describe("casting without content", () => {
   it("narrator voices never go to characters, even when a palette offers them", () => {
     const withNarrators = TABLE.filter((v) => ["am_michael", "af_heart", "am_puck", "af_kore"].includes(v.id));
     const names = Array.from({ length: 8 }, (_, i) => `S${String.fromCharCode(65 + i)}`);
-    for (const s of [undefined, { narrator: "m" as const }, { narrator: "f" as const }]) {
+    const all = (sex: "m" | "f") => Object.fromEntries(names.map((n, i) => [n, i % 2 === 0 ? sex : sex === "m" ? "f" : "m"])) as Record<string, "m" | "f">;
+    for (const s of [undefined, { narrator: "m" as const, speakers: all("m") }, { narrator: "f" as const, speakers: all("f") }]) {
       const got = castVoices(names.map((speaker) => ({ speaker, words: 1 })), s, withNarrators);
       for (const v of got.values()) expect(Object.values(NARRATORS) as string[]).not.toContain(v.voice);
     }
@@ -205,7 +206,12 @@ describe("the page tells the truth about the cast", () => {
 
   it("Crito's Bookplate states the cast, and no longer promises voices to come", () => {
     const html = bookplateHtml(WORKS[1]!, casts.crito);
-    expect(html).toContain("Socrates: Fenrir. Crito: Puck.");
+    expect(html).toContain("Socrates: Fenrir. Crito: Puck. Voices are cast in one accent, by the voice model's published grade and their measured contrast, never from the speakers' names.");
+    expect(html).not.toMatch(/measured quality/);
+    // "in one accent" only where it is true: a British cast under the American narrator does not say it.
+    const uk = bookplateHtml(WORKS[1]!, cast(cues, { ...WORKS[1]!.cast!, accent: "uk" }));
+    expect(uk).toContain("Voices are cast by the voice model's published grade and their measured contrast, never from the speakers' names.");
+    expect(uk).not.toContain("in one accent");
     expect(html).toContain("The speech is made by Kokoro-82M");
     expect(html).not.toMatch(/read aloud|until each part/);
   });
@@ -361,6 +367,14 @@ describe("T2b review: labels are never headings or honorifics", () => {
 });
 
 describe("T2b review: a cast failure silences one station only", () => {
+  it("a sheet that leaves out a labelled speaker is not honoured: the station is left uncast", () => {
+    expect(tryCast(cues, { narrator: "m", speakers: { SOCRATES: "m" } })).toBeNull();
+    expect(tryCast(cues, { narrator: "m" })).toBeNull();
+    expect(() => cast(cues, { narrator: "m", speakers: { SOCRATES: "m" } })).toThrow(/does not declare CRITO/);
+    // A work with no labels needs no speaker in its sheet.
+    expect(tryCast(segment(text("cave")), { narrator: "f" })).not.toBeNull();
+  });
+
   it("tryCast returns null where the sheet cannot be honoured, and the cast otherwise", () => {
     const males = TABLE.filter((v) => v.sex === "m");
     expect(tryCast(cues, { narrator: "m", speakers: { SOCRATES: "f", CRITO: "m" } }, males)).toBeNull();

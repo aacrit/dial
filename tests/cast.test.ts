@@ -3,7 +3,7 @@
 // (am_michael, af_heart). The rules are in web/src/engine/cast.ts's header.
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -70,6 +70,21 @@ describe("the measured table, as casting reads it", () => {
     expect(sha(JSON.stringify(TABLE))).toBe("9064694857218b9476a5f1517611d99e0e5a343527f22aaa70a7fe1635ffcbaf");
     expect(byId("am_michael")).toEqual({ id: "am_michael", sex: "m", accent: "us", grade: "C+", wpm10: 1676, f0Cents: 1194, centroidHz: 2429 });
     expect(byId("af_nicole").wpm10).toBe(1210);
+  });
+
+  it("every rounding is at least 1e-6 from a tie, so no engine's last-bit difference can move a value", () => {
+    const table = JSON.parse(readFileSync(path.join(root, "design/voices.json"), "utf8")) as { voices: { id: string; wpm_as_played: number; median_f0_hz: number; spectral_centroid_hz: number }[] };
+    for (const row of table.voices) {
+      for (const [k, x] of [
+        ["wpm10", row.wpm_as_played * 10],
+        ["f0Cents", 1200 * Math.log2(row.median_f0_hz / 55)],
+        ["centroidHz", row.spectral_centroid_hz],
+      ] as const) {
+        const frac = x - Math.floor(x);
+        // Values already integral (frac 0) or a tenth away from one are far from the .5 tie.
+        expect(Math.abs(frac - 0.5), `${row.id} ${k}`).toBeGreaterThanOrEqual(1e-6);
+      }
+    }
   });
 
   it("contrast is an integer from 0 to 1000, zero for a voice with itself, and symmetric", () => {
@@ -211,8 +226,9 @@ describe("the most-alternating pair is kept apart", () => {
 });
 
 describe("minor parts share voices by colouring the alternation graph", () => {
-  // Twelve speakers with no declared sex, and eight US voices at grade C or better in the
-  // pace band (af_alloy, af_aoede, af_bella, af_kore, af_nova, af_sarah, am_fenrir, am_puck).
+  // Twelve speakers, even-numbered men and odd-numbered women, and the US voices at grade C or
+  // better in the pace band: two men (am_fenrir, am_puck), six women (af_alloy, af_aoede,
+  // af_bella, af_kore, af_nova, af_sarah). The six men must share the two male voices.
   // The turns walk a ring S0 to S11 and back to S0, twice, with a chord S0-S6:
   // each speaker alternates with two or three others, never more.
   const names = Array.from({ length: 12 }, (_, i) => `S${i}`);
@@ -220,7 +236,7 @@ describe("minor parts share voices by colouring the alternation graph", () => {
   const turns = [...ring, "S6", "S0"];
   const words = [3000, 2400, 1900, 1500, 1200, 900, 60, 50, 40, 30, 20, 10];
   const speakers = names.map((speaker, i) => ({ speaker, words: words[i]! }));
-  const sheet: CastSheet = { narrator: "m" };
+  const sheet: CastSheet = { narrator: "m", speakers: Object.fromEntries(names.map((n, i) => [n, i % 2 === 0 ? "m" : "f"])) as Record<string, "m" | "f"> };
 
   it("never gives two speakers who alternate the same voice", () => {
     const got = castVoices(speakers, sheet, TABLE, turns);
@@ -245,8 +261,8 @@ describe("minor parts share voices by colouring the alternation graph", () => {
     }
     // The minor parts (under 2%) are among the sharers, and none drops below the grade filter.
     const minor = [...got].filter(([, c]) => c.reason.minor);
-    expect(minor.length).toBeGreaterThan(0);
-    expect(minor.some(([, c]) => c.reason.sharedWith.length > 0)).toBe(true);
+    expect(minor.map(([n]) => n)).toEqual(["S6", "S7", "S8", "S9", "S10", "S11"]);
+    expect(minor.filter(([, c]) => c.reason.sharedWith.length > 0).map(([n]) => n)).toEqual(["S6", "S8", "S10"]);
     for (const [, c] of got) {
       expect(byId(c.voice).grade).not.toBe("D+");
       expect(byId(c.voice).accent).toBe("us");
@@ -297,18 +313,79 @@ describe("one accent per work", () => {
 });
 
 describe("the score's balance", () => {
-  it("in Crito, a C+ voice beats a D voice unless its contrast is very poor", () => {
-    const crito = castReport(cast(segment(text("crito")), WORKS[1]!.cast)).parts[1]!;
-    const gap = (GRADES.indexOf("C+") - GRADES.indexOf("D")) * crito.share;
-    // The contrast term tops out at 1000 (the pair makes every exchange): a D voice would
-    // need over 836 per mille more contrast with Socrates than the C+ voice to win.
-    expect(gap).toBe(836);
-    expect(gap).toBeGreaterThan(800);
-    expect(NARRATOR_WEIGHT).toBeLessThan(gap);
+  // Two speakers who make every exchange; A (grade A voice) is cast first. B chooses between
+  // b_good (B-, 200 cents from A) and b_far (C, two grades lower, 700 cents from A).
+  const v = (id: string, grade: string, f0Cents: number): Voice => ({ id, sex: "m", accent: "us", grade, wpm10: 1800, f0Cents, centroidHz: 2200 });
+  const a1 = v("a1", "A", 1400);
+  const bGood = v("b_good", "B-", 1600);
+  const bFar = v("b_far", "C", 2100);
+  const turns = ["A", "B", "A", "B"];
+  const pick = (aWords: number, bWords: number) =>
+    castVoices(
+      [
+        { speaker: "A", words: aWords },
+        { speaker: "B", words: bWords },
+      ],
+      undefined,
+      [a1, bGood, bFar],
+      turns,
+    ).get("B")!;
+
+  it("a major part (half the words) takes the better grade over a more contrasting voice", () => {
+    const got = pick(500, 500);
+    expect(got.voice).toBe("b_good");
+    expect(got.reason.qualityPart).toBe(8 * 500);
+    expect(contrast(bFar, a1) - contrast(bGood, a1)).toBeLessThan(2 * 500);
   });
 
-  it("CAST_ENGINE_VERSION is defined once, here", () => {
+  it("a minor part (2% of the words) takes the more contrasting voice over the better grade", () => {
+    const got = pick(980, 20);
+    expect(got.voice).toBe("b_far");
+    expect(contrast(bFar, a1) - contrast(bGood, a1)).toBeGreaterThan(2 * 20);
+  });
+
+  it("the narrator's contrast counts only where the narrator speaks", () => {
+    const speakers = [{ speaker: "A", words: 1 }];
+    expect(castVoices(speakers, undefined, TABLE, ["A"], false).get("A")!.reason.narratorPart).toBe(0);
+    expect(castVoices(speakers, undefined, TABLE, ["A"], true).get("A")!.reason.narratorPart).toBeGreaterThan(0);
+    expect(castVoices(speakers, undefined, TABLE, ["A"], true).get("A")!.reason.narratorPart).toBeLessThanOrEqual(NARRATOR_WEIGHT);
+  });
+
+  it("the pool's grades are C, C+, B- and A-: one step is worth a speaker's share", () => {
+    const grades = new Set(CHARACTER_VOICES.filter((x) => x.wpm10 >= PACE_BAND[0] && x.wpm10 <= PACE_BAND[1] && GRADES.indexOf(x.grade as (typeof GRADES)[number]) >= GRADES.indexOf("C")).map((x) => x.grade));
+    expect([...grades].sort()).toEqual(["A-", "B-", "C", "C+"]);
+  });
+
+  it("CAST_ENGINE_VERSION is defined exactly once in web/src, in its own module", () => {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const d of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, d.name);
+        if (d.isDirectory()) walk(full);
+        else if (/\.(ts|mts|js|mjs)$/.test(d.name)) files.push(full);
+      }
+    };
+    walk(path.join(root, "web", "src"));
+    const defs = files.flatMap((f) => (readFileSync(f, "utf8").match(/export const CAST_ENGINE_VERSION\b/g) ?? []).map(() => path.relative(root, f).split(path.sep).join("/")));
+    expect(defs).toEqual(["web/src/engine/cast-version.ts"]);
     expect(CAST_ENGINE_VERSION).toBe("2");
+    // The offline helper takes the version without the voice table.
+    expect(readFileSync(path.join(root, "web/src/sw.ts"), "utf8")).toContain('from "./engine/cast-version"');
+    expect(readFileSync(path.join(root, "web/src/engine/cast-version.ts"), "utf8")).not.toMatch(/^import /m);
+  });
+});
+
+describe("a pool too small is reported, never hidden", () => {
+  it("three men who all answer one another, and two American male voices: the third clashes, and the report says so", () => {
+    const three = ["A", "B", "C"].map((speaker, i) => ({ speaker, words: 300 - i * 10 }));
+    const turns = ["A", "B", "C", "A", "C", "B", "A"];
+    const got = castVoices(three, { narrator: "m", speakers: { A: "m", B: "m", C: "m" } }, TABLE, turns);
+    expect([got.get("A")!.voice, got.get("B")!.voice].sort()).toEqual(["am_fenrir", "am_puck"]);
+    expect(got.get("C")!.reason.clash).toBe(true);
+    expect(got.get("C")!.reason.sharedWith.length).toBe(1);
+    const c = cast(segment("ALPHA: One.\n\nBETA: Two.\n\nGAMMA: Three.\n\nALPHA: Four.\n\nGAMMA: Five.\n\nBETA: Six."), { narrator: "m", speakers: { ALPHA: "m", BETA: "m", GAMMA: "m" } });
+    const report = castReport(c);
+    expect(report.parts.map((p) => p.clash)).toEqual([false, false, true]);
   });
 });
 
@@ -317,8 +394,8 @@ describe("the catalogue's casts", () => {
     const report = castReport(cast(segment(text("crito")), WORKS[1]!.cast));
     expect(report.narrator).toBe("am_michael");
     expect(report.parts).toEqual([
-      { speaker: "SOCRATES", voice: "am_fenrir", words: 4154, quality: 7, share: 790, qualityPart: 5530, contrastPart: 0, narratorPart: 57, score: 5587, accent: "us", minor: false, sharedWith: [] },
-      { speaker: "CRITO", voice: "am_puck", words: 1098, quality: 7, share: 209, qualityPart: 1463, contrastPart: 245, narratorPart: 51, score: 1759, accent: "us", minor: false, sharedWith: [], contrastRule: "met" },
+      { speaker: "SOCRATES", voice: "am_fenrir", words: 4154, quality: 7, share: 790, qualityPart: 5530, contrastPart: 0, narratorPart: 0, score: 5530, accent: "us", minor: false, sharedWith: [], clash: false },
+      { speaker: "CRITO", voice: "am_puck", words: 1098, quality: 7, share: 209, qualityPart: 1463, contrastPart: 245, narratorPart: 0, score: 1708, accent: "us", minor: false, sharedWith: [], contrastRule: "met", clash: false },
     ]);
     for (const p of report.parts) expect(CHARACTER_VOICES.map((v) => v.id)).toContain(p.voice);
   });
@@ -331,5 +408,31 @@ describe("the catalogue's casts", () => {
       expect(new Set(c.voices), slug).toEqual(new Set(["am_michael"]));
       expect(castReport(c).parts).toEqual([]);
     }
+  });
+});
+
+describe("a voice no longer cast leaves the device", () => {
+  it("the loader deletes cached voices this build does not pin, and nothing else", async () => {
+    const { hfVoiceKey, unpinnedVoiceKeys } = await import("../web/src/voice-files");
+    const repo = "onnx-community/Kokoro-82M-v1.0-ONNX";
+    const pins = { am_michael: "x", am_puck: "y" };
+    const keys = [hfVoiceKey(repo, "am_michael"), hfVoiceKey(repo, "bm_fable"), hfVoiceKey(repo, "bm_lewis"), hfVoiceKey(repo, "am_puck"), "https://example.invalid/other.bin", hfVoiceKey("other/repo", "bm_george")];
+    expect(unpinnedVoiceKeys(keys, repo, pins)).toEqual([hfVoiceKey(repo, "bm_fable"), hfVoiceKey(repo, "bm_lewis")]);
+    const voice = readFileSync(path.join(root, "web/src/voice.ts"), "utf8");
+    expect(voice).toContain("for (const stale of unpinnedVoiceKeys((await voices.keys()).map((r) => r.url), manifest.repo, manifest.voices)) await voices.delete(stale);");
+  });
+});
+
+describe("the page ships only what casting reads of the voice table", () => {
+  it("the built scripts hold the projected fields and none of the measured table's others", async () => {
+    const { CAST_FIELDS, projectVoices } = await import("../scripts/lib/voice-table.mjs");
+    const table = JSON.parse(readFileSync(path.join(root, "design/voices.json"), "utf8"));
+    const projected = projectVoices(table) as Record<string, unknown>[];
+    for (const row of projected) expect(Object.keys(row)).toEqual(CAST_FIELDS);
+    expect(projected.map((r) => r.id)).toEqual(TABLE.map((v) => v.id));
+    const assets = path.join(root, "dist", "assets");
+    const js = readdirSync(assets).filter((f) => f.endsWith(".js")).map((f) => readFileSync(path.join(assets, f), "utf8")).join("\n");
+    expect(js).toContain("wpm_as_played");
+    for (const unused of ["loudness_dbfs", "pause_to_speech", "render_rtf", "measured_source_data", "training_duration"]) expect(js, unused).not.toContain(unused);
   });
 });

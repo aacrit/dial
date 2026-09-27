@@ -38,7 +38,7 @@ import {
   workVoices,
 } from "../web/src/offline/plan";
 import { SAVED_CACHE, isNeverCached, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, shellPaths, staleShellCaches } from "../web/src/offline/routes";
-import { CAST_ENGINE_VERSION } from "../web/src/engine/cast";
+import { CAST_ENGINE_VERSION } from "../web/src/engine/cast-version";
 import type { Held, SizedManifest } from "../web/src/voice-cache";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -453,6 +453,7 @@ describe("the app manifest and icons", () => {
 // the version (so saved works show the new-version state), then pin here.
 const CAST_PINS: Record<string, Record<string, string>> = {
   "1": { cave: "bm_george", crito: "bm_fable,bm_lewis", meditations: "bm_george" },
+  "2": { cave: "am_michael", crito: "am_fenrir,am_puck", meditations: "am_michael" },
 };
 
 describe("CAST_ENGINE_VERSION follows the cast", () => {
@@ -464,7 +465,7 @@ describe("CAST_ENGINE_VERSION follows the cast", () => {
     }
     const pinned = CAST_PINS[CAST_ENGINE_VERSION];
     expect(pinned, `no voice-set pin for CAST_ENGINE_VERSION ${CAST_ENGINE_VERSION}: add one to tests/offline.test.ts`).toBeDefined();
-    expect(now, "the cast output changed: bump CAST_ENGINE_VERSION in web/src/engine/cast.ts, then pin the new sets here").toEqual(pinned);
+    expect(now, "the cast output changed: bump CAST_ENGINE_VERSION in web/src/engine/cast-version.ts, then pin the new sets here").toEqual(pinned);
   });
 });
 

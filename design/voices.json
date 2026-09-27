@@ -13,7 +13,7 @@
       "sample_rate": 24000
     },
     "method": {
-      "summary": "Each voice renders the same passages cue by cue at speed 1.0, exactly as the tab does; numbers are measured on the rendered samples by scripts/lib/voice-measure.mjs.",
+      "summary": "Each voice renders the same passages cue by cue at speed 1.0, as the tab does, on onnxruntime-node (the tab runs onnxruntime-web); numbers are measured on the rendered samples by scripts/lib/voice-measure.mjs.",
       "wpm": "articulation rate: words (whitespace and dashes separate; a token needs a letter or digit) over speaking seconds, each cue trimmed of its leading and trailing silence (a 20 ms frame is silent below the loudest frame -40 dB, or -60 dBFS). Pauses inside a cue count; the tab's pause table between cues does not. Only same-passage numbers compare.",
       "wpm_as_played": "the same words over the seconds a listener hears in Dial: each cue as Kokoro renders it (its own leading and trailing silence included) plus the tab's fixed pause table between cues (web/src/engine/segment.ts PAUSE_MS), none after a passage's last cue. This is the number to hold against a presenter's 150 to 165 wpm; wpm above is the voice's articulation rate.",
       "median_f0_hz": "normalized autocorrelation on the signal decimated to 8 kHz, 40 ms windows every 10 ms, 60 to 400 Hz, voiced when not silent and the best peak is >= 0.5; shortest-lag peak within 90 % of the best, parabolic refinement; median over voiced windows.",

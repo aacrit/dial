@@ -185,3 +185,18 @@ describe("design/voices.json", () => {
       expect(v.distance!.seconds_as_played, v.id).toBeGreaterThan(160);
   });
 });
+
+describe("voices.json was measured with this build's model and packages", () => {
+  it("its model, model pin and package versions are the ones fetch-voice.mjs pins and npm installed", async () => {
+    const { MODEL_FILES, REPO, REVISION } = await import("../scripts/fetch-voice.mjs");
+    const table = JSON.parse(readFileSync(path.join(root, "design/voices.json"), "utf8")) as { provenance: { engine: Record<string, unknown>; method: { summary: string } } };
+    const engine = table.provenance.engine;
+    const installed = (name: string) => (JSON.parse(readFileSync(path.join(root, "node_modules", name, "package.json"), "utf8")) as { version: string }).version;
+    expect(engine.model).toBe(`${REPO}@${REVISION}`);
+    expect(engine.model_sha256).toBe(MODEL_FILES["onnx/model_quantized.onnx"]);
+    expect(engine["kokoro-js"]).toBe(installed("kokoro-js"));
+    expect(engine["@huggingface/transformers"]).toBe(installed("@huggingface/transformers"));
+    expect(table.provenance.method.summary).toContain("on onnxruntime-node");
+    expect(table.provenance.method.summary).not.toContain("exactly as the tab does");
+  });
+});

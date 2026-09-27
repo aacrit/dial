@@ -13,7 +13,8 @@
 // gets the same voice. The one outside input is a Repertory work's cast
 // sheet, which the curator writes from the edition's list of persons and
 // which declares only voice sex (and, optionally, the work's accent family);
-// the engine honours it and never parses names. Voices are never sped up or
+// the engine honours it and never parses names. Where a sheet exists it must
+// declare every speaker the text labels, or the work is not cast. Voices are never sped up or
 // slowed down: pace is chosen here, by which voice is cast, and nowhere
 // else. Pure and deterministic, integer maths only once the table is read.
 //
@@ -33,7 +34,9 @@
 //      quality(grade) x share                                 (0 to 12000)
 //      + sum over speakers already cast:
 //          alternation x contrast(voice, theirs) / 1000        (0 to 1000)
-//      + contrast(voice, narrator) x NARRATOR_WEIGHT / 1000    (0 to 250)
+//      + contrast(voice, narrator) x NARRATOR_WEIGHT / 1000    (0 to 250,
+//        only in a work the narrator also speaks in)
+//    quality(grade) is hexgrad's published grade, not a measurement.
 //    share is the speaker's words per mille of all spoken words; alternation
 //    is the pair's direct turn exchanges per mille of all exchanges in the
 //    work; contrast is a per-mille distance over pitch, brightness and pace.
@@ -45,23 +48,10 @@
 //    graph, in rank order). Minor parts (under 2% of the words) are the
 //    expected sharers. Sharing never reaches below the grade filter.
 
-/**
- * The casting rules' version. Bump it whenever a change here can change
- * any work's voices: offline copies of a rendered work are keyed to it.
- */
-export const CAST_ENGINE_VERSION = "2";
-
-import { voices as MEASURED } from "../../../design/voices.json";
+import { voices as MEASURED } from "virtual:dial-voice-table";
 import type { Cue } from "./segment";
 
-/**
- * The casting rule's version. Bump it whenever a change here can give a work
- * a different set of voices (a new narrator, a new palette, a new scoring
- * rule): works saved for offline under another version are then shown as
- * "Saved on an older version" (offline/routes.ts offlineKey) until the
- * listener reopens Dial with a connection.
- */
-export const CAST_ENGINE_VERSION = "1";
+export { CAST_ENGINE_VERSION } from "./cast-version";
 
 /** A voice's sex, as its model publishes it, and as a cast sheet declares it. */
 export type VoiceSex = "m" | "f";
@@ -70,7 +60,7 @@ export type VoiceSex = "m" | "f";
 export const NARRATORS = { m: "am_michael", f: "af_heart" } as const;
 
 export type NarratorVoiceId = (typeof NARRATORS)[VoiceSex];
-/** A Kokoro voice id ("bm_fable"); only ids in design/voices.json are ever cast. */
+/** A Kokoro voice id ("am_puck"); only ids in design/voices.json are ever cast. */
 export type VoiceId = string;
 
 /** A voice as casting reads it: design/voices.json's measurements, as integers. */
@@ -93,12 +83,12 @@ export interface Voice<Id extends string = VoiceId> {
 const CENTS_REF_HZ = 55;
 
 /** One table row, rounded once to integers; everything after is integer maths. */
-export function measured<Id extends string>(row: { id: Id; sex: string; accent: string; hexgrad: { grade: string }; wpm_as_played: number; median_f0_hz: number; spectral_centroid_hz: number }): Voice<Id> {
+export function measured<Id extends string>(row: { id: Id; sex: string; accent: string; grade: string; wpm_as_played: number; median_f0_hz: number; spectral_centroid_hz: number }): Voice<Id> {
   return {
     id: row.id,
     sex: row.sex === "f" ? "f" : "m",
     accent: row.accent,
-    grade: row.hexgrad.grade,
+    grade: row.grade,
     wpm10: Math.round(row.wpm_as_played * 10),
     f0Cents: Math.round(1200 * Math.log2(row.median_f0_hz / CENTS_REF_HZ)),
     centroidHz: Math.round(row.spectral_centroid_hz),
@@ -113,7 +103,7 @@ const NARRATOR_IDS: readonly string[] = Object.values(NARRATORS);
 /** The voices characters may be cast from, before the per-work filters: the table without the narrators. */
 export const CHARACTER_VOICES: readonly Voice[] = TABLE.filter((v) => !NARRATOR_IDS.includes(v.id));
 
-/** "bm_fable" as the page names it: "Fable" (Kokoro's own name). */
+/** "am_puck" as the page names it: "Puck" (Kokoro's own name). */
 export function voiceName(id: string): string {
   const name = id.slice(id.indexOf("_") + 1);
   return name.charAt(0).toUpperCase() + name.slice(1);
@@ -152,15 +142,20 @@ const CONTRAST_WEIGHT_SUM = CONTRAST_WEIGHTS.f0 + CONTRAST_WEIGHTS.centroid + CO
 /** Each difference is saturated at a span: past an octave of pitch, 800 Hz of centroid or 40 wpm, voices are simply different. */
 export const CONTRAST_SPANS = { f0Cents: 1200, centroidHz: 800, wpm10: 400 } as const;
 /**
- * The weights balance quality against contrast. quality x share moves by
- * `share` points per grade step; the contrast term is at most 1000, reached
- * only by a pair that makes every exchange in the work at full contrast.
- * In Crito (Crito's share 209 per mille) a C+ voice leads a D voice by
- * 4 x 209 = 836 points, so the D voice wins only if it is more than 836
- * per mille further from Socrates than the C+ voice: quality decides unless
- * the better voice's contrast is very poor. The narrator's contrast counts
- * a quarter as much (NARRATOR_WEIGHT per mille): characters should not
- * sound like the house narrator, but other speakers matter more.
+ * The weights balance grade against contrast. The pool's grades are C, C+
+ * and B- (with A- af_bella above), and one grade step is worth `share`
+ * points (words per mille). The contrast term is at most 1000, reached only
+ * by a pair that makes every exchange in the work at full contrast; between
+ * two pool voices it is usually 100 to 400. So:
+ * - a lead (share 300 or more) takes the better grade unless the lower
+ *   voice contrasts with the speakers it answers by more than a step's
+ *   worth (300 per mille or more): grade decides, contrast breaks near-ties;
+ * - a minor part (share 20) gains only 20 per step, and contrast decides.
+ * In Crito, Crito (share 209) would take a B- over a C+ unless the C+ were
+ * over 209 per mille more contrasting with Socrates. The narrator's contrast
+ * counts a quarter as much (NARRATOR_WEIGHT per mille), and only in a work
+ * the narrator speaks in: characters should not sound like the narrator the
+ * listener hears between their lines, but other speakers matter more.
  */
 export const NARRATOR_WEIGHT = 250;
 /** The most-alternating pair must differ by at least this much pitch (two semitones)... */
@@ -224,7 +219,7 @@ export interface CastReason {
   score: number;
   /** Under MINOR_PERMILLE of the words. */
   minor: boolean;
-  /** Speakers cast earlier who hold the same voice (sharing, rule 4). */
+  /** Speakers cast earlier who hold the same voice (sharing, rule 5). */
   sharedWith: string[];
   /** Set on the later member of the most-alternating pair: whether MIN_F0_CENTS or MIN_CENTROID_HZ separates them. */
   contrastRule?: "met" | "unmet";
@@ -264,19 +259,23 @@ export function alternations(turns: readonly string[]): Map<string, number> {
 /**
  * Casts each speaker a character voice (the algorithm is in the header).
  * `speakers` come in order of first appearance, with their word counts;
- * `turns` is the speaker of each labelled cue in order. Narrator voices are
- * never cast, whatever the palette holds. A sheet the pool cannot honour
- * (no voice of a declared sex) throws, never a silent wrong voice.
+ * `turns` is the speaker of each labelled cue in order; `narrated` says
+ * whether the narrator also speaks in the work. Narrator voices are never
+ * cast, whatever the palette holds. A sheet the pool cannot honour (no voice
+ * of a declared sex), or a sheet that leaves out a speaker the text labels,
+ * throws, never a silent wrong voice.
  */
 export function castVoices<Id extends string>(
   speakers: readonly SpeakerStats[],
   sheet: CastSheet | undefined,
   palette: readonly Voice<Id>[] = CHARACTER_VOICES as readonly Voice<Id>[],
   turns: readonly string[] = [],
+  narrated = false,
 ): Map<string, Casting<Id>> {
   const narrator = TABLE.find((v) => v.id === narratorVoice(sheet))!;
   const accent = sheet?.accent ?? narrator.accent;
   const declared = sheet?.speakers ?? {};
+  if (sheet) for (const s of speakers) if (!Object.hasOwn(declared, s.speaker)) throw new Error(`cast: the cast sheet does not declare ${s.speaker}`);
   const candidates = palette.filter((v) => !NARRATOR_IDS.includes(v.id) && inPace(v));
   const graded = (min: string) => candidates.filter((v) => gradeOf(v.grade) >= gradeOf(min));
   const main = graded(MIN_GRADE);
@@ -333,7 +332,7 @@ export function castVoices<Id extends string>(
         const n = altOf(s.speaker, other);
         if (n > 0) contrastPart += Math.floor((n * contrast(v, palette.find((p) => p.id === c.voice)!)) / 1000);
       }
-      const narratorPart = Math.floor((contrast(v, narrator) * NARRATOR_WEIGHT) / 1000);
+      const narratorPart = narrated ? Math.floor((contrast(v, narrator) * NARRATOR_WEIGHT) / 1000) : 0;
       const qualityPart = quality * share;
       return { quality, share, qualityPart, contrastPart, narratorPart, score: qualityPart + contrastPart + narratorPart, accent: v.accent, minor: share < MINOR_PERMILLE, sharedWith: [] };
     };
@@ -344,7 +343,7 @@ export function castVoices<Id extends string>(
     let options = free.length > 0 ? free : shareable.length > 0 ? shareable : pool;
     const clash = free.length === 0 && shareable.length === 0;
 
-    // Rule 3: the later member of the most-alternating pair.
+    // Rule 4: the later member of the most-alternating pair.
     let contrastRule: CastReason["contrastRule"];
     if (top && top.includes(s.speaker) && out.has(top[0] === s.speaker ? top[1] : top[0])) {
       const partner = palette.find((p) => p.id === out.get(top![0] === s.speaker ? top![1] : top![0])!.voice)!;
@@ -415,12 +414,12 @@ export function cast(cues: readonly Pick<Cue, "speaker" | "spoken">[], sheet?: C
     s.words += wordsIn(c.spoken);
   });
   const narrator = narratorVoice(sheet);
-  const byVoice = castVoices(stats, sheet, palette, turns);
+  const narrated = cues.some((c) => c.speaker === undefined);
+  const byVoice = castVoices(stats, sheet, palette, turns, narrated);
   const parts = stats.map((s) => {
     const c = byVoice.get(s.speaker)!;
     return { speaker: s.speaker, voice: c.voice, firstCue: firstCue.get(s.speaker)!, words: s.words, reason: c.reason };
   });
-  const narrated = cues.some((c) => c.speaker === undefined);
   const voices = cues.map((c) => (c.speaker === undefined ? narrator : byVoice.get(c.speaker)!.voice));
   return { narrator, parts, narrated, voices };
 }
@@ -435,10 +434,12 @@ export function tryCast(cues: readonly Pick<Cue, "speaker" | "spoken">[], sheet?
 }
 
 /** One line of the casting report: who, which voice, and the score's parts. */
-export interface CastReportRow extends CastReason {
+export interface CastReportRow extends Omit<CastReason, "clash"> {
   speaker: string;
   voice: VoiceId;
   words: number;
+  /** Always stated: true when the speaker had to share a voice with someone it answers (the pool was too small). */
+  clash: boolean;
 }
 
 /**
@@ -446,7 +447,16 @@ export interface CastReportRow extends CastReason {
  * then each speaker in order of first appearance with the score's parts.
  */
 export function castReport(c: Pick<Cast, "narrator" | "parts">): { narrator: NarratorVoiceId; parts: CastReportRow[] } {
-  return { narrator: c.narrator, parts: c.parts.map((p) => ({ speaker: p.speaker, voice: p.voice, words: p.words, ...p.reason })) };
+  return { narrator: c.narrator, parts: c.parts.map((p) => ({ speaker: p.speaker, voice: p.voice, words: p.words, ...p.reason, clash: p.reason.clash === true })) };
+}
+
+/**
+ * Whether every character voice is in the narrator's accent, with no
+ * fallback: only then may the page say the work is cast "in one accent".
+ */
+export function inOneAccent(c: Pick<Cast, "narrator" | "parts">): boolean {
+  const accent = TABLE.find((v) => v.id === c.narrator)?.accent;
+  return c.parts.every((p) => !p.reason?.accentFallback && p.reason?.accent === accent);
 }
 
 /** How many different voices the listener hears. */

@@ -5,7 +5,7 @@
 // made (to this origin, already under the page's CSP), and the shell's own
 // paths, all on this origin (tests/offline.test.ts). It never sends anything.
 
-import { CAST_ENGINE_VERSION } from "./engine/cast";
+import { CAST_ENGINE_VERSION } from "./engine/cast-version";
 import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
 
 declare const __BUILD_TAG__: string;

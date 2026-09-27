@@ -5,7 +5,7 @@
 
 import { grouped, isPublicDomainWorldwide, type Work } from "./catalogue";
 import { DIAL, MAX_ANGLE, polar } from "./device/needle";
-import { VOICE_NAMES, speakerName, voiceCount, type Cast, type CastSheet } from "./engine/cast";
+import { VOICE_NAMES, inOneAccent, speakerName, voiceCount, type Cast, type CastSheet } from "./engine/cast";
 
 const ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -53,7 +53,8 @@ export function castSentence(cast?: Pick<Cast, "narrator" | "parts" | "narrated"
   if (cast.parts.length === 0) return `One voice, ${narrator}, reads every part. `;
   const lines = cast.parts.map((p) => `${esc(speakerName(p.speaker))}: ${VOICE_NAMES[p.voice]}.`);
   if (cast.narrated) lines.unshift(`The narration: ${narrator}.`);
-  return `${lines.join(" ")} Voices are cast in one accent, by their measured quality and contrast, never from the speakers' names. `;
+  const how = inOneAccent(cast) ? "in one accent, by" : "by";
+  return `${lines.join(" ")} Voices are cast ${how} the voice model's published grade and their measured contrast, never from the speakers' names. `;
 }
 
 const SEX_WORDS = { m: "male", f: "female" } as const;
