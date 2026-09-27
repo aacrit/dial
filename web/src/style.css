@@ -1688,8 +1688,14 @@ body.faceplate-page {
   min-width: 0;
   scroll-snap-align: start;
   scroll-snap-stop: always;
-  overflow: hidden;
-  padding: calc(var(--top) + env(safe-area-inset-top) + 4px) max(var(--padr), env(safe-area-inset-right)) calc(var(--bandh) + env(safe-area-inset-bottom) + 8px) max(12px, env(safe-area-inset-left));
+  /* Decision F: a panel whose content cannot fit scrolls vertically inside
+     itself, so nothing is ever out of reach; the snap still moves between
+     panels. At the panel map's viewports everything fits and it never has to. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: calc(var(--top) + env(safe-area-inset-top) + 4px) calc(var(--padr) + env(safe-area-inset-right)) calc(var(--bandh) + env(safe-area-inset-bottom) + 8px) max(12px, env(safe-area-inset-left));
 }
 
 /* Panel 1: the device, fitted. The dial takes whatever height is left. */
@@ -1730,6 +1736,11 @@ body.faceplate-page {
   gap: 8px;
   min-height: 0;
   min-width: 0;
+}
+
+/* Nothing on the side shrinks below its content: the dial gives way first, then the panel scrolls. */
+.side > * {
+  flex-shrink: 0;
 }
 
 .side > *,
@@ -1811,16 +1822,18 @@ body.faceplate-page {
 .widgets {
   position: relative;
   height: 100%;
-  min-height: 0;
+  /* Taller than the panel only when the widgets' own minimums cannot fit; then the panel scrolls (decision F). */
+  min-height: min-content;
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  /* The Script / Bookplate widget never shrinks below a readable window; The work gives way first (its text scrolls inside it). */
+  grid-template-rows: minmax(128px, auto) auto minmax(120px, 1fr) auto;
 }
 
+/* A widget in an auto row keeps its content height; one in a sized row (minmax) may shrink and scroll inside. */
 .widget {
   position: relative;
-  min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1830,7 +1843,8 @@ body.faceplate-page {
   background: var(--color-surface);
   border: 1px solid var(--color-bezel);
   box-shadow: var(--shadow-card);
-  overflow: hidden;
+  /* Clip, not hidden: a widget never scrolls by itself (focus cannot strand it); its content scrolls in its own scroller. */
+  overflow: clip;
 }
 
 .widget > h2,
@@ -1881,6 +1895,7 @@ body.faceplate-page {
 }
 
 .w-about .about-scroll {
+  min-height: 32px;
   display: grid;
   gap: 6px;
   align-content: start;
@@ -2003,6 +2018,10 @@ body.faceplate-page {
   font-size: 0.86rem;
 }
 
+.w-text {
+  min-height: 0;
+}
+
 .w-text .scroll {
   flex: 1;
 }
@@ -2116,28 +2135,34 @@ body.faceplate-page {
   flex: 1;
 }
 
-.reqs-in {
+/* The open details' own content box joins the flex chain, so the list can take the height that is left. */
+.reqs-box[open]::details-content {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 0;
   flex: 1;
+  min-height: 0;
 }
 
-.reqs-in .tot {
+.reqs > p {
+  margin: 0 0 6px;
+}
+
+.reqs .tot {
   font: 400 0.7rem/1.4 var(--font-data);
   font-variant-numeric: tabular-nums;
   color: var(--color-cream-muted);
 }
 
-.reqs-in .tot b {
+.reqs .tot b {
   font-weight: 400;
   color: var(--color-cream);
 }
 
 .reqs {
   max-height: min(34dvh, 260px);
-  min-height: 0;
+  min-height: 48px;
+  margin-top: 4px;
+  padding-top: 6px;
   overflow: auto;
   overscroll-behavior: contain;
   border-top: 1px solid var(--color-border);
@@ -2168,7 +2193,7 @@ body.faceplate-page {
   word-break: normal;
 }
 
-.reqs-in .logfoot {
+.reqs .logfoot {
   padding: 0;
   font-size: 0.74rem;
 }
@@ -2311,8 +2336,8 @@ body.faceplate-page {
   }
 
   .w-seal:has(.reqs-box[open]) .reqs {
-    flex: 1;
-    max-height: none;
+    flex: 1 1 auto;
+    max-height: 80dvh;
   }
 
   /* Script tapped: the script fills the work panel; the others come back on Close. */
@@ -2357,8 +2382,8 @@ body.faceplate-page {
   }
 
   .w-seal:has(.reqs-box[open]) .reqs {
-    flex: 1;
-    max-height: none;
+    flex: 1 1 auto;
+    max-height: 80dvh;
   }
 
   .w-text {
@@ -2388,8 +2413,9 @@ body.faceplate-page {
     min-height: 0;
   }
 
+  /* Centred while it fits; from the top once it does not, so nothing rides up under the top bar. */
   .side {
-    justify-content: center;
+    justify-content: safe center;
   }
 
   .ra.prev {
@@ -2398,7 +2424,7 @@ body.faceplate-page {
 
   .widgets {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(120px, 1fr);
     max-width: 1400px;
     margin: 0 auto;
   }
@@ -2422,16 +2448,19 @@ body.faceplate-page {
     grid-column: 3;
     grid-row: 1 / 3;
     align-self: start;
-    max-height: 100%;
   }
 
+  /* Open, the Seal takes its whole column; the list gets the height that is left, and the widget scrolls if even that is too little. */
   .w-seal:has(.reqs-box[open]) {
     align-self: stretch;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .w-seal:has(.reqs-box[open]) .reqs {
-    flex: 1;
-    max-height: none;
+    flex: 1 1 auto;
+    max-height: 80dvh;
   }
 
   .band {
@@ -2484,7 +2513,7 @@ body.faceplate-page {
 
   .p-device .device {
     column-gap: 14px;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   }
 
   .side {
@@ -2523,7 +2552,7 @@ body.faceplate-page {
   }
 
   .readalong {
-    padding: 2px 12px 6px;
+    padding: 0 12px 2px;
   }
 
   .ra-head {
@@ -2536,6 +2565,10 @@ body.faceplate-page {
 
   .ra.live {
     font-size: 0.9rem;
+  }
+
+  .side {
+    gap: 4px;
   }
 
   .tunein #tune-in,
@@ -2557,8 +2590,36 @@ body.faceplate-page {
 
   /* A long status line scrolls inside its own box rather than pushing the keys off the panel. */
   .onair-panel {
-    max-height: 3.6em;
+    max-height: 36px;
     overflow-y: auto;
+  }
+
+  .tunein {
+    gap: 2px 10px;
+  }
+
+  /* Secondary text goes first: the per-line count, the loudness note, and on a work's Broadcast the
+     station line (the dial names the station, and The work panel the title). */
+  #broadcast-progress,
+  #back-10,
+  #fwd-10,
+  .meters .il,
+  body[data-room="broadcast"] .station-line,
+  .w-keep .save .sz {
+    display: none;
+  }
+
+  .tunein .make-here {
+    font-size: 0.78rem;
+    min-height: 32px;
+  }
+
+  .ra.live {
+    -webkit-line-clamp: 1;
+  }
+
+  .ribbon {
+    height: 22px;
   }
 
   #broadcast-status {
@@ -2596,14 +2657,17 @@ body.faceplate-page {
     display: none;
   }
 
+  /* Open, the Seal covers the Script column too, and scrolls inside itself if it still cannot fit. */
   .w-seal:has(.reqs-box[open]) {
     position: absolute;
     top: 0;
     bottom: 0;
     right: 0;
-    width: calc((100% - 20px) / 3);
+    width: calc((100% - 20px) * 2 / 3 + 10px);
     z-index: 5;
     grid-area: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .band button {
@@ -2616,6 +2680,56 @@ body.faceplate-page {
   .station-line .by,
   .ra.prev {
     display: none;
+  }
+}
+
+/* A landscape screen too narrow for columns (under 600 px): the device and the widgets stack, as on a phone held upright, and the panel scrolls if it must. */
+@media (orientation: landscape) and (max-width: 599px) {
+  .p-device .device {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dialbox {
+    height: auto;
+    min-height: 110px;
+  }
+
+  .widgets {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(128px, auto) auto minmax(120px, 1fr) auto;
+  }
+
+  .w-about,
+  .w-keep,
+  .w-text,
+  .w-seal {
+    grid-column: 1;
+  }
+
+  .w-about {
+    grid-row: 1;
+  }
+
+  .w-keep {
+    grid-row: 2;
+  }
+
+  .w-text {
+    grid-row: 3;
+  }
+
+  .w-seal {
+    grid-row: 4;
+    align-self: stretch;
+  }
+
+  .w-seal:has(.reqs-box[open]) {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    z-index: 5;
+    grid-area: auto;
   }
 }
 
@@ -2646,7 +2760,8 @@ body.faceplate-page {
 
   .widgets {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    /* The Seal's open list takes only the height that is left, and the script keeps a readable window. */
+    grid-template-rows: auto auto minmax(220px, 1fr) minmax(0, auto);
     max-width: none;
   }
 
@@ -2660,8 +2775,8 @@ body.faceplate-page {
   }
 
   .w-seal:has(.reqs-box[open]) .reqs {
-    flex: 0 1 auto;
-    max-height: min(34dvh, 260px);
+    flex: 1 1 auto;
+    max-height: min(50dvh, 420px);
   }
 
   .band {
@@ -2676,5 +2791,13 @@ body.faceplate-page {
   .kn-dial::before {
     -webkit-mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
     mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
+  }
+}
+
+/* Narrow phones: the 10 s keys step aside so the knobs never crowd the transport (J and L still skip 10 s). */
+@media (max-width: 359px) {
+  #back-10,
+  #fwd-10 {
+    display: none;
   }
 }

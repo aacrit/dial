@@ -5,7 +5,7 @@
 // style.css. Nothing here fetches or sends anything.
 
 import { motion } from "./device/reduced-motion";
-import { PANELS, PHONE_PORTRAIT, SINGLE_PANEL, type PanelId } from "./panels";
+import { PANELS, PHONE_PORTRAIT, SHORT_LANDSCAPE, SINGLE_PANEL, type PanelId } from "./panels";
 
 export type TextTab = "script" | "bookplate";
 
@@ -102,10 +102,11 @@ export function mountPanels(): Panels {
     }
   }
 
-  // Focus that moves into the other panel (Tab, a link to /?panel=work) takes the band with it.
+  // Focus that lands in the other panel (Tab, a sheet closing, a key's opener) brings that panel into view, and the band with it.
   scroller?.addEventListener("focusin", (e) => {
     const p = (e.target as Element).closest<HTMLElement>("[data-panel]");
-    if (p && isPanel(p.id) && !matches(SINGLE_PANEL)) setCurrent(p.id);
+    if (!p || !isPanel(p.id) || matches(SINGLE_PANEL)) return;
+    if (p.id !== current) show(p.id, true);
   });
 
   // ---- the Script / Bookplate widget --------------------------------------------
@@ -146,7 +147,11 @@ export function mountPanels(): Panels {
     close.hidden = true;
     const back = fillOpener && fillOpener.isConnected && fillOpener.checkVisibility?.() !== false ? fillOpener : tabs[0];
     fillOpener = null;
-    if (returnFocus || hadFocus) back?.focus({ preventScroll: true });
+    if (!(returnFocus || hadFocus) || !back) return;
+    // The key that opened it may be on the other panel: bring that panel into view first, so focus is never off screen.
+    const home = back.closest<HTMLElement>("[data-panel]")?.id;
+    if (isPanel(home)) show(home, true);
+    back.focus({ preventScroll: true });
   };
   close?.addEventListener("click", () => unfill(true));
   text?.addEventListener("keydown", (e) => {
@@ -155,16 +160,31 @@ export function mountPanels(): Panels {
       unfill(true);
     }
   });
-  // Turned on its side, or grown: no longer a phone held upright, so nothing fills.
-  if (typeof matchMedia === "function") matchMedia(PHONE_PORTRAIT).addEventListener("change", (e) => {
-    if (!e.matches) unfill(false);
-  });
+  // On a phone held upright the open request list covers the work panel: the widgets under it are inert until it closes.
+  const reqs = document.getElementById("seal-reqs") as HTMLDetailsElement | null;
+  // On a phone on its side it covers the Script column, so that one alone is inert.
+  const paintInert = () => {
+    const open = !!reqs?.open;
+    const phone = open && matches(PHONE_PORTRAIT);
+    const side = open && matches(SHORT_LANDSCAPE);
+    for (const w of widgets?.querySelectorAll<HTMLElement>(":scope > .widget:not(.w-seal)") ?? []) w.inert = phone || (side && w.classList.contains("w-text"));
+  };
+  reqs?.addEventListener("toggle", paintInert);
+
+  // Turned on its side, or grown: no longer a phone held upright, so nothing fills or covers.
+  if (typeof matchMedia === "function") {
+    matchMedia(PHONE_PORTRAIT).addEventListener("change", (e) => {
+      if (!e.matches) unfill(false);
+      paintInert();
+    });
+    matchMedia(SHORT_LANDSCAPE).addEventListener("change", paintInert);
+  }
 
   tabs.forEach((tab, i) => {
     tab.addEventListener("click", () => {
       select(tab);
-      // Tapping Script on a phone makes the script fill The work panel.
-      if (tab.id === "tab-script" && matches(PHONE_PORTRAIT) && !filled()) {
+      // Tapping Script (or the Bookplate) on a phone makes it fill The work panel.
+      if (matches(PHONE_PORTRAIT) && !filled()) {
         fill(tab);
         focusInto(tab);
       }
@@ -184,7 +204,7 @@ export function mountPanels(): Panels {
     if (!tab) return;
     select(tab);
     show("work");
-    if (which === "script" && matches(PHONE_PORTRAIT)) fill(opener);
+    if (matches(PHONE_PORTRAIT)) fill(opener);
     focusInto(tab);
   };
 

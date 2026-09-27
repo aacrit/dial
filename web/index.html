@@ -159,8 +159,8 @@
               <p class="d" id="st-sentence"></p>
               <p class="meta" id="st-meta"></p>
               <p class="own">Have writing of your own? Bringing your own chapter needs the Studio, which is not open yet.</p>
+              <p class="asks"><button type="button" class="linkish" id="open-feedback" aria-haspopup="dialog">Tell us what is missing</button><a href="/privacy">Privacy</a></p>
             </div>
-            <p class="asks"><button type="button" class="linkish" id="open-feedback" aria-haspopup="dialog">Tell us what is missing</button><a href="/privacy">Privacy</a></p>
           </article>
 
           <article class="widget w-keep" data-part aria-labelledby="kp-h">
@@ -224,18 +224,17 @@
             <p class="sw-note" id="sw-note" role="status"></p>
             <details class="reqs-box" id="seal-reqs">
               <summary><span class="sh">Show every request</span><span class="hd">Hide the requests</span></summary>
-              <div class="reqs-in">
+              <div class="reqs" tabindex="0" role="region" aria-label="Every request this tab made">
                 <p class="count" id="seal-reqs-intro"></p>
+                <p class="count">Browser extensions and the browser's own services run outside the page, so the Seal cannot see them.</p>
                 <p class="count" id="sw-d">The switch: totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more. Turn it off and Dial sends no counts at all; only a feedback message you choose to send leaves this device. The setting stays on this device.</p>
                 <p class="tot" id="log-tot"></p>
-                <div class="reqs" tabindex="0" role="region" aria-label="Every request this tab made">
-                  <table class="log">
+                <table class="log">
                     <thead class="visually-hidden">
                       <tr><th>Direction</th><th>Time</th><th>Path on <span data-host></span></th><th class="wh-h">What it was</th><th>Size</th></tr>
                     </thead>
                     <tbody id="log"></tbody>
-                  </table>
-                </div>
+                </table>
                 <p class="logfoot" id="log-foot">Newest last.</p>
               </div>
             </details>

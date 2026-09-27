@@ -20,13 +20,19 @@ export const TABLET_PORTRAIT = "(min-width: 768px) and (orientation: portrait)";
 export const LANDSCAPE = "(orientation: landscape)";
 /** A phone on its side and other short screens: everything tighter. */
 export const SHORT_LANDSCAPE = "(orientation: landscape) and (max-height: 500px)";
+/** A landscape screen under 600 px wide: too narrow for columns, so the widgets stack as on a phone. */
+export const NARROW_LANDSCAPE = "(orientation: landscape) and (max-width: 599px)";
 /** Large screens: one panel, no snapping, no band (founder, 2026-09-27: "whenever everything fits"). */
 export const SINGLE_PANEL = "(min-width: 1600px) and (min-height: 900px)";
 
 /** Every query the stylesheet must carry, as written there. */
-export const QUERIES = [PHONE_PORTRAIT, TABLET_PORTRAIT, LANDSCAPE, SHORT_LANDSCAPE, SINGLE_PANEL] as const;
+export const QUERIES = [PHONE_PORTRAIT, TABLET_PORTRAIT, LANDSCAPE, SHORT_LANDSCAPE, NARROW_LANDSCAPE, SINGLE_PANEL] as const;
 
-/** The six viewports the design was checked at, and the enforced layout check runs at. */
+/**
+ * The panel map's six viewports: here every part must fit its panel
+ * unscrolled. scripts/layout-check.mjs checks them in a browser as a gate
+ * step (CoS decision G), with SMALL_VIEWPORTS below.
+ */
 export const VIEWPORTS = [
   { width: 375, height: 812, name: "phone" },
   { width: 768, height: 1024, name: "tablet" },
@@ -34,6 +40,15 @@ export const VIEWPORTS = [
   { width: 1280, height: 720, name: "laptop-short" },
   { width: 1920, height: 1080, name: "desktop" },
   { width: 740, height: 360, name: "phone-landscape" },
+] as const;
+
+/** Smaller and in-between screens: a panel may scroll inside itself there (decision F), but nothing may be out of reach. */
+export const SMALL_VIEWPORTS = [
+  { width: 375, height: 667, name: "small phone" },
+  { width: 360, height: 640, name: "android phone" },
+  { width: 320, height: 568, name: "narrow phone" },
+  { width: 640, height: 360, name: "small phone landscape" },
+  { width: 960, height: 540, name: "small laptop" },
 ] as const;
 
 /**
@@ -73,7 +88,7 @@ export function panelLayout(width: number, height: number): PanelLayout {
   const panels = ["radio", "work"] as const;
   if (matchesQuery(PHONE_PORTRAIT, width, height)) return { panels, snap: true, band: "bottom", work: "stack", scriptFills: true };
   if (matchesQuery(TABLET_PORTRAIT, width, height)) return { panels, snap: true, band: "bottom", work: "two-columns", scriptFills: false };
-  return { panels, snap: true, band: "right", work: "three-columns", scriptFills: false };
+  return { panels, snap: true, band: "right", work: matchesQuery(NARROW_LANDSCAPE, width, height) ? "stack" : "three-columns", scriptFills: false };
 }
 
 /** The top bar's and the band's heights, in px, per layout (style.css --top and --bandh). */

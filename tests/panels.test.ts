@@ -2,15 +2,15 @@
 // the stylesheet's agreement with it, the no-scroll rule's verdict
 // (scripts/lib/layout-probe.mjs judge), and the band selector's markup. The
 // same rule runs in a real browser at the six viewports with
-// `npm run layout-check`, before a merge.
+// `npm run layout-check`, a gate step in CI (CoS decision G).
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { judge } from "../scripts/lib/layout-probe.mjs";
-import { VIEWPORTS as CHECKED } from "../scripts/layout-check.mjs";
-import { LANDSCAPE, PANELS, PHONE_PORTRAIT, QUERIES, SHORT_LANDSCAPE, SINGLE_PANEL, TABLET_PORTRAIT, VIEWPORTS, chrome, dialSize, matchesQuery, panelBox, panelLayout } from "../web/src/panels";
+import { SMALL_VIEWPORTS as CHECKED_SMALL, VIEWPORTS as CHECKED } from "../scripts/layout-check.mjs";
+import { LANDSCAPE, NARROW_LANDSCAPE, PANELS, PHONE_PORTRAIT, QUERIES, SHORT_LANDSCAPE, SINGLE_PANEL, SMALL_VIEWPORTS, TABLET_PORTRAIT, VIEWPORTS, chrome, dialSize, matchesQuery, panelBox, panelLayout } from "../web/src/panels";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -60,8 +60,20 @@ describe("the panel map (design/spec.md 00)", () => {
     }
   });
 
-  it("the browser check runs at exactly these six viewports", () => {
+  it("the browser check runs at exactly these six viewports, and the five smaller ones", () => {
     expect(CHECKED).toEqual(VIEWPORTS.map((v) => [v.width, v.height]));
+    expect(CHECKED_SMALL).toEqual(SMALL_VIEWPORTS.map((v) => [v.width, v.height]));
+    expect(CHECKED_SMALL).toEqual([
+      [375, 667],
+      [360, 640],
+      [320, 568],
+      [640, 360],
+      [960, 540],
+    ]);
+    // A landscape screen too narrow for columns stacks its widgets.
+    expect(matchesQuery(NARROW_LANDSCAPE, 568, 320)).toBe(true);
+    expect(panelLayout(568, 320).work).toBe("stack");
+    expect(panelLayout(640, 360).work).toBe("three-columns");
   });
 
   it("reads media queries as CSS does: portrait when the height is at least the width", () => {
@@ -116,7 +128,7 @@ describe("style.css agrees with the map", () => {
     expect(chrome(1280, 800).bandWidth).toBe(96);
   });
 
-  it("the page never scrolls sideways; vertically it snaps panel to panel inside .panels, never body", () => {
+  it("the page never scrolls sideways; vertically it snaps panel to panel inside .panels, never body; a panel that cannot fit scrolls inside itself (decision F)", () => {
     expect(css).toMatch(/html:has\(body\.faceplate-page\),\s*body\.faceplate-page \{\s*height: 100%;\s*overflow: hidden;/);
     const panels = rule(".panels");
     expect(panels).toMatch(/overflow-x: hidden;/);
@@ -125,6 +137,11 @@ describe("style.css agrees with the map", () => {
     const panel = rule(".panel");
     expect(panel).toMatch(/height: 100dvh;/);
     expect(panel).toMatch(/scroll-snap-stop: always;/);
+    expect(panel).toMatch(/overflow-x: hidden;\s*overflow-y: auto;\s*overscroll-behavior: contain;/);
+    // Band clearance on a landscape phone adds the safe area to the plate's room.
+    expect(panel).toMatch(/calc\(var\(--padr\) \+ env\(safe-area-inset-right\)\)/);
+    // Widgets clip rather than hide: focus can never scroll a widget by itself and strand its content.
+    expect(rule(".widget")).toMatch(/overflow: clip;/);
     expect(panel).toMatch(/env\(safe-area-inset-top\)/);
     expect(panel).toMatch(/env\(safe-area-inset-bottom\)/);
     expect(css).not.toMatch(/overflow-x: (auto|scroll)/);
@@ -142,7 +159,14 @@ describe("style.css agrees with the map", () => {
     expect(rule(".side")).toMatch(/min-width: 0;/);
     expect(css).toMatch(/\.side > \*,\s*\.display,\s*\.instruments,\s*\.ra-head,\s*\.ra-lines \{\s*min-width: 0;/);
     // The script widget takes the remaining height.
-    expect(rule(".widgets")).toMatch(/grid-template-rows: auto auto minmax\(0, 1fr\) auto;/);
+    expect(rule(".widgets")).toMatch(/grid-template-rows: minmax\(128px, auto\) auto minmax\(120px, 1fr\) auto;/);
+    expect(rule(".widgets")).toMatch(/min-height: min-content;/);
+    // The open list joins the flex chain through the details' own content box; no unbounded list anywhere.
+    expect(rule(".reqs-box[open]::details-content")).toMatch(/display: flex;\s*flex-direction: column;\s*flex: 1;\s*min-height: 0;/);
+    expect(rule(".reqs")).toMatch(/max-height: min\(34dvh, 260px\);/);
+    expect(css).not.toMatch(/max-height: none;/);
+    // On the single panel the Seal's row takes only what is left, and the script keeps a window.
+    expect(mediaBlocks(SINGLE_PANEL)[0]).toMatch(/grid-template-rows: auto auto minmax\(220px, 1fr\) minmax\(0, auto\);/);
   });
 
   it("on a phone, the open request list and the tapped script fill the work panel; an absolute widget leaves its grid row", () => {
@@ -158,7 +182,20 @@ describe("the no-scroll rule's verdict (layout-probe judge)", () => {
   const page = (panels: object[], over: object = {}) => ({ innerWidth: 375, innerHeight: 812, scrollWidth: 375, scrollerScrollWidth: 375, scrollerClientWidth: 375, panels, ...over });
 
   it("a panel whose parts fit passes", () => {
-    expect(judge(page([panel([part("w-about", 52, 300), part("seal", 320, 760)])]))).toEqual({ ok: true, worst: 0, problems: [] });
+    expect(judge(page([panel([part("w-about", 52, 300), part("seal", 320, 760)])]))).toEqual({ ok: true, worst: 0, clipped: 0, problems: [] });
+  });
+
+  it("anything out of reach fails, counted; overlapping knobs fail; away from the map's viewports a panel may scroll", () => {
+    const clip = { el: '#open-feedback "Tell us what is missing"', interactive: true, why: "article.widget.w-about clips it by 51 px", px: 51 };
+    const v = judge(page([{ ...panel([]), clips: [clip, { ...clip, el: "span.pd", interactive: false }] }]));
+    expect(v.ok).toBe(false);
+    expect(v.clipped).toBe(2);
+    expect(v.problems[0]).toMatch(/^#work control #open-feedback "Tell us what is missing" cannot be reached: article\.widget\.w-about clips it by 51 px/);
+    expect(judge(page([{ ...panel([]), overlaps: [{ a: 'div.knob "Volume"', b: '#line-prev "Line"', px: 7.7 }] }])).problems[0]).toMatch(/Volume" overlaps #line-prev/);
+    // A panel longer than the screen: a fit failure at the map's viewports, fine elsewhere if nothing is clipped.
+    const long = page([panel([part("seal", 320, 900)])]);
+    expect(judge(long).ok).toBe(false);
+    expect(judge(long, { fit: false }).ok).toBe(true);
   });
 
   it("a part under the band, a page wider than the viewport, a part under the top bar or the band plate: each fails, by how much", () => {
@@ -209,20 +246,30 @@ describe("the band selector and the rooms", () => {
 
   it("keyboard and motion: the band's keys are buttons that move with the arrows; a band move is instant under reduced motion", () => {
     const ui = read("web/src/panels-ui.ts");
+    // Focus is never left off screen: closing a filled widget brings its opener's panel into view first, and focus landing in another panel moves the panels to it.
+    expect(ui).toMatch(/const home = back\.closest<HTMLElement>\("\[data-panel\]"\)\?\.id;\s*if \(isPanel\(home\)\) show\(home, true\);\s*back\.focus\(\{ preventScroll: true \}\);/);
+    expect(ui).toMatch(/if \(p\.id !== current\) show\(p\.id, true\);/);
+    // On a phone both tabs fill the panel; the open Seal list makes what it covers inert.
+    expect(ui).toMatch(/if \(matches\(PHONE_PORTRAIT\) && !filled\(\)\) \{/);
+    expect(ui).toMatch(/w\.inert = phone \|\| \(side && w\.classList\.contains\("w-text"\)\);/);
     expect(ui).toMatch(/band\?\.addEventListener\("keydown"/);
     expect(ui).toContain('behavior: instant || motion.reduce ? "auto" : "smooth"');
     // The phone's filled script closes with its key or Esc, and focus goes back to the key that opened it.
     expect(ui).toMatch(/close\?\.addEventListener\("click", \(\) => unfill\(true\)\);/);
     expect(ui).toMatch(/if \(e\.key === "Escape" && filled\(\)\)/);
-    expect(ui).toContain("if (returnFocus || hadFocus) back?.focus({ preventScroll: true });");
     // Filling is for a phone held upright only, and ends when it stops being one.
     expect(ui).toMatch(/matchMedia\(PHONE_PORTRAIT\)\.addEventListener\("change"/);
   });
 
-  it("the browser check is its own script, run before a merge and never in the per-commit gate", () => {
+  it("the browser check is a gate step: CI installs Chromium and never skips it; only a local run without a browser may (decision G)", () => {
     const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string>; devDependencies: Record<string, string> };
     expect(pkg.scripts["layout-check"]).toBe("node scripts/layout-check.mjs");
-    expect(read("scripts/gate.mjs")).not.toMatch(/layout-check/);
-    expect(Object.keys(pkg.devDependencies)).not.toContain("playwright");
+    expect(pkg.devDependencies.playwright).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(read("scripts/gate.mjs")).toMatch(/label: "layout-check", run: \(\) => spawnSync\(process\.execPath, \[path\.join\(repoRoot, "scripts\/layout-check\.mjs"\), "--gate"\]/);
+    const wf = read(".github/workflows/gate.yml");
+    expect(wf).toMatch(/- run: npx playwright install --with-deps chromium\s*\n\s*- run: npm run gate/);
+    expect(wf).not.toMatch(/continue-on-error/);
+    // The skip is for a local gate only: under CI it fails instead.
+    expect(read("scripts/layout-check.mjs")).toMatch(/if \(gate && !process\.env\.CI\) \{/);
   });
 });

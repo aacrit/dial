@@ -107,7 +107,10 @@ edition, the passage performed and the PD basis.
 - `npm run dev`: Vite dev server plus `wrangler dev`.
 - `npm run build`: production build to dist/, build tag injected.
 - `npm run gate`: the full gate (typecheck, build, tests, lint-size, lint-workflows,
-  lint-design, lint-docs, lint-events, gate-selftest). Must pass before any merge.
+  lint-design, lint-docs, lint-events, gate-selftest, layout-check). Must pass before any merge.
+- `npm run layout-check`: the no-scroll rule in Chromium at the panel map's
+  viewports (`scripts/layout-check.mjs`). CI always runs it; a local gate
+  without a browser skips it and says so.
 - `npm run contract -- --url <url>`: run `contract.yaml` against a live URL.
   Checks marked `requires: deployed` show SKIP on localhost and must PASS
   on the preview.

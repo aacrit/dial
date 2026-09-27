@@ -36,6 +36,10 @@ const STEPS = [
   { label: "lint-docs", run: () => runNode("scripts/lint-docs.mjs") },
   { label: "lint-events", run: () => runNode("scripts/lint-events.mjs") },
   { label: "gate-selftest", run: () => runNode("scripts/gate-selftest.mjs") },
+  // The no-scroll rule in a browser, at every viewport of the panel map and
+  // five smaller ones (CoS decision G). CI installs Chromium and always runs
+  // it; a local run without a browser says it skipped, and why.
+  { label: "layout-check", run: () => spawnSync(process.execPath, [path.join(repoRoot, "scripts/layout-check.mjs"), "--gate"], { cwd: repoRoot, stdio: "inherit", shell: false }) },
 ];
 
 for (const step of STEPS) {

@@ -19,4 +19,6 @@ jobs:
           path: .cache/recordings
           key: recordings-${{ hashFiles('recordings.lock.json') }}
       - run: npm install
+      # The layout check (a gate step) drives Chromium through the panel map; CI never skips it.
+      - run: npx playwright install --with-deps chromium
       - run: npm run gate

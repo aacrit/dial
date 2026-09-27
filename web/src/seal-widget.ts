@@ -90,9 +90,15 @@ function setupWords(): void {
     requestAnimationFrame(render);
   });
   render();
-  // The switch changes the count line; midnight changes what "today" is.
+  // The switch changes the count line; midnight changes what "today" is,
+  // looked at once a minute while the tab is in view, and on coming back.
   document.addEventListener("dial:counts", render);
-  setInterval(render, 60_000);
+  setInterval(() => {
+    if (!document.hidden) render();
+  }, 60_000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) render();
+  });
 }
 
 // ---- the counts switch -----------------------------------------------------

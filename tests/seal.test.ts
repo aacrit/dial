@@ -526,8 +526,16 @@ describe("the Seal widget on the radio (T8, design/spec.md 00)", () => {
     expect(sealLineHtml(summarize([fromEntry(entry("https://x.example/a"), ORIGIN)!]), false, true, XSS)).not.toContain("<img");
   });
 
-  it("sends and counts nothing of its own", () => {
-    expect(read("web/src/seal-widget.ts")).not.toMatch(/sendEvent|reportCoreSuccess|page_view|fetch\(/);
+  it("sends and counts nothing of its own, and does no work in a hidden tab", () => {
+    const widget = read("web/src/seal-widget.ts");
+    expect(widget).not.toMatch(/sendEvent|reportCoreSuccess|page_view|fetch\(/);
+    expect(widget).toMatch(/setInterval\(\(\) => \{\s*if \(!document\.hidden\) render\(\);\s*\}, 60_000\);/);
+  });
+
+  it("says what it cannot see, beside the list, and the list scrolls inside itself", () => {
+    const list = /<div class="reqs" tabindex="0" role="region" aria-label="Every request this tab made">[\s\S]*?<\/table>/.exec(html)![0];
+    expect(list).toContain("Browser extensions and the browser's own services run outside the page, so the Seal cannot see them.");
+    expect(list).toContain('<tbody id="log"></tbody>');
   });
 });
 
