@@ -96,14 +96,15 @@ export async function contractFetch(url, init = {}, retryMs = 2000) {
   }
 }
 
-async function runCheck(check, baseUrl) {
+async function runCheck(check, baseUrl, originalBase = baseUrl) {
   const target = joinUrl(baseUrl, check.path ?? "/");
   const label = check.name ?? `${check.type} ${check.path ?? "/"}`;
 
   // A check about the production zone (host_suffix: voidvision.org) does not
   // apply to any other host, a workers.dev preview included: reported as not
   // applicable, never as a skip or a pass (the /release skill matches NOT_APPLICABLE).
-  if (check.host_suffix && !onHost(baseUrl, check.host_suffix)) {
+  // Judged on the URL the contract was run against, never on a rerouted burst host.
+  if (check.host_suffix && !onHost(originalBase, check.host_suffix)) {
     return { label, pass: true, notApplicable: true, detail: NOT_APPLICABLE };
   }
 
@@ -237,10 +238,66 @@ async function runCheck(check, baseUrl) {
   }
 }
 
+/**
+ * Where a burst goes. On a host under the contract's `burst_zone` (the
+ * production domain), the zone's WAF blocks a burst before the Worker's own
+ * limit can answer, so it goes to `burst_host`, the same deployment's
+ * workers.dev address. Any other base (a preview, localhost) is used as is.
+ */
+export function burstBase(contract, baseUrl) {
+  if (contract.burst_zone && contract.burst_host && onHost(baseUrl, contract.burst_zone)) return contract.burst_host;
+  return baseUrl;
+}
+
+/** The build a deployment serves, from its /healthz, or "" when it does not say. */
+async function servedBuild(base) {
+  try {
+    const r = await contractFetch(joinUrl(base, "/healthz"), { cache: "no-store" });
+    const data = await r.json();
+    return typeof data?.build === "string" ? data.build : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Whether `burstHost` serves the same build as `baseUrl`: a burst sent there
+ * proves the production Worker's limit only if it is the production Worker.
+ * A mistyped or stale burst_host fails; a gradual deployment mid-split may.
+ */
+export async function burstHostProblem(baseUrl, burstHost) {
+  const [prod, other] = await Promise.all([servedBuild(baseUrl), servedBuild(burstHost)]);
+  if (prod && prod === other) return undefined;
+  return `burst_host ${burstHost} serves ${other || "no build"}, ${baseUrl} serves ${prod || "no build"}`;
+}
+
 export async function runContract(contract, baseUrl) {
   const results = [];
-  for (const check of contract.checks) {
-    const r = await runCheck(check, baseUrl);
+  let hostProblem;
+  let hostChecked = false;
+  for (let check of contract.checks) {
+    const base = check.type === "burst" ? burstBase(contract, baseUrl) : baseUrl;
+    let r;
+    const notHere = (check.host_suffix && !onHost(baseUrl, check.host_suffix)) || (check.requires === "deployed" && isLocalUrl(baseUrl));
+    if (base !== baseUrl && !notHere) {
+      if (!hostChecked) {
+        // The build check's request to production counts toward the zone's WAF window too:
+        // wait out this burst's pause first, so it never reads a 1015 page as "no build".
+        if (check.pause_before_seconds) {
+          await new Promise((resolve) => setTimeout(resolve, check.pause_before_seconds * 1000));
+          check = { ...check, pause_before_seconds: 0 };
+        }
+        hostProblem = await burstHostProblem(baseUrl, base);
+        hostChecked = true;
+      }
+      const label = check.name ?? `${check.type} ${check.path ?? "/"}`;
+      r = hostProblem ? { label, pass: false, detail: hostProblem, buildMismatch: true } : await runCheck(check, base, baseUrl);
+      r.rerouted = true;
+      // Say where it ran: the summary names the base URL, and this burst did not run there.
+      r.detail = `${r.detail ? `${r.detail}; ` : ""}via ${base}`;
+    } else {
+      r = await runCheck(check, base, baseUrl);
+    }
     // A check that waits on someone (a zone setting, a Board ask) says who, in its failure.
     if (!r.pass && check.failure_note) r.detail = `${r.detail ?? "failed"}. ${check.failure_note}`;
     results.push(r);
@@ -262,12 +319,14 @@ async function main() {
   const skipped = results.filter((r) => r.skipped).length;
   const notApplicable = results.filter((r) => r.notApplicable).length;
   const ran = results.length - skipped - notApplicable;
+  const rerouted = results.filter((r) => r.rerouted).length;
+  const buildMatched = !results.some((r) => r.buildMismatch);
 
   for (const r of results) {
     console.log(`${r.notApplicable ? "N/A " : r.skipped ? "SKIP" : r.pass ? "PASS" : "FAIL"}  ${r.label}${r.detail ? ` - ${r.detail}` : ""}`);
   }
   console.log(
-    `\n${passed}/${ran} checks passed against ${baseUrl}${skipped ? `; ${skipped} skipped: needs deployed runtime` : ""}${notApplicable ? `; ${notApplicable} ${NOT_APPLICABLE}` : ""}`,
+    `\n${passed}/${ran} checks passed against ${baseUrl}${skipped ? `; ${skipped} skipped: needs deployed runtime` : ""}${notApplicable ? `; ${notApplicable} ${NOT_APPLICABLE}` : ""}${rerouted ? `; ${rerouted} burst${rerouted === 1 ? "" : "s"} ran via ${contract.burst_host}${buildMatched ? " (same build)" : " (build did not match)"}` : ""}`,
   );
 
   if (passed !== ran) {

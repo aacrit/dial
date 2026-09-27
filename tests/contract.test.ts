@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { NOT_APPLICABLE, USER_AGENT, contractFetch, describeFetchError, isLocalUrl, loadContract, onHost, runContract } from "../scripts/contract.mjs";
+import { NOT_APPLICABLE, USER_AGENT, burstBase, contractFetch, describeFetchError, isLocalUrl, loadContract, onHost, runContract } from "../scripts/contract.mjs";
 import { contractAt, deployedTag } from "../scripts/deployed-contract.mjs";
 
 let server: Server;
@@ -185,6 +185,81 @@ describe("contract runner: deployed-only burst checks", () => {
     expect(burst).toMatchObject({ expect_status: 429, expect_error: "rate_limited", requires: "deployed" });
     expect(burst.pause_before_seconds).toBeGreaterThan(10);
     expect(burst.count).toBeGreaterThan(20);
+  });
+
+  it("on the production domain a burst goes to the workers.dev host, past the zone's WAF; any other base is kept", async () => {
+    const contract = { burst_zone: "voidvision.org", burst_host: "https://dial.aacrit.workers.dev", checks: [] };
+    expect(burstBase(contract, "https://dial.voidvision.org")).toBe("https://dial.aacrit.workers.dev");
+    expect(burstBase(contract, "https://4e5f171d-dial.aacrit.workers.dev")).toBe("https://4e5f171d-dial.aacrit.workers.dev");
+    expect(burstBase(contract, "http://127.0.0.1:8787")).toBe("http://127.0.0.1:8787");
+    expect(burstBase(contract, "https://voidvision.org.evil.example")).toBe("https://voidvision.org.evil.example");
+    expect(burstBase({ checks: [] }, "https://dial.voidvision.org")).toBe("https://dial.voidvision.org");
+  });
+
+  it("runContract sends only bursts to the burst host; every other check stays on the base", async () => {
+    // A burst_zone matching the local test host proves the routing without leaving the machine.
+    let otherBuild = "abc123";
+    let bursts = 0;
+    const other = createServer((req, res) => {
+      if (req.url === "/healthz") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, build: otherBuild }));
+        return;
+      }
+      bursts++;
+      res.writeHead(429, { "content-type": "application/json" });
+      res.end('{"error":"rate_limited"}');
+    });
+    await new Promise<void>((resolve) => other.listen(0, "127.0.0.1", resolve));
+    const port = (other.address() as { port: number }).port;
+    try {
+      const contract = {
+        burst_zone: "localhost",
+        burst_host: `http://127.0.0.1:${port}`,
+        checks: [
+          { name: "home", type: "status", path: "/", expect: 200 },
+          { name: "burst", type: "burst", path: "/", count: 2, expect_status: 429, expect_error: "rate_limited" },
+        ],
+      };
+      const local = baseUrl.replace("127.0.0.1", "localhost");
+      const [home, burst] = await runContract(contract, local);
+      expect(home.pass).toBe(true);
+      expect(home.detail).toBeUndefined();
+      expect(burst.pass).toBe(true);
+      // The result says where the burst ran: the summary names the base, and it did not run there.
+      expect(burst.detail).toBe(`via http://127.0.0.1:${port}`);
+      expect(bursts).toBe(2);
+
+      // A burst host serving another build is not the production Worker: the burst fails, and nothing is sent.
+      otherBuild = "release/older";
+      bursts = 0;
+      const [, stale] = await runContract(contract, local);
+      expect(stale.pass).toBe(false);
+      expect(stale.detail).toBe(`burst_host http://127.0.0.1:${port} serves release/older, ${local} serves abc123; via http://127.0.0.1:${port}`);
+      expect(bursts).toBe(0);
+    } finally {
+      other.close();
+    }
+  });
+
+  it("host_suffix is judged on the URL the contract ran against, never on a rerouted burst host", async () => {
+    // The base is under burst_zone but not under host_suffix; the burst host is under host_suffix.
+    // Judged on the burst host, the check would run (and fetch); judged on the base, it is n/a.
+    const contract = {
+      burst_zone: "localhost",
+      burst_host: "https://unused.voidvision.org",
+      checks: [{ name: "zone-only burst", type: "burst", path: "/", count: 1, expect_status: 429, host_suffix: "voidvision.org" }],
+    };
+    const [r] = await runContract(contract, baseUrl.replace("127.0.0.1", "localhost"));
+    expect(r).toMatchObject({ notApplicable: true, detail: NOT_APPLICABLE });
+  });
+
+  it("contract.yaml routes production bursts to this Worker's workers.dev host", () => {
+    const file = fileURLToPath(new URL("../contract.yaml", import.meta.url));
+    const c = loadContract(path.resolve(file));
+    expect(c.burst_zone).toBe("voidvision.org");
+    expect(c.burst_host).toBe("https://dial.aacrit.workers.dev");
+    expect(burstBase(c, c.url)).toBe("https://dial.aacrit.workers.dev");
   });
 
   it("a burst with method and body posts JSON, and passes once the Worker's 429 answers", async () => {
