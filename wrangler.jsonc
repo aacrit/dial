@@ -37,7 +37,8 @@
     "binding": "ASSETS",
     // A path that matches no asset gets dist/404.html (web/404.html) with a
     // 404 status from Workers Static Assets, never the Worker (T11, M2): an
-    // unknown path costs no invocation. /seal is one of them.
+    // unknown path costs no invocation, except under /play/*, which runs the
+    // Worker first for the http:// redirect (T12). /seal is one of them.
     "not_found_handling": "404-page",
     // The Worker's own routes, and the pages (T12: the Worker sends a plain
     // http:// page request to https://, worker/src/https.ts; a page on https

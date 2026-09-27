@@ -235,7 +235,7 @@ async function guarded(request: Request, env: Env): Promise<Response> {
 
   // A page (run_worker_first lists the page paths only so plain http:// can
   // be redirected) goes straight to Workers Static Assets: no rate limit, so
-  // a class opening Dial together from one network is never refused a page,
+  // the Worker adds no per-network limit to a page (the zone WAF still applies on the custom domain),
   // and no D1.
   if ((request.method === "GET" || request.method === "HEAD") && !isWorkerRoute(url.pathname)) return route(request, env, url);
 
@@ -276,8 +276,8 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   }
 
   // Not a Worker route: whatever Workers Static Assets has at this path.
-  // With run_worker_first limited to the Worker's own routes, this is
-  // mostly a 404 for a path no asset matches. A page policy it carries
+  // run_worker_first lists the Worker's routes and the pages (T12), so
+  // this is a page, or a 404 for an unknown path under /play/*. A page policy it carries
   // (dist/_headers) is kept; anything without one gets the page policy.
   const asset = await env.ASSETS.fetch(request);
   return withSecurityHeaders(asset, asset.headers.get("Content-Security-Policy") ?? PAGE_CSP_HEADER);

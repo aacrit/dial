@@ -176,8 +176,16 @@ async function runCheck(check, baseUrl, originalBase = baseUrl) {
       const r = await contractFetch(from, { redirect: "manual" });
       await r.arrayBuffer();
       const location = r.headers.get("location") ?? "";
-      const pass = r.status === check.expect && (check.location_starts_with === undefined || location.startsWith(check.location_starts_with));
-      return { label, pass, detail: pass ? undefined : `${from} answered ${r.status}${location ? ` to ${location}` : ""}, expected ${check.expect} to ${check.location_starts_with ?? "anywhere"}` };
+      // With `same_url_on_https`, the Location must be exactly the requested URL on https://.
+      const sameUrl = new URL(from);
+      sameUrl.protocol = "https:";
+      sameUrl.port = "";
+      const wantLocation = check.same_url_on_https ? sameUrl.toString() : check.location_starts_with;
+      const pass =
+        r.status === check.expect &&
+        (check.location_starts_with === undefined || location.startsWith(check.location_starts_with)) &&
+        (!check.same_url_on_https || location === sameUrl.toString());
+      return { label, pass, detail: pass ? undefined : `${from} answered ${r.status}${location ? ` to ${location}` : ""}, expected ${check.expect} to ${wantLocation ?? "anywhere"}` };
     }
 
     const response = await contractFetch(target);

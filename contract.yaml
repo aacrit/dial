@@ -438,7 +438,18 @@ checks:
     location_starts_with: "https://"
     host_suffix: voidvision.org
     requires: deployed
-    failure_note: "Waiting on the founder: switch on Always Use HTTPS for the voidvision.org zone (the open Board ask). G3 requires this check."
+    failure_note: "The Worker's http:// redirect (T12, worker/src/https.ts) is not answering on the production host; the zone's Always Use HTTPS would also cover it."
+
+  # The Worker's own redirect (T12) on any deployed host, the preview
+  # included (curl does not apply workers.dev's HSTS preload): a page over
+  # plain http:// answers 301 to the very same URL on https://.
+  - name: a page over http:// is sent to the same URL on https:// (deployed only)
+    type: redirect
+    path: /play/cave?at=12
+    scheme: http
+    expect: 301
+    same_url_on_https: true
+    requires: deployed
 
   - name: healthz allows no camera, microphone, location or USB
     type: header
@@ -461,13 +472,13 @@ checks:
   # page (also a 429), and it waits out the WAF's 10 s window first. The
   # binding counts permissively, so the burst goes 20 at a time: 25
   # sequential requests never tripped it (Dial's Spark release, 2026-09-26).
-  # Its count also settles only after a few seconds, so up to 8 waves go a
+  # Its count also settles only after a few seconds, so up to 4 waves go a
   # second apart and the check stops at the first refusal: 80 back to back
-  # passed 1 run in 3 on the preview (2026-09-27).
+  # with no gap passed 1 run in 3 on the preview (2026-09-27).
   - name: rate limit bites on the Worker (deployed only)
     type: burst
     path: /healthz
-    count: 160
+    count: 80
     concurrency: 20
     wave_gap_ms: 1000
     expect_status: 429

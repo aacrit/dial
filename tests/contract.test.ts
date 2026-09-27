@@ -433,6 +433,29 @@ describe("contract runner: requests that fail below HTTP", () => {
   });
 });
 
+describe("contract runner: same_url_on_https (T12)", () => {
+  it("passes only on a 301 to exactly the requested URL on https://", async () => {
+    let location = "";
+    const srv = createServer((_req, res) => {
+      res.writeHead(301, { location });
+      res.end();
+    });
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    const port = (srv.address() as { port: number }).port;
+    const check = { name: "r", type: "redirect", path: "/play/cave?at=12", scheme: "http", expect: 301, same_url_on_https: true };
+    try {
+      location = "https://127.0.0.1/play/cave?at=12";
+      expect((await runContract({ checks: [check] }, `http://127.0.0.1:${port}`))[0]!.pass).toBe(true);
+      location = "https://127.0.0.1/";
+      const [wrong] = await runContract({ checks: [check] }, `http://127.0.0.1:${port}`);
+      expect(wrong!.pass).toBe(false);
+      expect(wrong!.detail).toContain("expected 301 to https://127.0.0.1/play/cave?at=12");
+    } finally {
+      srv.close();
+    }
+  });
+});
+
 describe("contract runner: burst pacing (T12)", () => {
   it("wave_gap_ms pauses between waves, and a burst stops at its first refusal", async () => {
     let n = 0;

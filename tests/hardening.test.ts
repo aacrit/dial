@@ -276,9 +276,9 @@ describe("per-client rate limit (Workers Rate Limiting binding)", () => {
     expect((await handle(post("/feedback", { text: "x" }), env)).status).toBe(429);
     expect((await handle(get("/healthz"), env)).status).toBe(429);
     expect((await handle(get("/api/anything"), env)).status).toBe(429);
-    // Pages reach the Worker only so plain http:// can be redirected; a class
-    // on one network is never refused a page. Unknown paths never reach the
-    // Worker in production (not_found_handling "404-page"); here the mock
+    // Pages reach the Worker only so plain http:// can be redirected, and it
+    // adds no per-network limit to them. Unknown paths outside /play/* never
+    // reach the Worker in production (not_found_handling "404-page"); here the mock
     // assets answer 404, not 429.
     expect((await handle(get("/no-such-path"), env)).status).toBe(404);
     expect((await handle(post("/no-such-path", {}), env)).status).toBe(429);
