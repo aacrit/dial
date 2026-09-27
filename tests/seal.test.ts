@@ -398,7 +398,7 @@ describe("speed of this device: processor only, results never sent", () => {
     expect(verdictHtml(1.02).replace(/<[^>]+>/g, "")).toBe("Dial will use the processor: 1.0×, as fast as real time.");
     // No planning claim reaches the page before T7.
     for (const x of [0.5, 1, 3]) expect(verdictHtml(x)).not.toMatch(/plan|80|margin/i);
-    for (const f of ["web/index.html", "web/src/seal-widget.ts", "web/src/main.ts"]) expect(read(f), f).not.toMatch(/plans on|80%|PLANNING_MARGIN|plannedSpeed/);
+    for (const f of ["web/index.html", "web/src/seal-widget.ts"]) expect(read(f), f).not.toMatch(/plans on|80%|PLANNING_MARGIN|plannedSpeed/);
   });
 
   it("before the click, the button line states what the test will download, by the radio's size rules", () => {

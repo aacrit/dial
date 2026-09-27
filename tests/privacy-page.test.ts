@@ -87,7 +87,7 @@ describe("web/privacy.html, claim by claim", () => {
     expect(text).toContain("Once you have heard four fifths of a work, one listen is counted");
     // One wording on both pages (CoS decision D), paired with HEARD_SHARE = 0.8.
     expect(text).not.toMatch(/80%/);
-    const seal = read("web/index.html").replace(/<[^>]+>/g, " ").replace(/s+/g, " ");
+    const seal = read("web/index.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
     expect(seal).toContain("The switch: totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more.");
     expect(seal).not.toMatch(/works fully made|80%/);
     expect(read("web/index.html")).toContain('<span id="sw-l">Send anonymous counts</span>');
