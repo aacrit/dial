@@ -265,6 +265,36 @@ describe("the no-scroll rule's verdict (layout-probe judge)", () => {
   });
 });
 
+describe("measuring a settled page, not a moving one (T13: the CI flake on 360x640 work)", () => {
+  const probe = read("scripts/lib/layout-probe.mjs");
+  const check = read("scripts/layout-check.mjs");
+
+  it("layout-check imports settle from the probe and runs it before every measure", () => {
+    expect(check).toMatch(/import \{ judge, measure, settle \} from "\.\/lib\/layout-probe\.mjs";/);
+    // Inside `check`, settle runs first: a scenario is never measured mid font-swap reflow or mid scroll-snap.
+    expect(check).toMatch(/const check = async \(scenario, roots, extra = \[\]\) => \{\s*\/\/[^\n]*\n\s*\/\/[^\n]*\n\s*await page\.evaluate\(settle\);\s*const m = await page\.evaluate\(measure, roots\);/);
+  });
+
+  it("settle waits for fonts, two animation frames, and the panels scroller to stop moving", () => {
+    expect(probe).toMatch(/export async function settle\(\)/);
+    expect(probe).toMatch(/await document\.fonts\.ready;/);
+    expect(probe).toMatch(/requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)/);
+    // It waits on the same scroller `measure` reads (data-panels), by scrollend or a stable scrollTop, whichever is first.
+    expect(probe).toMatch(/document\.querySelector\("\[data-panels\]"\)/);
+    expect(probe).toMatch(/addEventListener\("scrollend", onScrollend, \{ once: true \}\)/);
+    expect(probe).toMatch(/stable \+= 1;/);
+    // It cannot hang on a scroller that never fires scrollend.
+    expect(probe).toMatch(/setTimeout\(finish, SETTLE_TIMEOUT_MS\)/);
+  });
+
+  it("layout-check accepts a --throttle flag for local repro (never used by the gate)", () => {
+    expect(check).toMatch(/const throttle = arg\("--throttle"\);/);
+    expect(check).toMatch(/Emulation\.setCPUThrottlingRate", \{ rate: Number\(throttle\) \}/);
+    const wf = read(".github/workflows/gate.yml");
+    expect(wf).not.toMatch(/--throttle/);
+  });
+});
+
 describe("the band selector and the rooms", () => {
   it("one key per panel, a lamp in each, the first current; the rooms in the top bar, with no Seal", () => {
     const band = /<nav class="band" id="band" aria-label="Band: move between panels">[\s\S]*?<\/nav>/.exec(html)![0];
