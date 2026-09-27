@@ -218,6 +218,15 @@ checks:
     header: x-frame-options
     expect: DENY
 
+  # Every file the offline helper keeps (dist/offline-shell.json, the list
+  # compiled into /sw.js) is served. Waits out the zone WAF's 10 s window
+  # first, since the pages and icons are outside /assets/.
+  - name: every offline shell file is served
+    type: each_status
+    path: /offline-shell.json
+    expect: 200
+    pause_before_seconds: 11
+
   # The per-client rate limit actually bites. The Workers Rate Limiting
   # binding only counts on Cloudflare, so this runs against the preview and
   # production only. It must be the Worker's own refusal, not a WAF 1015

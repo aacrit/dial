@@ -15,7 +15,7 @@ export function shellKey(pathname) {
  * (the runtime's 21.6 MB .wasm is kept by the voice loader, keyed to its
  * pin, and handed to the runtime, which then never fetches a bundled copy).
  */
-const NOT_SHELL = [/^voice\//, /^ort\//, /^works\//, /^_headers$/, /^_redirects$/, /^build-tag\.txt$/, /^sw\.js$/, /\.map$/, /\.wasm$/];
+const NOT_SHELL = [/^voice\//, /^ort\//, /^works\//, /^_headers$/, /^_redirects$/, /^offline-shell\.json$/, /^build-tag\.txt$/, /^sw\.js$/, /\.map$/, /\.wasm$/];
 
 /**
  * The shell's paths from the build's file list (paths relative to dist/,

@@ -12,8 +12,10 @@ import type { Work } from "../catalogue";
 import { installCard, isIosSafari, readNotNow, writeNotNow } from "./install";
 import {
   OFFLINE_NOTICE,
+  SAVED_OLDER,
+  SAVED_OLDER_LINE,
   SAVE_OFFLINE_NOT_SAVED,
-  isSaved,
+  savedState,
   offlineExtras,
   onDeviceBytes,
   planTotal,
@@ -24,12 +26,13 @@ import {
   workVoices,
   type SavePlan,
 } from "./plan";
-import { isPersisted, offlineWorks, planFor, readManifest, removeWork, requestPersistence, saveWork, savedSlugs, shellKept, type Manifest } from "./store";
+import { PAGE_KEY, coverVoiceRecord, isPersisted, offlineWorks, planFor, readManifest, removeWork, requestPersistence, saveWork, savedSlugs, shellState, type Manifest } from "./store";
 
 type RowState =
   | { kind: "idle"; plan: SavePlan; error?: string }
   | { kind: "saving"; loaded: number; total: number; ctrl: AbortController }
   | { kind: "saved"; bytes: number; persisted: boolean }
+  | { kind: "older" }
   | { kind: "unsaved-offline" };
 
 interface BeforeInstallPromptEvent extends Event {
@@ -74,6 +77,7 @@ export function mountOffline(hooks: OfflineHooks) {
   const installYes = document.getElementById("install-yes") as HTMLButtonElement | null;
   const installNo = document.getElementById("install-no") as HTMLButtonElement | null;
   const iosBox = document.getElementById("ios-card");
+  const iosSaved = document.getElementById("ios-saved-note");
   const iosNo = document.getElementById("ios-no") as HTMLButtonElement | null;
   const states = new Map<string, RowState>();
   let manifest: Manifest | null = null;
@@ -141,6 +145,13 @@ export function mountOffline(hooks: OfflineHooks) {
       remove.addEventListener("click", () => void remove_(w));
       row.append(ok, sz, remove);
       focusTarget = remove;
+    } else if (state.kind === "older") {
+      const remove = el("button", "btn text", "Remove");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${w.called} from this device`);
+      remove.addEventListener("click", () => void remove_(w));
+      row.append(el("span", "ok", SAVED_OLDER), el("span", "sz", SAVED_OLDER_LINE), remove);
+      focusTarget = remove;
     } else {
       row.append(el("span", "ok", "Not saved"), el("span", "sz", SAVE_OFFLINE_NOT_SAVED));
     }
@@ -152,10 +163,10 @@ export function mountOffline(hooks: OfflineHooks) {
     const cur = states.get(slug);
     if (cur?.kind === "saving") return;
     const text = hooks.textOf(slug);
-    const saved = await savedSlugs().catch(() => new Set<string>());
+    const savedNow = await savedSlugs().catch(() => new Set<string>());
     if (!text) {
       // No text on this page: offline, the work is not saved here; online, its text did not arrive, so the row waits.
-      if (offline && !saved.has(slug)) states.set(slug, { kind: "unsaved-offline" });
+      if (offline && !savedNow.has(slug)) states.set(slug, { kind: "unsaved-offline" });
       else states.delete(slug);
       if (hooks.tuned().slug === slug) paint();
       return;
@@ -164,8 +175,12 @@ export function mountOffline(hooks: OfflineHooks) {
       manifest ??= await readManifest();
       const voices = workVoices(text.voices);
       const textBytes = new TextEncoder().encode(text.source).byteLength;
+      // A saved work's record keeps covering today's cast (a recast may add a voice).
+      await coverVoiceRecord(slug, voices);
       const plan = await planFor(manifest, slug, voices, textBytes);
-      if (isSaved(plan, await shellKept())) {
+      const saved = savedState(plan, await shellState(), PAGE_KEY);
+      if (saved === "older") states.set(slug, { kind: "older" });
+      else if (saved === "saved") {
         const extras = offlineExtras(manifest.manifest).map((p) => ({ path: p, bytes: p === "/voice/manifest.json" ? manifest!.bytes : (manifest!.manifest.sizes[p] ?? 0) }));
         states.set(slug, { kind: "saved", bytes: onDeviceBytes(manifest.manifest, voices, textBytes, extras), persisted: await isPersisted() });
       } else if (offline) states.set(slug, { kind: "unsaved-offline" });
@@ -220,7 +235,13 @@ export function mountOffline(hooks: OfflineHooks) {
 
   const remove_ = async (w: Work) => {
     if (!manifest) return;
-    await removeWork(manifest.manifest, w.slug);
+    // Today's cast of every other work whose text is here: a voice one of them needs is never removed.
+    const today = new Map<string, readonly string[]>();
+    for (const slug of await savedSlugs()) {
+      const t = slug === w.slug ? undefined : hooks.textOf(slug);
+      if (t) today.set(slug, workVoices(t.voices));
+    }
+    await removeWork(manifest.manifest, w.slug, today);
     states.delete(w.slug);
     await refresh(w.slug);
     say(`Removed ${w.called} from this device.`);
@@ -256,6 +277,8 @@ export function mountOffline(hooks: OfflineHooks) {
     const leaving = (installBox.contains(document.activeElement) && card !== "prompt") || (iosBox.contains(document.activeElement) && card !== "ios");
     installBox.hidden = card !== "prompt";
     iosBox.hidden = card !== "ios";
+    // What happens to saved works is said only where saving works at all.
+    if (iosSaved) iosSaved.hidden = card !== "ios" || !(await offlineWorks());
     if (leaving) document.getElementById("tune-in")?.focus();
   };
   window.addEventListener("beforeinstallprompt", (e) => {

@@ -9,6 +9,6 @@ import { OFFLINE_HEADER } from "./routes";
 
 const ctx = self as unknown as { postMessage(message: boolean): void };
 
-fetch("/voice/manifest.json", { cache: "no-store" })
+fetch("/voice/manifest.json")
   .then((res) => ctx.postMessage(res.headers.get(OFFLINE_HEADER) === "1"))
   .catch(() => ctx.postMessage(false));

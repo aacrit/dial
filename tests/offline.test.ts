@@ -20,6 +20,10 @@ import {
   WORK_NOT_ON_DEVICE,
   parseVoices,
   isSaved,
+  SAVED_OLDER,
+  SAVED_OLDER_LINE,
+  savedState,
+  unionVoices,
   kilobytes,
   offlineExtras,
   onDeviceBytes,
@@ -32,7 +36,8 @@ import {
   voicesToRemove,
   workVoices,
 } from "../web/src/offline/plan";
-import { SAVED_CACHE, isNeverCached, isThisBuild, pageHeaders, route, shellCacheName, shellKey, shellPaths, staleShellCaches } from "../web/src/offline/routes";
+import { SAVED_CACHE, isNeverCached, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, shellPaths, staleShellCaches } from "../web/src/offline/routes";
+import { CAST_ENGINE_VERSION } from "../web/src/engine/cast";
 import type { Held, SizedManifest } from "../web/src/voice-cache";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -153,7 +158,11 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     // Install fails on an incomplete shell, so the previous helper keeps serving.
     expect(sw).toMatch(/precache\(\)\.then\(\(ok\) => \{\s*if \(!ok\) throw/);
     // A fetched home page from another build is refused.
-    expect(sw).toContain('if (path === "/" && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw');
+    // Every page kept (not only "/") must be this build's.
+    expect(sw).toContain('if (isPage(copy.headers.get("content-type")) && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw');
+    expect(isPage("text/html; charset=utf-8")).toBe(true);
+    expect(isPage("application/javascript")).toBe(false);
+    expect(isPage(null)).toBe(false);
     expect(isThisBuild('<meta name="build" content="abc1234" />', "abc1234")).toBe(true);
     expect(isThisBuild('<meta name="build" content="def5678" />', "abc1234")).toBe(false);
     expect(isThisBuild("<p>no meta</p>", "abc1234")).toBe(false);
@@ -161,14 +170,18 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(sw).toMatch(/for \(const path of __SHELL__\) if \(!\(await cache\.match\(path\)\)\) return false;/);
     const store = read("web/src/offline/store.ts");
     expect(store).toContain("const helper = \"serviceWorker\" in navigator ? navigator.serviceWorker.controller : null;");
-    expect(store).toContain("resolve(e.data?.ok === true);");
+    expect(store).toContain("resolve({ ok: e.data?.ok === true, key: typeof e.data?.key === \"string\" ? e.data.key : null });");
     expect(store).toContain('return askHelper("shell-status", timeoutMs);');
-    expect(read("web/src/offline/ui.ts")).toContain("if (isSaved(plan, await shellKept()))");
+    expect(read("web/src/offline/ui.ts")).toContain("const saved = savedState(plan, await shellState(), PAGE_KEY);");
   });
 
   it("the save row shows only where the helper also serves the render worker's requests", () => {
     const probe = read("web/src/offline/probe.worker.ts");
-    expect(probe).toContain('fetch("/voice/manifest.json", { cache: "no-store" })');
+    // The default cache: the probe asks about routing, not freshness.
+    expect(probe).toContain('fetch("/voice/manifest.json")');
+    expect(probe).not.toContain("no-store");
+    // After a no, the next station asks again.
+    expect(read("web/src/offline/store.ts")).toMatch(/\.then\(\(ok\) => \{\s*if \(!ok\) probe = null;/);
     expect(read("web/src/sw.ts")).toContain("headers.set(OFFLINE_HEADER, \"1\");");
     const ui = read("web/src/offline/ui.ts");
     expect(ui).toContain("let supported = false;");
@@ -231,7 +244,26 @@ describe("save and remove", () => {
   it("Remove reads the voices recorded at save time, never today's cast", () => {
     const store = read("web/src/offline/store.ts");
     expect(store).toContain("[VOICES_HEADER]: [...voices].join(\",\")");
-    expect(store).toMatch(/export async function removeWork\(m: VoiceManifest, slug: string\): Promise<void> \{\s*const records = await savedVoiceRecords\(\);/);
+    expect(store).toMatch(/export async function removeWork\(m: VoiceManifest, slug: string, todayCasts: ReadonlyMap<string, readonly string\[\]>\): Promise<void> \{\s*const records = await savedVoiceRecords\(\);/);
+    // Each refresh widens a saved work's record to cover today's cast.
+    expect(read("web/src/offline/ui.ts")).toMatch(/await coverVoiceRecord\(slug, voices\);\s*const plan = await planFor/);
+  });
+
+  it("recast: A saved with voice c, B saved before a recast that now needs c; removing A keeps c", () => {
+    const records = new Map<string, readonly string[] | null>([
+      ["a", ["c"]],
+      ["b", ["x"]], // recorded before the recast
+    ]);
+    // Without today's cast the record alone would let c go.
+    expect(voicesToRemove("a", records)).toEqual(["c"]);
+    // With B's cast today (x and c), c survives.
+    expect(voicesToRemove("a", records, new Map([["b", ["x", "c"]]]))).toEqual([]);
+    // And once refresh has widened B's record, c survives even without the text at hand.
+    const widened = new Map(records).set("b", unionVoices(records.get("b")!, ["x", "c"]));
+    expect(widened.get("b")).toEqual(["x", "c"]);
+    expect(voicesToRemove("a", widened)).toEqual([]);
+    expect(unionVoices(null, ["c"])).toEqual(["c"]);
+    expect(unionVoices(["x", "c"], ["c"])).toEqual(["x", "c"]);
     // A refresh by the helper keeps the record.
     expect(read("web/src/sw.ts")).toContain('if (k.startsWith("x-dial-")) headers.set(k, v);');
   });
@@ -336,6 +368,9 @@ describe("installing Dial", () => {
     expect(installCard({ ...base, iosSafari: true })).toBe("ios");
     const html = read("web/index.html");
     const ios = /<section class="card install" id="ios-card"[\s\S]*?<\/section>/.exec(html)![0];
+    // The saved-works note starts hidden, and shows only where offline saving works.
+    expect(ios).toContain('<p class="muted install-note" id="ios-saved-note" hidden>');
+    expect(read("web/src/offline/ui.ts")).toContain('if (iosSaved) iosSaved.hidden = card !== "ios" || !(await offlineWorks());');
     expect(ios).not.toContain(">Install<");
     expect(ios).toContain("Scroll down and tap Add to Home Screen.");
     expect(ios).toContain("iPhone can clear saved works if you do not open Dial for a week");
@@ -406,7 +441,59 @@ describe("the app manifest and icons", () => {
   });
 });
 
+describe("the offline-compatibility key", () => {
+  const pins = { sha256: "m".repeat(64), runtimeSha256: "r".repeat(64), voices: { bm_george: "g", af_heart: "h" } };
+
+  it("changes with any voice pin, the runtime pin or the casting rule's version, and not with key order", () => {
+    const k = offlineKey(pins, "1")!;
+    expect(k).toMatch(/^[0-9a-f]{8}$/);
+    expect(offlineKey({ ...pins, voices: { af_heart: "h", bm_george: "g" } }, "1")).toBe(k);
+    expect(offlineKey({ ...pins, voices: { ...pins.voices, am_michael: "n" } }, "1")).not.toBe(k);
+    expect(offlineKey({ ...pins, voices: { ...pins.voices, bm_george: "g2" } }, "1")).not.toBe(k);
+    expect(offlineKey({ ...pins, runtimeSha256: "s".repeat(64) }, "1")).not.toBe(k);
+    expect(offlineKey({ ...pins, sha256: "n".repeat(64) }, "1")).not.toBe(k);
+    expect(offlineKey(pins, "2")).not.toBe(k);
+    expect(offlineKey(null, "1")).toBeNull();
+    expect(pinsOf({ ...pins, repo: "r", sizes: {} })).toEqual(pins);
+    expect(pinsOf({})).toBeNull();
+  });
+
+  it("Saved only when the helper's key is the page's; otherwise the older-version state", () => {
+    const plan = savePlan(M, ["bm_george"], everything(["bm_george"]), 17_000, true, []);
+    expect(savedState(plan, { ok: true, key: "k1" }, "k1")).toBe("saved");
+    expect(savedState(plan, { ok: true, key: "k0" }, "k1")).toBe("older");
+    expect(savedState(plan, { ok: true, key: null }, "k1")).toBe("older");
+    expect(savedState(plan, { ok: true, key: "k1" }, null)).toBe("older");
+    expect(savedState(plan, { ok: false, key: "k1" }, "k1")).toBe("no");
+    expect(SAVED_OLDER).toBe("Saved on an older version");
+    expect(SAVED_OLDER_LINE).toBe("Reopen Dial with a connection to update it.");
+  });
+
+  it("the helper and the page compile the same pins and the same casting version", () => {
+    expect(CAST_ENGINE_VERSION).toMatch(/^\d+$/);
+    const sw = read("web/src/sw.ts");
+    expect(sw).toContain("const KEY = offlineKey(pinsOf(__VOICE_PINS__), CAST_ENGINE_VERSION);");
+    expect(sw).toMatch(/port\.postMessage\(\{ type: "shell", ok, build: __BUILD_TAG__, key: KEY \}\)/);
+    expect(read("web/src/offline/store.ts")).toContain("export const PAGE_KEY = offlineKey(pinsOf(typeof __VOICE_PINS__ === \"undefined\" ? null : __VOICE_PINS__), CAST_ENGINE_VERSION);");
+    expect(read("web/vite.config.ts")).toContain("define: { __VOICE_PINS__: JSON.stringify(pins) },");
+    expect(read("scripts/build.mjs")).toContain("__VOICE_PINS__: JSON.stringify(pins)");
+    const built = path.join(root, "dist", "sw.js");
+    expect(existsSync(built), "dist/sw.js: run npm run build first").toBe(true);
+    const m = JSON.parse(read("web/public/voice/manifest.json"));
+    // The built helper carries this manifest's runtime pin.
+    expect(readFileSync(built, "utf8")).toContain(m.runtimeSha256);
+  });
+});
+
 describe("the contract checks the installable app and the offline helper", () => {
+  it("every offline shell file is served: the build writes the list the helper compiles in", () => {
+    const checks = (parseYaml(read("contract.yaml")) as { checks: { type: string; path?: string; expect?: number }[] }).checks;
+    expect(checks.some((c) => c.type === "each_status" && c.path === "/offline-shell.json" && c.expect === 200)).toBe(true);
+    const listed = JSON.parse(readFileSync(path.join(root, "dist", "offline-shell.json"), "utf8")) as string[];
+    const compiled = /`(\/[^`]*)`\.split\(`,`\)/.exec(readFileSync(path.join(root, "dist", "sw.js"), "utf8"))![1]!.split(",");
+    expect(listed).toEqual(compiled);
+  });
+
   const checks = (parseYaml(read("contract.yaml")) as { checks: { type: string; path?: string; expect?: number }[] }).checks;
   it("/manifest.webmanifest and /sw.js return 200", () => {
     for (const p of ["/manifest.webmanifest", "/sw.js"]) {

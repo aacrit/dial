@@ -21,8 +21,14 @@
 import type { VoiceManifest } from "../voice";
 import { runtimeCacheKey, runtimeCacheName, voiceCacheName, type Held } from "../voice-cache";
 import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
-import { offlineExtras, parseVoices, savePlan, voicesToRemove, type SavePlan } from "./plan";
-import { SAVED_CACHE } from "./routes";
+import { CAST_ENGINE_VERSION } from "../engine/cast";
+import { offlineExtras, parseVoices, savePlan, unionVoices, voicesToRemove, type SavePlan } from "./plan";
+import { SAVED_CACHE, offlineKey, pinsOf } from "./routes";
+
+declare const __VOICE_PINS__: unknown;
+
+/** This page's offline-compatibility key: its build's voice pins and casting rule. */
+export const PAGE_KEY = offlineKey(pinsOf(typeof __VOICE_PINS__ === "undefined" ? null : __VOICE_PINS__), CAST_ENGINE_VERSION);
 
 /** On a saved text: the work's voices, comma separated, as cast when it was saved. */
 export const VOICES_HEADER = "x-dial-voices";
@@ -40,10 +46,11 @@ let probe: Promise<boolean> | null = null;
 /**
  * Whether offline saving works in this browser: Cache Storage, an offline
  * helper in control of this page, and that helper answering the render
- * worker's requests too (offline/probe.worker.ts). Asked once per visit.
+ * worker's requests too (offline/probe.worker.ts). A yes is kept for the
+ * visit; after a no, the next call asks again.
  */
 export function offlineWorks(timeoutMs = 10_000): Promise<boolean> {
-  probe ??= (async () => {
+  probe ??= (async (): Promise<boolean> => {
     if (!canSaveOffline()) return false;
     const sw = navigator.serviceWorker;
     if (!sw.controller) {
@@ -61,7 +68,10 @@ export function offlineWorks(timeoutMs = 10_000): Promise<boolean> {
       w.onmessage = (e: MessageEvent<boolean>) => done(e.data === true);
       w.onerror = () => done(false);
     });
-  })();
+  })().then((ok) => {
+    if (!ok) probe = null;
+    return ok;
+  });
   return probe;
 }
 
@@ -146,27 +156,34 @@ export async function planFor(man: Manifest, slug: string, voices: readonly stri
  * (web/src/sw.ts): after a release, until every Dial tab closes, it may be
  * the previous build's, which still plays offline as a whole.
  */
-async function askHelper(type: "ensure-shell" | "shell-status", timeoutMs: number): Promise<boolean> {
+export interface ShellState {
+  /** Every file of the helper's shell is kept. */
+  ok: boolean;
+  /** The helper's offline-compatibility key (null when there is no helper or no answer). */
+  key: string | null;
+}
+
+async function askHelper(type: "ensure-shell" | "shell-status", timeoutMs: number): Promise<ShellState> {
   const helper = "serviceWorker" in navigator ? navigator.serviceWorker.controller : null;
-  if (!helper) return false;
-  return new Promise<boolean>((resolve) => {
+  if (!helper) return { ok: false, key: null };
+  return new Promise<ShellState>((resolve) => {
     const ch = new MessageChannel();
-    const timer = setTimeout(() => resolve(false), timeoutMs);
-    ch.port1.onmessage = (e: MessageEvent<{ ok?: boolean; build?: string }>) => {
+    const timer = setTimeout(() => resolve({ ok: false, key: null }), timeoutMs);
+    ch.port1.onmessage = (e: MessageEvent<{ ok?: boolean; key?: string | null }>) => {
       clearTimeout(timer);
-      resolve(e.data?.ok === true);
+      resolve({ ok: e.data?.ok === true, key: typeof e.data?.key === "string" ? e.data.key : null });
     };
     helper.postMessage({ type }, [ch.port2]);
   });
 }
 
 /** Asks the offline helper to keep every file of its app shell; true once it has. */
-export function ensureShell(timeoutMs = 30_000): Promise<boolean> {
-  return askHelper("ensure-shell", timeoutMs);
+export async function ensureShell(timeoutMs = 30_000): Promise<boolean> {
+  return (await askHelper("ensure-shell", timeoutMs)).ok;
 }
 
-/** Whether every file of the serving helper's shell is kept (the helper checks each one). */
-export function shellKept(timeoutMs = 5_000): Promise<boolean> {
+/** Whether every file of the serving helper's shell is kept (the helper checks each one), and the helper's key. */
+export function shellState(timeoutMs = 5_000): Promise<ShellState> {
   return askHelper("shell-status", timeoutMs);
 }
 
@@ -286,14 +303,34 @@ export async function savedVoiceRecords(): Promise<Map<string, readonly string[]
 }
 
 /**
- * Removes a saved work: its text, and each of its recorded voices that no
- * other saved work records (never a voice another saved work needs). The
- * voice model and runtime stay: every work, saved or not, uses them.
+ * Keeps a saved work's voice record covering today's cast: the record
+ * becomes the union of what it held and `voices` (a recast may have added
+ * one). Nothing is written when the record already covers them, or when the
+ * work is not saved.
  */
-export async function removeWork(m: VoiceManifest, slug: string): Promise<void> {
+export async function coverVoiceRecord(slug: string, voices: readonly string[]): Promise<void> {
+  const cache = await caches.open(SAVED_CACHE);
+  const hit = await cache.match(workKey(slug));
+  if (!hit) return;
+  const old = parseVoices(hit.headers.get(VOICES_HEADER));
+  const merged = unionVoices(old, voices);
+  if (old && merged.length === old.length) return;
+  const headers = new Headers(hit.headers);
+  headers.set(VOICES_HEADER, merged.join(","));
+  await put(cache, workKey(slug), new Response(await hit.blob(), { headers }));
+}
+
+/**
+ * Removes a saved work: its text, and each of its recorded voices that no
+ * other saved work records or uses in today's cast (`todayCasts`, for every
+ * other saved work whose text this page holds), so never a voice another
+ * saved work needs. The voice model and runtime stay: every work, saved or
+ * not, uses them.
+ */
+export async function removeWork(m: VoiceManifest, slug: string, todayCasts: ReadonlyMap<string, readonly string[]>): Promise<void> {
   const records = await savedVoiceRecords();
   const cache = await caches.open(SAVED_CACHE);
   await cache.delete(workKey(slug));
   const kv = await caches.open(KOKORO_VOICES_CACHE);
-  for (const id of voicesToRemove(slug, records)) await kv.delete(hfVoiceKey(m.repo, id));
+  for (const id of voicesToRemove(slug, records, todayCasts)) await kv.delete(hfVoiceKey(m.repo, id));
 }

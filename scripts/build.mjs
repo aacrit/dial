@@ -43,6 +43,12 @@ export function stampHtml(text, tag, tokens) {
   return tokens ? stampTokens(stamped, tokens) : stamped;
 }
 
+/** The staged voice manifest's pins (web/vite.config.ts reads the same file for the page). */
+export function readVoicePins() {
+  const m = JSON.parse(readFileSync(path.join(webDir, "public", "voice", "manifest.json"), "utf8"));
+  return { sha256: m.sha256, runtimeSha256: m.runtimeSha256, voices: m.voices };
+}
+
 /** Every file in dist/, relative and "/" separated. */
 function distFiles() {
   return readdirSync(distDir, { recursive: true, withFileTypes: true })
@@ -55,14 +61,14 @@ function distFiles() {
  * (a service worker's URL is its identity), with this build's tag and shell
  * list compiled in. A new build is a new script, so browsers install it.
  */
-async function buildServiceWorker(tag, shell) {
+async function buildServiceWorker(tag, shell, pins) {
   const { build } = await import("vite");
   await build({
     configFile: false,
     root: webDir,
     logLevel: "warn",
     publicDir: false,
-    define: { __BUILD_TAG__: JSON.stringify(tag), __SHELL__: JSON.stringify(shell) },
+    define: { __BUILD_TAG__: JSON.stringify(tag), __SHELL__: JSON.stringify(shell), __VOICE_PINS__: JSON.stringify(pins) },
     build: {
       outDir: distDir,
       emptyOutDir: false,
@@ -120,7 +126,9 @@ async function main() {
 
   // The offline helper, last, so its shell list is the finished build's.
   const shell = shellPaths(distFiles());
-  await buildServiceWorker(tag, shell);
+  await buildServiceWorker(tag, shell, readVoicePins());
+  // The shell's list, for the contract (every path must answer 200). Not part of the shell itself.
+  writeFileSync(path.join(distDir, "offline-shell.json"), JSON.stringify(shell) + "\n");
 
   console.log(`build: stamped dist/ with build tag "${tag}"; offline shell of ${shell.length} files`);
 }

@@ -17,12 +17,19 @@ export function workVoices(voices: readonly string[]): string[] {
 
 /**
  * The voices Remove may delete: the removed work's recorded voices, less
- * every voice another saved work records. `saved` maps each saved work (the
- * removed one included) to its voices as recorded at save time, or null
- * where no record exists. With any record unknown, no voice is deleted:
- * one might be needed, and a voice left behind costs only space.
+ * every voice another saved work records or uses in today's cast. `saved`
+ * maps each saved work (the removed one included) to its voices as
+ * recorded, or null where no record exists; `todayCasts` maps saved works
+ * to the voices today's casting rule gives them, where the text is at hand
+ * (a recast after saving can make a work need a voice its record lacks).
+ * With any record unknown, no voice is deleted: one might be needed, and a
+ * voice left behind costs only space.
  */
-export function voicesToRemove(removing: string, saved: ReadonlyMap<string, readonly string[] | null>): string[] {
+export function voicesToRemove(
+  removing: string,
+  saved: ReadonlyMap<string, readonly string[] | null>,
+  todayCasts: ReadonlyMap<string, readonly string[]> = new Map(),
+): string[] {
   const mine = saved.get(removing);
   if (!mine) return [];
   const kept = new Set<string>();
@@ -30,8 +37,14 @@ export function voicesToRemove(removing: string, saved: ReadonlyMap<string, read
     if (slug === removing) continue;
     if (voices === null) return [];
     for (const v of voices) kept.add(v);
+    for (const v of todayCasts.get(slug) ?? []) kept.add(v);
   }
   return workVoices(mine).filter((v) => !kept.has(v));
+}
+
+/** A record widened to cover today's cast: the old voices, then any new ones, each once. */
+export function unionVoices(old: readonly string[] | null, today: readonly string[]): string[] {
+  return workVoices([...(old ?? []), ...today]);
 }
 
 /** A recorded voice list ("bm_george,bm_fable"), or null when there is no usable record. */
@@ -133,6 +146,19 @@ export function onDeviceBytes(m: SizedManifest, voices: readonly string[], textB
 }
 
 export const SAVE_OFFLINE_NOT_SAVED = "Needs a connection to save or play.";
+export const SAVED_OLDER = "Saved on an older version";
+export const SAVED_OLDER_LINE = "Reopen Dial with a connection to update it.";
+
+/**
+ * The saved state: "saved" when every piece is here and the serving helper's
+ * offline-compatibility key is the page's; "older" when every piece is here
+ * but the helper is another version's (it would play a different voice or
+ * cast offline); otherwise not saved.
+ */
+export function savedState(p: SavePlan, shell: { ok: boolean; key: string | null }, pageKey: string | null): "saved" | "older" | "no" {
+  if (!isSaved(p, shell.ok)) return "no";
+  return pageKey !== null && shell.key === pageKey ? "saved" : "older";
+}
 export const WORK_NOT_ON_DEVICE = "This work isn't saved on this device. It needs a connection to play.";
 export const OFFLINE_NOTICE = "Offline. Works saved on this device play as usual. The others need a connection.";
 

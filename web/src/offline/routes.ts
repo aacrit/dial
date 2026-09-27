@@ -27,10 +27,51 @@ export const SAVED_CACHE = "dial-saved";
 /** Set by the helper on every saved-route response it answers, so a probe can tell it is in the path. */
 export const OFFLINE_HEADER = "x-dial-offline-helper";
 
+/** Whether a response is a page (and so must be this build's): by its content type. */
+export function isPage(contentType: string | null): boolean {
+  return !!contentType && contentType.toLowerCase().includes("text/html");
+}
+
 /** Whether a page is this build's: its <meta name="build"> content is the tag. */
 export function isThisBuild(html: string, buildTag: string): boolean {
   const m = /<meta\s+name="build"\s+content="([^"]*)"/i.exec(html);
   return !!m && m[1] === buildTag;
+}
+
+/** The pins an offline render depends on: the model's, the runtime's and each voice's. */
+export interface VoicePinSet {
+  sha256: string;
+  runtimeSha256: string;
+  voices: Record<string, string>;
+}
+
+/** The pins from a voice manifest (scripts/fetch-voice.mjs writes it), or null. */
+export function pinsOf(m: unknown): VoicePinSet | null {
+  const x = m as Partial<VoicePinSet> | null;
+  if (!x || typeof x.sha256 !== "string" || typeof x.runtimeSha256 !== "string" || !x.voices || typeof x.voices !== "object") return null;
+  return { sha256: x.sha256, runtimeSha256: x.runtimeSha256, voices: x.voices };
+}
+
+/**
+ * The offline-compatibility key: a hash (FNV-1a, 32 bit) of the voice pins
+ * and the casting rule's version. The helper compiles its build's key in
+ * (sw.ts); the page compiles its own (vite.config.ts). A work shows "Saved"
+ * only when the two match: then the helper that answers offline serves the
+ * same voice and the same cast the page would use. Null pins give no key.
+ */
+export function offlineKey(pins: VoicePinSet | null, castVersion: string): string | null {
+  if (!pins) return null;
+  const voices = Object.keys(pins.voices)
+    .sort()
+    .map((id) => `${id}=${pins.voices[id]}`)
+    .join(",");
+  const text = `model=${pins.sha256};runtime=${pins.runtimeSha256};voices=${voices};cast=${castVersion}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
 }
 
 /** The shell cache for one build. */

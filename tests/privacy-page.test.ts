@@ -79,7 +79,7 @@ describe("web/privacy.html, claim by claim", () => {
     const saved = new Map([["cave", ["bm_george"]], ["crito", ["bm_george", "bm_fable"]]]);
     expect(voicesToRemove("crito", saved)).toEqual(["bm_fable"]);
     const store = read("web/src/offline/store.ts");
-    expect(store).toMatch(/const records = await savedVoiceRecords\(\);[\s\S]*await cache\.delete\(workKey\(slug\)\);[\s\S]*for \(const id of voicesToRemove\(slug, records\)\) await kv\.delete/);
+    expect(store).toMatch(/const records = await savedVoiceRecords\(\);[\s\S]*await cache\.delete\(workKey\(slug\)\);[\s\S]*for \(const id of voicesToRemove\(slug, records, todayCasts\)\) await kv\.delete/);
     expect(store.slice(store.indexOf("export async function removeWork"))).not.toMatch(/voiceCacheName|runtimeCacheName/);
   });
 

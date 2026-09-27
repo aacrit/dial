@@ -270,7 +270,7 @@ describe("true copy: the first voice download", () => {
   it("the page's offline claims ship with the offline helper that makes them true (T4)", () => {
     // Offline exists from T4: the helper is registered from main.ts and built to dist/sw.js.
     expect(main).toMatch(/^registerOfflineHelper\(\);$/m);
-    expect(read("scripts/build.mjs")).toContain("await buildServiceWorker(tag, shell);");
+    expect(read("scripts/build.mjs")).toContain("await buildServiceWorker(tag, shell, readVoicePins());");
     expect(privacyHtml).toContain("Saved for offline");
   });
 });

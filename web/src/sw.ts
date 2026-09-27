@@ -5,10 +5,15 @@
 // made (to this origin, already under the page's CSP), and the shell's own
 // paths, all on this origin (tests/offline.test.ts). It never sends anything.
 
-import { OFFLINE_HEADER, SAVED_CACHE, isThisBuild, pageHeaders, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
+import { CAST_ENGINE_VERSION } from "./engine/cast";
+import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
 
 declare const __BUILD_TAG__: string;
 declare const __SHELL__: string[];
+declare const __VOICE_PINS__: unknown;
+
+/** This build's offline-compatibility key (offline/routes.ts offlineKey). */
+const KEY = offlineKey(pinsOf(__VOICE_PINS__), CAST_ENGINE_VERSION);
 
 interface ExtendableEvent extends Event {
   waitUntil(p: Promise<unknown>): void;
@@ -52,7 +57,8 @@ async function precache(): Promise<boolean> {
       const res = await fetch(path, { cache: "reload" });
       if (!res.ok) throw new Error(`${path}: ${res.status}`);
       const copy = await clean(res);
-      if (path === "/" && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw new Error("/: another build");
+      // Every page kept must be this build's, never another release's.
+      if (isPage(copy.headers.get("content-type")) && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw new Error(`${path}: another build`);
       await cache.put(path, copy);
     } catch {
       ok = false;
@@ -94,8 +100,8 @@ sw.addEventListener("message", (event) => {
   const data = event.data as { type?: string } | null;
   const port = event.ports[0];
   if (!port) return;
-  if (data?.type === "ensure-shell") event.waitUntil(precache().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__ })));
-  else if (data?.type === "shell-status") event.waitUntil(shellComplete().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__ })));
+  if (data?.type === "ensure-shell") event.waitUntil(precache().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
+  else if (data?.type === "shell-status") event.waitUntil(shellComplete().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
 });
 
 async function fromShell(request: Request): Promise<Response> {
