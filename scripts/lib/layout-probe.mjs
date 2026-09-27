@@ -26,6 +26,67 @@ export const SLACK = 1;
 export const MIN_SCROLLER = 24;
 
 /**
+ * Runs in the page, before `measure` (T13: the CI flake on 360x640 "work" was
+ * `#st-sentence`, a -webkit-line-clamp box, measured at 2 px instead of a
+ * settled ~65 px — caught mid font swap under CPU load; repros locally under
+ * CDP CPU throttling). Waits for:
+ * - `document.fonts.ready`, so a line-clamp box is never measured between the
+ *   fallback font's layout and the swapped-in web font's;
+ * - two animation frames, so a layout the font swap just invalidated has been
+ *   recomputed and painted (reduced motion already collapses every
+ *   transition and animation to ~0 via tokens.css's `@media
+ *   (prefers-reduced-motion: reduce)` rule; this is not a wait for those);
+ * - the panels' scroller (`[data-panels]`, scroll-snap) to stop moving:
+ *   either its `scrollend` event, or a stable `scrollTop` across
+ *   `STABLE_FRAMES` consecutive frames, whichever comes first, capped at
+ *   `SETTLE_TIMEOUT_MS` so a scroller that never fires `scrollend` (nothing
+ *   to settle) cannot hang the check. Self-contained, like `measure`: the
+ *   browser receives it as source, so nothing outside its own body is in scope.
+ */
+export async function settle() {
+  const STABLE_FRAMES = 3;
+  const SETTLE_TIMEOUT_MS = 800;
+  if (typeof document !== "undefined" && document.fonts && document.fonts.ready) {
+    await document.fonts.ready;
+  }
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  const scroller = document.querySelector("[data-panels]");
+  if (!scroller) return;
+  await new Promise((resolve) => {
+    let done = false;
+    let last = scroller.scrollTop;
+    let stable = 0;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      scroller.removeEventListener("scrollend", onScrollend);
+      resolve();
+    };
+    const onScrollend = () => finish();
+    scroller.addEventListener("scrollend", onScrollend, { once: true });
+    const tick = () => {
+      if (done) return;
+      const cur = scroller.scrollTop;
+      if (cur === last) {
+        stable += 1;
+        if (stable >= STABLE_FRAMES) {
+          finish();
+          return;
+        }
+      } else {
+        stable = 0;
+        last = cur;
+      }
+      requestAnimationFrame(tick);
+    };
+    const timer = setTimeout(finish, SETTLE_TIMEOUT_MS);
+    requestAnimationFrame(tick);
+  });
+}
+
+/**
  * Runs in the page. `rootIds`: the panels to measure (the one in view, or
  * both on a single-panel screen), or an open sheet. Plain data out; nothing
  * is changed. Self-contained: the browser receives it as source.

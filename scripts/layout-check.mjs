@@ -14,20 +14,25 @@
 // it on every pull request. Locally, `npm run gate` passes --gate, which
 // skips with a clear message when no browser can start; CI never skips.
 //
-//   npm run build && npm run layout-check [-- --port 8803] [--shots <dir>] [--url <base>] [--only 740x360]
+//   npm run build && npm run layout-check [-- --port 8803] [--shots <dir>] [--url <base>] [--only 740x360] [--throttle 4]
 //
 // Without --url it serves dist/ itself on 127.0.0.1 (static files only: /e
 // and /feedback answer 404), so nothing leaves the machine; the offline
 // helper runs, so Save for offline is on the page as a listener sees it.
 // "On air" is a layout stub: the parts a broadcast shows are revealed with
 // the longest status line, without making any speech.
+//
+// --throttle <rate> (local repro only, never passed in CI): slows each
+// page's CPU by that factor via CDP's Emulation.setCPUThrottlingRate, the
+// way T13's flake (a line-clamp box measured mid font-swap reflow) was
+// reproduced locally.
 
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { judge, measure } from "./lib/layout-probe.mjs";
+import { judge, measure, settle } from "./lib/layout-probe.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(repoRoot, "dist");
@@ -194,6 +199,7 @@ async function main() {
     process.exit(1);
   }
   const gate = process.argv.includes("--gate");
+  const throttle = arg("--throttle");
   const skip = (why) => {
     // In CI the check always runs (decision G); a local gate may lack a browser.
     if (gate && !process.env.CI) {
@@ -227,12 +233,19 @@ async function main() {
       if (only && only !== `${width}x${height}`) continue;
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
       const page = await context.newPage();
+      if (throttle) {
+        const client = await context.newCDPSession(page);
+        await client.send("Emulation.setCPUThrottlingRate", { rate: Number(throttle) });
+      }
       const viewport = `${width}x${height}`;
       // One panel with everything on it (web/src/panels.ts SINGLE_PANEL): both halves are in view.
       const single = width >= 1600 && height >= 900;
       const inView = (id) => (single ? ["radio", "work"] : [id]);
       const fail = (scenario, problem) => rows.push({ viewport, scenario, scrollWidth: "-", worst: 0, clipped: 0, ok: false, problems: [problem] });
       const check = async (scenario, roots, extra = []) => {
+        // Measure a settled page, not a moving one (T13): fonts loaded, the
+        // font swap's reflow painted, and the panels' scroll-snap scroller at rest.
+        await page.evaluate(settle);
         const m = await page.evaluate(measure, roots);
         const v = judge(m, { fit });
         const problems = [...v.problems, ...extra];
