@@ -28,16 +28,35 @@ checks:
     path: /privacy
     expect: 200
 
-  # T6: the Seal, the privacy proof (request log, counts switch, speed).
-  - name: seal page status 200
+  # T8: the Seal is a widget on the radio (design/spec.md 00), and /seal is
+  # gone. A 404, not a redirect: there is no page to send anyone to, and a
+  # bare 404 needs no _redirects rule for Workers Static Assets to keep
+  # (not_found_handling stays "none"). The widget's own words are on the
+  # radio's page instead.
+  - name: the Seal page is gone
     type: status
     path: /seal
-    expect: 200
+    expect: 404
 
-  - name: seal page shows the request log
+  - name: the radio carries the Seal widget
     type: contains
-    path: /seal
-    text: "Every request this tab made"
+    path: /
+    text: "Seal"
+
+  - name: the Seal widget has the counts switch
+    type: contains
+    path: /
+    text: "Send anonymous counts"
+
+  - name: the Seal widget lists every request, collapsed
+    type: contains
+    path: /
+    text: "Show every request"
+
+  - name: a work's Broadcast carries the Seal widget too
+    type: contains
+    path: /play/crito
+    text: "Send anonymous counts"
 
   - name: healthz responds
     type: status

@@ -364,8 +364,13 @@ describe("reduced motion: everything snaps", () => {
     expect(read("web/src/device/radio.ts")).toContain("eye.to(eyeWedge(motion.reduce ? 1 : alignment(angles, needle.x) * ready)).step(dt, motion.reduce);");
   });
 
-  it("the script scrolls to the live line without smooth scrolling, and the sheets' entrance collapses", () => {
-    expect(main).toContain('scrollIntoView({ block: "center", behavior: motion.reduce ? "auto" : "smooth" })');
+  it("the script scrolls to the live line without smooth scrolling, only inside its widget, and the sheets' entrance collapses", () => {
+    // T8: the script is a widget on the work panel; its scroller moves, never the panels (no scrollIntoView, which would jump the page).
+    const panels = read("web/src/panels-ui.ts");
+    expect(panels).toContain('scroller.scrollTo({ top: Math.max(0, top), behavior: motion.reduce ? "auto" : "smooth" });');
+    expect(panels).toContain('behavior: instant || motion.reduce ? "auto" : "smooth"');
+    expect(main).toContain("centreWithin(scriptPanel, el)");
+    for (const [f, src] of [["main.ts", main], ["panels-ui.ts", panels]]) expect(src, f).not.toMatch(/scrollIntoView/);
     expect(read("design/tokens.css")).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation-duration: 0\.001ms !important;/);
     expect(read("web/src/style.css")).toMatch(/dialog\.sheet\[open\] \{\s*animation: sheet-rise var\(--dur-morph\)/);
   });

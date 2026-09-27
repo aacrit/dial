@@ -1,10 +1,10 @@
 // "Speed of this device", as pure functions: the one sentence the test
-// times, the speed it measures and the panel's words. The 80% planning
-// margin (founder, 2026-09-26) is kept here for T7, which wires it into the
-// radio; until then the Seal prints only the measured speed, because
-// nothing plans on it yet. The results stay on the Seal's screen:
-// nothing here, in narrate.worker.ts's bench() or in seal.ts's test path sends anything,
-// not even a count (tests/seal.test.ts checks the three files).
+// times, the speed it measures and its words. The test left with the Seal
+// page (T8, design/spec.md 00): it becomes the radio's gauge in T7, which
+// has a slot on the glass (index.html #speed-gauge) and wires the 80%
+// planning margin (founder, 2026-09-26) into the radio. Nothing here or in
+// narrate.worker.ts's bench() sends anything, not even a count
+// (tests/seal.test.ts checks both).
 
 import { aboutMegabytes, isStatableTotal } from "./download-size";
 import { esc } from "./render";

@@ -441,3 +441,74 @@ export function footHtml(sealed: boolean, dropped: number): string {
   const gone = dropped > 0 ? ` The oldest ${plural(dropped, "request is", "requests are")} no longer listed, to keep the log small.` : "";
   return `Newest last. ${where}${gone}`;
 }
+
+// ---- The Seal widget on the radio (design/spec.md 00) -----------------------
+// The Seal is a widget on the work panel: a small magic eye, one sentence,
+// today's counts, the switch, and "Show every request" collapsed. Its words
+// come from this tab's log only, so they say "from this tab": another Dial
+// tab keeps a log of its own, and this one cannot see it.
+
+/** Whether two times fall on the same local day. */
+function sameDay(a: number, b: number): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
+}
+
+export interface CountsToday {
+  /** Counts this tab delivered today (local date); a send that never arrived is not one. */
+  n: number;
+  /** When this tab last delivered a count today, or null. */
+  last: number | null;
+  /** Old records were let go and the oldest kept one is from today: today's number may be higher. */
+  atLeast: boolean;
+}
+
+/** Today's delivered counts in this tab's log. */
+export function countsToday(records: readonly RequestRecord[], now: number, dropped = 0): CountsToday {
+  let n = 0;
+  let last: number | null = null;
+  for (const r of records) {
+    if (r.dir !== "sent" || !r.own || r.failed || r.path.split("?")[0] !== "/e" || !sameDay(r.t, now)) continue;
+    n++;
+    last = last === null ? r.t : Math.max(last, r.t);
+  }
+  const oldest = records.reduce<number | null>((m, r) => (m === null ? r.t : Math.min(m, r.t)), null);
+  return { n, last, atLeast: dropped > 0 && oldest !== null && sameDay(oldest, now) };
+}
+
+/**
+ * The widget's count line: "Today Dial sent 2 anonymous counts from this
+ * tab.", "No counts sent today from this tab.", or, with counts off,
+ * "Counts are off. No count has been sent from this tab since 21:26."
+ */
+export function countLineHtml(today: CountsToday, counts: CountsState): string {
+  if (counts === "off") {
+    return today.last === null ? "Counts are off. No count has been sent from this tab today." : `Counts are off. No count has been sent from this tab since ${num(clock(today.last, false))}.`;
+  }
+  if (today.n === 0) return today.atLeast ? "No counts from today are left in this tab's log." : "No counts sent today from this tab.";
+  return `Today Dial sent ${today.atLeast ? "at least " : ""}${plural(today.n, "anonymous count", "anonymous counts")} from this tab.`;
+}
+
+/**
+ * The widget's one sentence, from the log: "Sealed. Nothing you hear or
+ * make leaves this device." while every request went to this origin (a
+ * blocked one never left); "Open." with the number of requests to another
+ * address otherwise; "Reading this tab." until the browser's record arrives.
+ */
+export function sealLineHtml(s: LogSummary, sealed: boolean, ready: boolean, host: string): string {
+  if (!ready) return "<b>Reading this tab.</b> Collecting the browser's record of every request this page has made.";
+  if (!sealed) return `<b>Open.</b> This tab made ${plural(s.foreign, "request", "requests")} to another address. Dial's pages allow requests to ${esc(host)} only; the rows are marked in the list.`;
+  const blocked = s.blocked ? ` The browser blocked ${plural(s.blocked, "request", "requests")} to another site before ${s.blocked === 1 ? "it" : "they"} left.` : "";
+  return `<b>${s.blocked ? "Still sealed." : "Sealed."}</b> Nothing you hear or make leaves this device.${blocked}`;
+}
+
+/** The sentence over the request list, when it is shown. */
+export function requestsIntroHtml(s: LogSummary, sealed: boolean, host: string): string {
+  const h = esc(host);
+  const sent = s.feedback ? "and the counts and feedback it sent" : "and the counts it sent";
+  const check = "Check it yourself in your browser's developer tools, Network tab.";
+  if (!sealed) return `Everything this tab fetched from ${h}, ${sent}. Marked rows went to another address. ${check}`;
+  const blocked = s.blocked ? ` The browser blocked ${plural(s.blocked, "request", "requests")} to another site before ${s.blocked === 1 ? "it" : "they"} left, marked in the list.` : "";
+  return `Everything this tab fetched from ${h}, ${sent}. Nothing went anywhere else.${blocked} ${check}`;
+}

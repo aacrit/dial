@@ -1,5 +1,6 @@
 // Records this tab's requests for the Seal, from the browser's own record.
-// Each Dial page (the radio at /, the Seal at /seal) runs recordRequests():
+// The radio (/ and /play/<work>, whose work panel carries the Seal widget)
+// runs recordRequests():
 // a PerformanceObserver on Resource Timing (buffered, so it also sees what
 // loaded before the script ran) and on the page's navigation, plus the
 // browser's securitypolicyviolation events for anything the CSP blocked.
@@ -8,8 +9,8 @@
 // Dial's offline helper (the service worker, web/src/sw.ts), whose rows are
 // marked as its own requests.
 //
-// The log is kept in sessionStorage under LOG_KEY, so the Seal can show
-// what the radio fetched earlier in the same tab. It holds a path, a size, a
+// The log is kept in sessionStorage under LOG_KEY, so the Seal widget can
+// show what the radio fetched earlier in the same tab. It holds a path, a size, a
 // time and, for a count, the event name (request-log.ts RECORD_KEYS): never
 // text or audio. It is erased when the tab closes, and it is never sent
 // (web/privacy.html says so; tests/privacy-page.test.ts pairs the two).

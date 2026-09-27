@@ -18,205 +18,251 @@
     <svg class="defs" width="0" height="0" aria-hidden="true">
       <defs>
         <symbol id="x-wordmark" viewBox="0 -72.2 261.5 72.8"><path d="M8.6 -69.1L29.0 -69.1Q43.2 -69.1 49.8 -67.1Q57.4 -64.7 61.5 -61.1Q65.6 -57.4 68.0 -53.5Q72.8 -45.6 72.8 -35.4Q72.8 -19.5 61.3 -9.7Q53.2 -2.6 42.2 -0.9Q36.1 0.0 25.1 0.0L8.6 0.0L8.6 -69.1ZM33.5 -4.1Q34.3 -4.0 35.0 -4.0L36.1 -4.0Q49.3 -4.0 58.7 -12.3Q68.6 -20.9 68.6 -35.4Q68.6 -44.4 64.3 -51.7Q58.0 -62.3 44.3 -64.6Q39.9 -65.3 33.5 -65.4L33.5 -4.1ZM92.9 -69.1L117.8 -69.1L117.8 0.0L92.9 0.0L92.9 -69.1ZM154.4 -8.7Q145.4 -8.7 142.2 -8.8L140.8 -5.5Q140.1 -4.1 139.6 -2.5Q138.5 0.5 136.5 0.5Q135.5 0.5 134.9 -0.0Q134.4 -0.6 134.4 -1.3Q134.4 -2.3 135.3 -3.7Q136.8 -5.7 138.2 -9.0Q134.0 -9.4 134.0 -11.5Q134.0 -13.5 136.4 -13.5Q137.8 -13.5 139.8 -13.0L164.1 -72.2L197.5 0.0L172.1 0.0L168.1 -8.7L154.4 -8.7ZM143.7 -12.6Q148.4 -12.3 152.1 -12.3L166.4 -12.3L154.2 -38.6L143.7 -12.6ZM258.2 -4.4Q260.8 -4.4 260.8 -2.2Q260.8 -1.4 259.7 -0.7Q258.7 0.0 256.0 0.0L216.3 0.0L216.3 -69.1L241.2 -69.1L241.2 -3.2L250.4 -3.2Q253.4 -3.2 255.7 -3.8Q257.9 -4.4 258.2 -4.4Z" /></symbol>
+        <symbol id="g-down" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" /></symbol>
+        <symbol id="g-up" viewBox="0 0 24 24"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5" /></symbol>
+        <symbol id="g-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></symbol>
       </defs>
     </svg>
 
-    <header class="masthead">
-      <a class="brand" href="/" id="to-repertory" aria-label="Dial, AM 514 kHz. The Repertory">
+    <header class="masthead topbar">
+      <a class="brand" href="/" id="to-repertory" aria-label="Dial, AM 514 kHz. The radio">
         <svg class="arch" viewBox="0 0 120 156" aria-hidden="true"><path class="arch-body" d="M8 148 V62 A52 52 0 0 1 112 62 V148 Q112 152 108 152 H12 Q8 152 8 148 Z" /><path class="arch-inner" d="M17 145 V63 A43 43 0 0 1 103 63 V145" /><path class="arch-live" d="M20 94 L100 94" /></svg>
         <svg class="wm" viewBox="0 0 261.5 72.8" aria-hidden="true"><use href="#x-wordmark" /></svg>
         <span class="freq">AM <span data-numeral>514</span> kHz</span>
       </a>
       <nav class="rooms" aria-label="Rooms">
-        <a href="/" id="room-repertory" aria-current="page">Repertory</a>
-        <a href="/seal">Seal</a>
+        <a href="/" id="room-repertory" aria-current="page"><span>Radio</span><span class="wave-box" aria-hidden="true"><svg class="wave-underline" viewBox="0 0 80 8"><path d="M0 4 Q5 0.8 10 4 T20 4 T30 4 T40 4 T50 4 T60 4 T70 4 T80 4" /></svg></span></a>
       </nav>
       <button type="button" class="keycap" id="open-shortcuts" aria-label="Keyboard shortcuts" aria-haspopup="dialog">?</button>
     </header>
 
-    <main class="room" id="main">
-      <header class="rep-head">
-        <h1>The Repertory</h1>
-        <p class="eyebrow">First shelf &middot; Philosophy &middot; <span data-numeral>3</span> stations</p>
-      </header>
+    <main class="panels" id="main" data-panels>
+      <h1 class="visually-hidden">The Repertory</h1>
 
-      <section class="device" data-device aria-label="The Repertory, as a radio: each work is a station on the dial">
-        <div class="dialwin" data-dialwin role="slider" tabindex="0" aria-label="Tuning dial. Drag the needle, or use the arrow keys to move between stations." aria-valuemin="1" aria-valuemax="3" aria-valuenow="1">
-          <canvas class="dw-wave" aria-hidden="true"></canvas>
-          <svg viewBox="0 0 400 250" aria-hidden="true">
-            <g class="dw-scale"></g>
-            <g class="dw-needle">
-              <line class="nd-tail" x1="200" y1="238" x2="200" y2="247" />
-              <line class="nd" x1="200" y1="236" x2="200" y2="52" />
-              <circle class="nd-cap" cx="200" cy="236" r="10" />
-              <circle class="nd-hub" cx="200" cy="236" r="3" />
-            </g>
-            <text class="dw-am" x="24" y="240">514 &middot; 001</text>
-          </svg>
-          <span class="dw-sheen" aria-hidden="true"></span>
-        </div>
-
-        <div class="station-line">
-          <p class="eyebrow" id="st-eyebrow"></p>
-          <h2 id="st-title"></h2>
-          <p class="by" id="st-credit"></p>
-        </div>
-
-        <div class="glasspanel display">
-          <div class="instruments">
-            <div class="inst">
-              <svg class="mini-eye" viewBox="0 0 64 64" aria-hidden="true"><circle class="me-glass" cx="32" cy="32" r="28" /><path class="me-fan" data-eye d="" /><circle class="me-cap" cx="32" cy="32" r="10" /></svg>
-              <span class="il">On station</span>
-            </div>
-            <div class="inst">
-              <svg class="valve" viewBox="0 0 64 64" aria-hidden="true"><circle class="v-glow" cx="32" cy="40" r="20" /><path class="v-env" d="M22 56 V26 a10 10 0 0 1 20 0 V56" /><rect class="v-base" x="18" y="56" width="28" height="5" rx="2" /><path class="v-fil" d="M27 50 V37 l5 -7 l5 7 V50" /></svg>
-              <span class="il" id="valve-label">Voice</span>
-            </div>
-            <div class="meters" role="group" aria-label="Loudness">
-              <div class="mrow"><span>Voice</span><span class="mbar" id="m-voice-meter" role="meter" aria-label="Voice loudness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Silent"><b class="band" aria-hidden="true"></b><i id="m-voice"></i><b class="peak" id="m-peak" aria-hidden="true" hidden></b></span></div>
-              <div class="mrow"><span>Music</span><span class="mbar"><i class="rest"></i></span></div>
-              <span class="il" id="m-band" hidden><span class="pip eye" aria-hidden="true"></span>Voice level in range</span>
-              <span class="il" id="m-music">Music: none in this work yet</span>
+      <section class="panel p-device" id="radio" data-panel aria-label="The radio">
+        <section class="device" data-device aria-label="The Repertory, as a radio: each work is a station on the dial">
+          <div class="dialbox" data-part>
+            <div class="dialwin" data-dialwin role="slider" tabindex="0" aria-label="Tuning dial. Drag the needle, or use the arrow keys to move between stations." aria-valuemin="1" aria-valuemax="3" aria-valuenow="1">
+              <canvas class="dw-wave" aria-hidden="true"></canvas>
+              <svg viewBox="0 0 400 250" aria-hidden="true">
+                <g class="dw-scale"></g>
+                <g class="dw-needle">
+                  <line class="nd-tail" x1="200" y1="238" x2="200" y2="247" />
+                  <line class="nd" x1="200" y1="236" x2="200" y2="52" />
+                  <circle class="nd-cap" cx="200" cy="236" r="10" />
+                  <circle class="nd-hub" cx="200" cy="236" r="3" />
+                </g>
+                <text class="dw-am" x="24" y="240">514 &middot; 001</text>
+              </svg>
+              <span class="dw-sheen" aria-hidden="true"></span>
             </div>
           </div>
-          <p class="devnote" id="devnote" role="status"></p>
-          <div class="station-card">
-            <p class="desc" id="st-sentence"></p>
-            <p class="meta" id="st-meta"></p>
-          </div>
-          <section class="readalong" id="readalong" aria-label="Read along" hidden>
-            <div class="ra-head">
-              <p class="ra-who" id="ra-who"></p>
-              <span class="ra-sheets">
-                <button type="button" class="ra-btn" id="open-script" aria-haspopup="dialog">Script</button>
-                <button type="button" class="ra-btn" id="open-bookplate" aria-haspopup="dialog">Bookplate</button>
-              </span>
+
+          <div class="side">
+            <div class="station-line" data-part>
+              <p class="eyebrow" id="st-eyebrow"></p>
+              <h2 id="st-title"></h2>
+              <p class="by" id="st-credit"></p>
             </div>
-            <div class="ra-lines" id="ra-lines" lang="en"></div>
-          </section>
-        </div>
 
-        <div class="tunein">
-          <button type="button" class="btn" id="tune-in" disabled>Tune in</button>
-          <button type="button" class="btn quiet" id="pause" hidden>Pause</button>
-          <button type="button" class="btn" id="retry" hidden>Try again</button>
-          <button type="button" class="btn" id="resume-line" hidden>Resume</button>
-          <span class="avail" id="tune-avail"></span>
-          <button type="button" class="btn text make-here" id="make-here" hidden>Or make it on this device (the voice downloads once)</button>
-        </div>
+            <div class="glasspanel display" data-part>
+              <div class="instruments">
+                <div class="inst">
+                  <svg class="mini-eye" viewBox="0 0 64 64" aria-hidden="true"><circle class="me-glass" cx="32" cy="32" r="28" /><path class="me-fan" data-eye d="" /><circle class="me-cap" cx="32" cy="32" r="10" /></svg>
+                  <span class="il">On station</span>
+                </div>
+                <div class="inst">
+                  <svg class="valve" viewBox="0 0 64 64" aria-hidden="true"><circle class="v-glow" cx="32" cy="40" r="20" /><path class="v-env" d="M22 56 V26 a10 10 0 0 1 20 0 V56" /><rect class="v-base" x="18" y="56" width="28" height="5" rx="2" /><path class="v-fil" d="M27 50 V37 l5 -7 l5 7 V50" /></svg>
+                  <span class="il" id="valve-label">Voice</span>
+                </div>
+                <!-- The speed gauge and its "Test this device" key go in this slot (T7, design/spec.md 00, the Speed row). Its engine is bench.ts and the render worker's bench. -->
+                <div class="inst" id="speed-gauge" hidden></div>
+                <div class="meters" role="group" aria-label="Loudness">
+                  <div class="mrow"><span>Voice</span><span class="mbar" id="m-voice-meter" role="meter" aria-label="Voice loudness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Silent"><b class="band" aria-hidden="true"></b><i id="m-voice"></i><b class="peak" id="m-peak" aria-hidden="true" hidden></b></span></div>
+                  <div class="mrow"><span>Music</span><span class="mbar"><i class="rest"></i></span></div>
+                  <span class="il" id="m-band" hidden><span class="pip eye" aria-hidden="true"></span>Voice level in range</span>
+                  <span class="il" id="m-music">Music: none in this work yet</span>
+                </div>
+              </div>
+              <p class="devnote" id="devnote" role="status"></p>
+              <section class="readalong" id="readalong" aria-label="Read along" hidden>
+                <div class="ra-head">
+                  <p class="ra-who" id="ra-who"></p>
+                  <span class="ra-sheets">
+                    <button type="button" class="ra-btn" id="open-script" aria-controls="tp-script">Script</button>
+                    <button type="button" class="ra-btn" id="open-bookplate" aria-controls="tp-bookplate">Bookplate</button>
+                  </span>
+                </div>
+                <div class="ra-lines" id="ra-lines" lang="en"></div>
+              </section>
+            </div>
 
-        <div class="switch-ask" id="switch-ask" role="group" aria-labelledby="switch-q" hidden>
-          <p id="switch-q"></p>
-          <div class="switch-actions">
-            <button type="button" class="btn" id="switch-yes">Stop and tune in</button>
-            <button type="button" class="btn quiet" id="switch-no">Keep listening</button>
+            <div class="tunein" data-part>
+              <button type="button" class="btn" id="tune-in" disabled>Tune in</button>
+              <button type="button" class="btn quiet" id="pause" hidden>Pause</button>
+              <button type="button" class="btn" id="retry" hidden>Try again</button>
+              <button type="button" class="btn" id="resume-line" hidden>Resume</button>
+              <span class="avail" id="tune-avail"></span>
+              <button type="button" class="btn text make-here" id="make-here" hidden>Or make it on this device (the voice downloads once)</button>
+            </div>
+
+            <div class="switch-ask" id="switch-ask" role="group" aria-labelledby="switch-q" data-part hidden>
+              <p id="switch-q"></p>
+              <div class="switch-actions">
+                <button type="button" class="btn" id="switch-yes">Stop and tune in</button>
+                <button type="button" class="btn quiet" id="switch-no">Keep listening</button>
+              </div>
+            </div>
+
+            <div class="dev-ribbon" id="ribbon-box" data-part hidden>
+              <svg class="ribbon" id="ribbon" viewBox="0 0 1000 30" preserveAspectRatio="none" role="slider" tabindex="0" aria-label="Position in the work. Drag to move, or use J and L." aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+                <g class="segs"></g>
+                <line class="renderhead" x1="-10" y1="5" x2="-10" y2="25" vector-effect="non-scaling-stroke" />
+                <line class="needle" x1="0" y1="3" x2="0" y2="27" vector-effect="non-scaling-stroke" />
+              </svg>
+              <p class="times"><span class="timecode" id="t-el"></span><span class="timecode" id="t-total"></span></p>
+              <p class="scrub-note" id="scrub-note" role="status"></p>
+            </div>
+
+            <div class="onair-panel" data-part>
+              <progress id="render-meter" class="visually-hidden" aria-label="Getting the voice ready" hidden></progress>
+              <p id="broadcast-status" role="status" aria-live="polite"></p>
+              <p id="broadcast-progress"></p>
+            </div>
+
+            <div class="notice" id="offline-note" data-part hidden>
+              <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16" /><path d="M8.5 18H17a3.5 3.5 0 0 0 1.2-6.8A6 6 0 0 0 10 7.2" /><path d="M6.2 9.6A4.5 4.5 0 0 0 7 18" /></svg>
+              <p id="offline-note-text" role="status"></p>
+            </div>
+
+            <div class="controls" data-part>
+              <div class="knob" data-knob="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70 percent"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Volume</span></div>
+              <div class="keys" role="group" aria-label="Stations" data-presets></div>
+              <div class="keys transport" role="group" aria-label="Transport" id="transport">
+                <button type="button" class="key" id="line-prev" aria-label="Previous line"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6v12M18 6.5l-8.5 5.5 8.5 5.5z" /></svg><span class="t">Line</span></button>
+                <button type="button" class="key" id="back-10" aria-label="Back 10 seconds"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.1-5" /><path d="M5 4v3.5h3.5" /></svg><span class="t"><span data-numeral>10</span> s</span></button>
+                <button type="button" class="key" id="fwd-10" aria-label="Forward 10 seconds"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.1-5" /><path d="M19 4v3.5h-3.5" /></svg><span class="t"><span data-numeral>10</span> s</span></button>
+                <button type="button" class="key" id="line-next" aria-label="Next line"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6v12M6 6.5l8.5 5.5L6 17.5z" /></svg><span class="t">Line</span></button>
+              </div>
+              <div class="knob" data-knob="tune" role="slider" tabindex="0" aria-label="Tune" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Tune</span></div>
+            </div>
           </div>
-        </div>
-
-        <div class="dev-ribbon" id="ribbon-box" hidden>
-          <svg class="ribbon" id="ribbon" viewBox="0 0 1000 30" preserveAspectRatio="none" role="slider" tabindex="0" aria-label="Position in the work. Drag to move, or use J and L." aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-            <g class="segs"></g>
-            <line class="renderhead" x1="-10" y1="5" x2="-10" y2="25" vector-effect="non-scaling-stroke" />
-            <line class="needle" x1="0" y1="3" x2="0" y2="27" vector-effect="non-scaling-stroke" />
-          </svg>
-          <p class="times"><span class="timecode" id="t-el"></span><span class="timecode" id="t-total"></span></p>
-          <p class="scrub-note" id="scrub-note" role="status"></p>
-        </div>
-
-        <div class="onair-panel">
-          <progress id="render-meter" class="visually-hidden" aria-label="Getting the voice ready" hidden></progress>
-          <p id="broadcast-status" role="status" aria-live="polite"></p>
-          <p id="broadcast-progress"></p>
-          <a id="download" class="btn quiet" hidden>Download as an audio file</a>
-        </div>
-
-        <div class="controls">
-          <div class="knob" data-knob="vol" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70 percent"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Volume</span></div>
-          <div class="keys" role="group" aria-label="Stations" data-presets></div>
-          <div class="keys transport" role="group" aria-label="Transport" id="transport">
-            <button type="button" class="key" id="line-prev" aria-label="Previous line"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6v12M18 6.5l-8.5 5.5 8.5 5.5z" /></svg><span class="t">Line</span></button>
-            <button type="button" class="key" id="back-10" aria-label="Back 10 seconds"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.1-5" /><path d="M5 4v3.5h3.5" /></svg><span class="t"><span data-numeral>10</span> s</span></button>
-            <button type="button" class="key" id="fwd-10" aria-label="Forward 10 seconds"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.1-5" /><path d="M19 4v3.5h-3.5" /></svg><span class="t"><span data-numeral>10</span> s</span></button>
-            <button type="button" class="key" id="line-next" aria-label="Next line"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6v12M6 6.5l8.5 5.5L6 17.5z" /></svg><span class="t">Line</span></button>
-          </div>
-          <div class="knob" data-knob="tune" role="slider" tabindex="0" aria-label="Tune" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"><div class="kn-dial"><div class="kn-rot"><span class="kn-mark"></span></div></div><span class="kl">Tune</span></div>
-        </div>
+        </section>
       </section>
 
-      <div class="below">
-        <div class="notice" id="offline-note" hidden>
-          <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16" /><path d="M8.5 18H17a3.5 3.5 0 0 0 1.2-6.8A6 6 0 0 0 10 7.2" /><path d="M6.2 9.6A4.5 4.5 0 0 0 7 18" /></svg>
-          <p id="offline-note-text" role="status"></p>
+      <section class="panel p-work" id="work" data-panel aria-label="The work">
+        <div class="widgets" id="widgets">
+          <article class="widget w-about" data-part aria-labelledby="ab-h">
+            <h2 id="ab-h">The work</h2>
+            <h3 id="w-title"></h3>
+            <div class="scroll about-scroll">
+              <p class="d" id="st-sentence"></p>
+              <p class="meta" id="st-meta"></p>
+              <p class="own">Have writing of your own? Bringing your own chapter needs the Studio, which is not open yet.</p>
+              <p class="asks"><button type="button" class="linkish" id="open-feedback" aria-haspopup="dialog">Tell us what is missing</button><a href="/privacy">Privacy</a></p>
+            </div>
+          </article>
+
+          <article class="widget w-keep" data-part aria-labelledby="kp-h">
+            <h2 id="kp-h">Keep it</h2>
+            <div class="scroll keep-scroll">
+              <div class="save" id="save-row" hidden></div>
+              <p class="visually-hidden" id="save-status" role="status" aria-live="polite"></p>
+              <a id="download" class="btn quiet" hidden>Download as an audio file</a>
+              <section class="install" id="install-card" aria-labelledby="install-h" hidden>
+                <h3 id="install-h">Keep Dial on this device</h3>
+                <p class="muted">Install it to open from your home screen. Works you save for offline stay with it.</p>
+                <div class="install-actions">
+                  <button type="button" class="btn" id="install-yes">Install</button>
+                  <button type="button" class="btn quiet" id="install-no">Not now</button>
+                </div>
+              </section>
+              <section class="install" id="ios-card" aria-labelledby="ios-h" hidden>
+                <h3 id="ios-h">Add Dial to your Home Screen</h3>
+                <ol class="steps">
+                  <li>In Safari, tap Share: the square with an arrow pointing up.</li>
+                  <li>Scroll down and tap Add to Home Screen.</li>
+                  <li>Tap Add.</li>
+                </ol>
+                <p class="muted install-note" id="ios-saved-note" hidden>Works you save in the Home Screen app stay with it. Works saved in Safari need saving again there. In a Safari tab, iPhone can clear saved works if you do not open Dial for a week.</p>
+                <div class="install-actions">
+                  <button type="button" class="btn quiet" id="ios-no">Not now</button>
+                </div>
+              </section>
+            </div>
+          </article>
+
+          <article class="widget w-text" id="w-text" data-part aria-label="Script and Bookplate">
+            <div class="text-head">
+              <div class="tabs" role="tablist" aria-label="Script and Bookplate">
+                <button type="button" role="tab" id="tab-script" aria-selected="true" aria-controls="tp-script" tabindex="0">Script</button>
+                <button type="button" role="tab" id="tab-bookplate" aria-selected="false" aria-controls="tp-bookplate" tabindex="-1">Bookplate</button>
+              </div>
+              <button type="button" class="btn quiet close-key" id="text-close" hidden>Close</button>
+            </div>
+            <div class="scroll" role="tabpanel" id="tp-script" aria-labelledby="tab-script">
+              <p class="eyebrow sheet-note" id="script-note"></p>
+              <div class="script" id="script" lang="en"></div>
+            </div>
+            <div class="scroll" role="tabpanel" id="tp-bookplate" aria-labelledby="tab-bookplate" tabindex="0" hidden>
+              <p class="eyebrow sheet-note" id="bookplate-note"></p>
+              <dl class="bookplate-dl" id="bookplate"></dl>
+            </div>
+          </article>
+
+          <article class="widget w-seal" id="seal" data-part aria-labelledby="seal-h">
+            <h2 id="seal-h">Seal</h2>
+            <div class="seal-top">
+              <svg class="seye" id="seal-eye" viewBox="0 0 64 64" aria-hidden="true"><circle class="g" cx="32" cy="32" r="28" /><path class="f" id="seal-fan" d="" /><circle class="c" cx="32" cy="32" r="10" /></svg>
+              <p class="line" id="seal-line"></p>
+            </div>
+            <p class="count" id="seal-count"></p>
+            <div class="sw-row">
+              <span id="sw-l">Send anonymous counts</span>
+              <button class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="sw-l" aria-describedby="sw-d" id="sw"></button>
+            </div>
+            <p class="sw-note" id="sw-note" role="status"></p>
+            <details class="reqs-box" id="seal-reqs">
+              <summary><span class="sh">Show every request</span><span class="hd">Hide the requests</span></summary>
+              <div class="reqs" tabindex="0" role="region" aria-label="Every request this tab made">
+                <p class="count" id="seal-reqs-intro"></p>
+                <p class="count">Browser extensions and the browser's own services run outside the page, so the Seal cannot see them.</p>
+                <p class="count" id="sw-d">The switch: totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more. Turn it off and Dial sends no counts at all; only a feedback message you choose to send leaves this device. The setting stays on this device.</p>
+                <p class="tot" id="log-tot"></p>
+                <table class="log">
+                    <thead class="visually-hidden">
+                      <tr><th>Direction</th><th>Time</th><th>Path on <span data-host></span></th><th class="wh-h">What it was</th><th>Size</th></tr>
+                    </thead>
+                    <tbody id="log"></tbody>
+                </table>
+                <p class="logfoot" id="log-foot">Newest last.</p>
+              </div>
+            </details>
+          </article>
         </div>
-
-        <section class="card install" id="install-card" aria-labelledby="install-h" hidden>
-          <h2 id="install-h">Keep Dial on this device</h2>
-          <p class="muted">Install it to open from your home screen. Works you save for offline stay with it.</p>
-          <div class="install-actions">
-            <button type="button" class="btn" id="install-yes">Install</button>
-            <button type="button" class="btn quiet" id="install-no">Not now</button>
-          </div>
-        </section>
-
-        <section class="card install" id="ios-card" aria-labelledby="ios-h" hidden>
-          <h2 id="ios-h">Add Dial to your Home Screen</h2>
-          <ol class="steps">
-            <li>In Safari, tap Share: the square with an arrow pointing up.</li>
-            <li>Scroll down and tap Add to Home Screen.</li>
-            <li>Tap Add.</li>
-          </ol>
-          <p class="muted install-note" id="ios-saved-note" hidden>Works you save in the Home Screen app stay with it. Works saved in Safari need saving again there. In a Safari tab, iPhone can clear saved works if you do not open Dial for a week.</p>
-          <div class="install-actions">
-            <button type="button" class="btn quiet" id="ios-no">Not now</button>
-          </div>
-        </section>
-
-        <div class="save" id="save-row" hidden></div>
-        <p class="visually-hidden" id="save-status" role="status" aria-live="polite"></p>
-
-        <details class="drill bookplate">
-          <summary>Bookplate</summary>
-          <div class="drill-body"><dl id="bookplate"></dl></div>
-        </details>
-
-        <p class="own">Have writing of your own? Bringing your own chapter needs the Studio, which is not open yet.</p>
-
-        <section class="card" id="feedback-card">
-          <h2>Tell us what is missing</h2>
-          <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
-          <form id="feedback-form" novalidate>
-            <label for="feedback-text">Feedback</label>
-            <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
-            <button type="submit" class="btn">Send</button>
-            <p id="feedback-status" role="status" aria-live="polite"></p>
-          </form>
-        </section>
-
-        <footer class="page-footer">
-          <a href="/seal">The Seal: every request this tab made</a> &middot; <a href="/privacy">Privacy</a>
-        </footer>
-      </div>
+      </section>
     </main>
 
-    <dialog class="sheet" id="script-sheet" aria-labelledby="sc-h">
-      <div class="sheet-in">
-        <div class="sheet-top">
-          <h2 id="sc-h">The full script</h2>
-          <button type="button" class="btn quiet" data-close>Close</button>
-        </div>
-        <p class="eyebrow sheet-note" id="script-note"></p>
-        <div class="script" id="script" lang="en"></div>
-      </div>
-    </dialog>
+    <nav class="band" id="band" aria-label="Band: move between panels">
+      <span class="bl" aria-hidden="true">Band</span>
+      <button type="button" data-to="radio" aria-current="true"><span class="lampb" aria-hidden="true"></span>Radio</button>
+      <button type="button" data-to="work" aria-current="false"><span class="lampb" aria-hidden="true"></span>The work</button>
+    </nav>
+    <p class="visually-hidden" id="band-status" role="status" aria-live="polite"></p>
 
-    <dialog class="sheet" id="bookplate-sheet" aria-labelledby="bp-h">
+    <dialog class="sheet small" id="feedback-sheet" aria-labelledby="fb-h">
       <div class="sheet-in">
         <div class="sheet-top">
-          <h2 id="bp-h">Bookplate</h2>
+          <h2 id="fb-h">Tell us what is missing</h2>
           <button type="button" class="btn quiet" data-close>Close</button>
         </div>
-        <p class="eyebrow sheet-note" id="bookplate-note"></p>
-        <dl class="bookplate-dl" id="bookplate-sheet-dl"></dl>
+        <p class="muted">A sentence is enough. It goes straight to the people building this.</p>
+        <form id="feedback-form" novalidate>
+          <label for="feedback-text">Feedback</label>
+          <textarea id="feedback-text" name="text" maxlength="2000" rows="3" required></textarea>
+          <button type="submit" class="btn">Send</button>
+          <p id="feedback-status" role="status" aria-live="polite"></p>
+        </form>
       </div>
     </dialog>
 
