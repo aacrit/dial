@@ -21,9 +21,19 @@ export function valveCountdown(wait: number): string {
   return `Starting in ${countdownClock(wait)}`;
 }
 
-/** The countdown's line under the glass. */
-export function countdownLine(wait: number): string {
-  return `Starting in ${countdownClock(wait)} so it never pauses.`;
+/**
+ * The countdown's line under the glass (CoS decision O): the plan is a
+ * forecast at four fifths of the measured speed, so it says it should not
+ * pause, never that it cannot. After "Start anyway" only the time is said.
+ */
+export function countdownLine(wait: number, mayPause = false): string {
+  if (mayPause) return `Starting in ${countdownClock(wait)}.`;
+  return `Starting in ${countdownClock(wait)}. Planned at four fifths of this device's speed, so it should not pause.`;
+}
+
+/** The valve's label during a hold. */
+export function valveResuming(wait: number): string {
+  return `Resuming in ${countdownClock(wait)}`;
 }
 
 /** Said while the speed test times its sentence. */
@@ -51,7 +61,8 @@ export function planSentence(choice: SpeedChoice, measured: number, planned: num
 
 /** The question past two minutes: what waiting would take, and the choices. */
 export function choiceQuestion(wait: number, hasRecording: boolean): string {
-  const lead = `To play without a pause, this device would make the first ${countdownClock(wait)} before starting.`;
+  // The wait is time spent making, not audio (T7 review).
+  const lead = `To play without a pause, this device needs ${countdownClock(wait)} of making before it starts.`;
   return hasRecording ? `${lead} Dial's own recording can play now instead.` : `${lead} You can wait, or start now and let it pause when it needs to.`;
 }
 
@@ -76,6 +87,14 @@ export function gpuProgress(loaded: number, total: number): string {
 }
 
 export const GPU_FAILED_LINE = "The graphics chip's voice could not be downloaded or kept, so the processor carries on.";
+
+/** The browser stopped the graphics chip mid-work: the processor carries on, from the line it was making. */
+export const GPU_LOST_LINE = "The browser stopped the graphics chip, so this device's processor carries on from the next line, more slowly.";
+
+/** No room for it: the size, and the fix. */
+export function gpuNoRoomLine(bytes: number): string {
+  return `There is not enough free space on this device for the graphics chip's voice (${aboutMegabytes(bytes)}), so the processor carries on. Free some space, then try again.`;
+}
 
 /** The ask's words: the wait past two minutes, the graphics chip's offer, or both. */
 export function askLine(o: { wait: number; choice: boolean; hasRecording: boolean; gpuBytes: number }): string {

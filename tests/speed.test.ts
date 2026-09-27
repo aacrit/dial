@@ -8,9 +8,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { entryFor, gpuOffer, keptChoice, measuredEntry, parseEntry, pickBackend, shapeOf, soundsRight, type SpeedChoice, type SpeedEntry } from "../web/src/speed/backend";
-import { HOLD_LINE, MEASURING_LINE, PLAY_RECORDING_NOW, START_ANYWAY, askLine, choiceQuestion, countdownClock, countdownLine, gpuButton, gpuLoadingLine, gpuOfferLine, planSentence, valveCountdown } from "../web/src/speed/copy";
-import { GAUGE_MAX, engineLabel, engineWords, gaugeName, gaugeReadout, needleAngle, type Gauge } from "../web/src/speed/gauge";
-import { Pacer, type AskOptions, type PacerHooks } from "../web/src/speed/pacer";
+import { GPU_LOST_LINE, HOLD_LINE, MEASURING_LINE, PLAY_RECORDING_NOW, START_ANYWAY, askLine, choiceQuestion, countdownClock, countdownLine, gpuButton, gpuLoadingLine, gpuNoRoomLine, gpuOfferLine, planSentence, valveCountdown, valveResuming } from "../web/src/speed/copy";
+import { GAUGE_MAX, engineLabel, engineWords, gaugeName, gaugeReadout, gaugeValueNow, needleAngle, type Gauge } from "../web/src/speed/gauge";
+import { NoRoomError, ROOM_MARGIN, downloadGpuModel, gpuOfferAllowed, roomFor, type DownloadDeps } from "../web/src/speed/gpu-model";
+import { Pacer, TEST_AHEAD_S, type AskOptions, type PacerHooks } from "../web/src/speed/pacer";
+import { RenderLoop, WARM_UP, gpuWatchdogMs, speedTest, type FromWorker, type LoopDeps, type LoopManifest, type Speaker } from "../web/src/speed/render-loop";
+import { BENCH_SENTENCE } from "../web/src/bench-sentence";
 import { AHEAD_CAP_S, CHOICE_OVER_S, MIN_LEAD_S, PLANNING_MARGIN, aheadLimit, branchFor, leadWait, nextRate, paceScale, planRate, refillLines, type PlanLine } from "../web/src/speed/plan";
 import { SPEED_KEY, keepSpeed, readSpeed } from "../web/src/speed/store";
 import { GPU_PIN_HEADER, gpuModelKey, heldGpuModel, pinnedModelCache } from "../web/src/voice-files";
@@ -237,7 +240,11 @@ describe("the gauge's figures (speed/gauge.ts) and the plan's words (speed/copy.
     expect(countdownClock(303)).toBe("5:03");
     expect(countdownClock(3723)).toBe("1:02:03");
     expect(countdownClock(0.3)).toBe("0:01");
-    expect(countdownLine(42)).toBe("Starting in 0:42 so it never pauses.");
+    // CoS decision O: a forecast at four fifths of the measured speed, never a promise.
+    expect(countdownLine(42)).toBe("Starting in 0:42. Planned at four fifths of this device's speed, so it should not pause.");
+    expect(countdownLine(8, true)).toBe("Starting in 0:08.");
+    expect(countdownLine(42)).not.toMatch(/never|won't/);
+    expect(valveResuming(12)).toBe("Resuming in 0:12");
     expect(valveCountdown(303)).toBe("Starting in 5:03");
   });
 
@@ -249,8 +256,10 @@ describe("the gauge's figures (speed/gauge.ts) and the plan's words (speed/copy.
   });
 
   it("the choice past two minutes and the graphics chip's offer state the wait and the size, and no em dash anywhere", () => {
-    expect(choiceQuestion(21 * 60 + 53, true)).toBe("To play without a pause, this device would make the first 21:53 before starting. Dial's own recording can play now instead.");
-    expect(choiceQuestion(150, false)).toBe("To play without a pause, this device would make the first 2:30 before starting. You can wait, or start now and let it pause when it needs to.");
+    // The wait is making time, not audio.
+    expect(choiceQuestion(33 * 60 + 33, true)).toBe("To play without a pause, this device needs 33:33 of making before it starts. Dial's own recording can play now instead.");
+    expect(choiceQuestion(150, false)).toBe("To play without a pause, this device needs 2:30 of making before it starts. You can wait, or start now and let it pause when it needs to.");
+    expect(gpuNoRoomLine(325_532_232)).toBe("There is not enough free space on this device for the graphics chip's voice (about 326 MB), so the processor carries on. Free some space, then try again.");
     expect(gpuOfferLine(325_532_232)).toContain("about 326 MB, downloaded once and kept on this device");
     expect(gpuButton(325_532_232)).toBe("Test the graphics chip (about 326 MB)");
     expect(gpuLoadingLine(48_200_000, 325_532_232)).toBe("Downloading the graphics chip's voice: 48 of 326 MB. The processor keeps making the work meanwhile.");
@@ -277,6 +286,8 @@ interface Rig {
   asks: { question: string; options: AskOptions }[];
   hidden: number;
   gauge: { shown: string[]; values: number[] };
+  gpuAsks: number;
+  gpuSends: number;
 }
 
 /** A work of `n` lines, each `words` words (about `words` x 60/155 s of speech) with no pause. */
@@ -309,7 +320,7 @@ function rig(n: number, words: number, hasRecording: boolean): Rig {
       return this.pos;
     },
   };
-  const r: Rig = { clock, audio, sched, said: [], asks: [], hidden: 0, gauge: { shown: [], values: [] }, pacer: null! };
+  const r: Rig = { clock, audio, sched, said: [], asks: [], hidden: 0, gauge: { shown: [], values: [] }, gpuAsks: 0, gpuSends: 0, pacer: null! };
   const gauge: Gauge = { show: (b) => void r.gauge.shown.push(b), set: (x) => void r.gauge.values.push(x), hide: () => undefined };
   const hooks: PacerHooks = {
     cues: Array.from({ length: n }, () => ({ spoken: Array.from({ length: words }, () => "word").join(" "), pauseAfterMs: 0 })),
@@ -324,9 +335,11 @@ function rig(n: number, words: number, hasRecording: boolean): Rig {
     hideAsk: () => void r.hidden++,
     repaint: () => undefined,
     allow: () => undefined,
-    askGpu: () => undefined,
+    askGpu: () => void r.gpuAsks++,
+    sendGpu: () => void r.gpuSends++,
     keep: () => undefined,
     setPauseLabel: () => undefined,
+    resumed: () => void r.said.push("resumed"),
     now: () => clock.t,
   };
   r.pacer = new Pacer(hooks);
@@ -367,8 +380,8 @@ describe("the pacer (speed/pacer.ts): the countdown, the choice past two minutes
     r.pacer.ready();
     expect(r.asks).toHaveLength(1);
     expect(r.asks[0]!.options).toEqual({ recording: true, anyway: true, gpuBytes: 0 });
-    expect(r.asks[0]!.question).toMatch(/^To play without a pause, this device would make the first \d+:\d\d before starting\. Dial's own recording can play now instead\.$/);
-    expect(r.pacer.progressLine()).toMatch(/^Starting in \d+:\d\d so it never pauses\.$/);
+    expect(r.asks[0]!.question).toMatch(/^To play without a pause, this device needs \d+:\d\d of making before it starts\. Dial's own recording can play now instead\.$/);
+    expect(r.pacer.progressLine()).toMatch(/^Starting in \d+:\d\d\. Planned at four fifths of this device's speed, so it should not pause\.$/);
     // Dial's recording, chosen.
     r.pacer.playRecording();
     expect(r.said.at(-1)).toBe("recording");
@@ -411,11 +424,15 @@ describe("the pacer (speed/pacer.ts): the countdown, the choice past two minutes
     expect(r.pacer.waiting).toBe(true);
     expect(r.audio.state).toBe("suspended");
     expect(r.said).toContain(HOLD_LINE);
+    // CoS decision O: a hold says only what it is doing, never a countdown promise.
+    expect(r.pacer.progressLine()).toBe(HOLD_LINE);
     // It resumes at the next line boundary once the plan holds again.
     make(r, 11.6, 2.9);
     make(r, 11.6, 2.9);
     expect(r.pacer.waiting).toBe(false);
     expect(r.audio.state).toBe("running");
+    // The page says it is on air again.
+    expect(r.said.at(-1)).toBe("resumed");
   });
 
   it("Pause pressed during the wait only stops playback starting by itself", () => {
@@ -445,10 +462,17 @@ describe("the page and the worker keep to the plan (source checks)", () => {
   const main = read("web/src/main.ts");
   const worker = read("web/src/narrate.worker.ts");
 
-  it("the worker times each line itself and waits for the page's allowance (chapter-ahead)", () => {
-    expect(worker).toMatch(/while \(i > allowed\) await new Promise<void>/);
-    expect(worker).toMatch(/const ms = performance\.now\(\) - t0;/);
+  it("the worker runs the tested loop with the real engines, and the page measures from the worker's own timing", () => {
+    expect(worker).toMatch(/const loop = new RenderLoop\(\{/);
+    expect(worker).toMatch(/ctx\.onmessage = \(event\) => loop\.onMessage\(event\.data\);/);
+    expect(worker).toMatch(/return !!\(await gpu\.requestAdapter\(\)\);/);
+    expect(read("web/src/speed/render-loop.ts")).toMatch(/while \(i > this\.allowed\) await new Promise<void>/);
     expect(main).toMatch(/own\.pacer\?\.cue\(speech, msg\.ms \/ 1000\);/);
+    // The offer passes the device gate; the model goes to the worker only through the pacer's safe moment.
+    expect(main).toMatch(/gpuOfferAllowed\(navigator as DeviceHints, matchMedia\("\(pointer: coarse\) and \(max-width: 900px\)"\)\.matches\) \? msg\.gpuOffer : 0/);
+    expect(main).toMatch(/if \(m\.type === "done"\) own\.pacer\?\.gpuReady\(\);/);
+    expect([...main.matchAll(/type: "gpu" \}/g)]).toHaveLength(1);
+    expect(main).toMatch(/sendGpu: \(\) => own\.worker\?\.postMessage\(\{ type: "gpu" \} satisfies ToWorker\),/);
   });
 
   it("the gauge shows only while this device makes the work; Dial's recording never builds a pacer", () => {
@@ -456,5 +480,367 @@ describe("the page and the worker keep to the plan (source checks)", () => {
     expect(main).toMatch(/const worker = rec \? null : new Worker\(/);
     expect(read("web/src/speed/pacer.ts")).toMatch(/done\(\): void \{[\s\S]*?this\.h\.gauge\.hide\(\);/);
     expect(read("web/src/speed/gauge.ts")).toMatch(/if \(motion\.reduce \|\| slot\.hidden\) \{\s*spring\.snap\(\);/);
+    // A meter, like the Voice meter.
+    const gauge = read("web/src/speed/gauge.ts");
+    for (const a of ['setAttribute("role", "meter")', 'setAttribute("aria-valuemin", "0")', 'setAttribute("aria-valuemax", String(GAUGE_MAX))', 'setAttribute("aria-valuenow", gaugeValueNow(rtf))', 'setAttribute("aria-valuetext", gaugeName(rtf, backend))']) expect(gauge).toContain(a);
+    expect(gaugeValueNow(1.234)).toBe("1.23");
+    expect(gaugeValueNow(16.7)).toBe("4");
+    expect(gaugeValueNow(NaN)).toBe("0");
+  });
+});
+
+// ---- The graphics chip: who is offered it, the download, when it is tested ---------------
+
+const BYTES = 325_532_232;
+
+describe("the graphics chip's 326 MB model: offered only where it fits (speed/gpu-model.ts)", () => {
+  it("is offered only with 8 GB or more reported, never on a phone", () => {
+    expect(gpuOfferAllowed({ deviceMemory: 8 }, false)).toBe(true);
+    expect(gpuOfferAllowed({ deviceMemory: 8, userAgentData: { mobile: false } }, true)).toBe(true);
+    expect(gpuOfferAllowed({ deviceMemory: 4 }, false)).toBe(false);
+    // No memory reported (Firefox, Safari): not offered.
+    expect(gpuOfferAllowed({}, false)).toBe(false);
+    expect(gpuOfferAllowed({ deviceMemory: 8, userAgentData: { mobile: true } }, false)).toBe(false);
+    // No mobile hint: a coarse pointer on a small screen counts as a phone.
+    expect(gpuOfferAllowed({ deviceMemory: 8 }, true)).toBe(false);
+  });
+
+  it("needs its size plus a tenth free; no estimate leaves it to the write", () => {
+    expect(ROOM_MARGIN).toBe(1.1);
+    expect(roomFor(BYTES, { quota: 1e9, usage: 0 })).toBe(true);
+    expect(roomFor(BYTES, { quota: BYTES * 1.05, usage: 0 })).toBe(false);
+    expect(roomFor(BYTES, { quota: 2e9, usage: 2e9 - BYTES })).toBe(false);
+    expect(roomFor(BYTES, null)).toBe(true);
+  });
+
+  /** A fake origin and cache: parts of 3 and 2 bytes, pinned by a fake hash of their length. */
+  function origin(opts: { quota?: number; badPart?: number } = {}) {
+    const parts = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])];
+    const manifest = { repo: "r", revision: "rev", sha256: "q".repeat(64), runtime: "x", runtimeSha256: "y", model: "onnx/model_quantized.onnx", parts: [], sizes: {}, gpu: { model: "onnx/model.onnx", sha256: "g".repeat(64), parts: ["model.part0", "model.part1"], partSha256: ["h3", "h2"], bytes: 5 } };
+    const fetched: string[] = [];
+    const store = new Map<string, Uint8Array>();
+    const deleted: string[] = [];
+    const deps: DownloadDeps = {
+      fetch: (async (url: string) => {
+        fetched.push(url);
+        if (url === "/voice/manifest.json") return new Response(JSON.stringify(manifest));
+        const i = manifest.gpu.parts.findIndex((p) => url.endsWith(p));
+        return new Response(i === opts.badPart ? new Uint8Array([9, 9, 9]) : parts[i]!);
+      }) as typeof fetch,
+      open: async () => ({
+        put: async (key: RequestInfo | URL, res: Response) => void store.set(String(key), new Uint8Array(await res.arrayBuffer())),
+        delete: async (key: RequestInfo | URL) => {
+          deleted.push(String(key));
+          return store.delete(String(key));
+        },
+      }),
+      estimate: async () => ({ quota: opts.quota ?? 1e9, usage: 0 }),
+      sha256: async (buf) => `h${buf.byteLength}`,
+    };
+    return { deps, fetched, store, deleted };
+  }
+
+  it("streams the parts into the cache one at a time, each checked, with the whole's pin beside it", async () => {
+    const o = origin();
+    const seen: number[] = [];
+    await downloadGpuModel((loaded) => seen.push(loaded), o.deps);
+    expect(o.fetched).toEqual(["/voice/manifest.json", "/voice/models/r/onnx/model.part0", "/voice/models/r/onnx/model.part1"]);
+    expect([...o.store.get("/voice/models/r/onnx/model.onnx")!]).toEqual([1, 2, 3, 4, 5]);
+    expect(seen).toEqual([0, 3, 5]);
+    // Any copy under an older pin goes first.
+    expect(o.deleted[0]).toBe("/voice/models/r/onnx/model.onnx");
+    expect(read("web/src/speed/gpu-model.ts")).toMatch(/new Response\(body, \{ headers: \{[^}]*\[GPU_PIN_HEADER\]: gpu\.sha256 \} \}\)/);
+  });
+
+  it("a part that fails its pin keeps nothing", async () => {
+    const o = origin({ badPart: 1 });
+    await expect(downloadGpuModel(() => undefined, o.deps)).rejects.toThrow(/pin/);
+    expect(o.store.size).toBe(0);
+  });
+
+  it("no room: nothing is fetched past the manifest, and the error says so", async () => {
+    const o = origin({ quota: 5 });
+    await expect(downloadGpuModel(() => undefined, o.deps)).rejects.toBeInstanceOf(NoRoomError);
+    expect(o.fetched).toEqual(["/voice/manifest.json"]);
+  });
+});
+
+describe("the pacer and the graphics chip: offered once, downloaded on the listener's key, tested at a safe moment", () => {
+  it("offers it with a real countdown, downloads only on the key, and sends it at once while playback waits", () => {
+    const r = rig(60, 30, false);
+    r.pacer.speed(choiceOf(0.9), entryOf(0.9), BYTES);
+    r.pacer.ready();
+    expect(r.asks).toHaveLength(1);
+    expect(r.asks[0]!.options.gpuBytes).toBe(BYTES);
+    expect(r.gpuAsks).toBe(0);
+    r.pacer.testGpu();
+    expect(r.gpuAsks).toBe(1);
+    // The download's progress beside the countdown's time.
+    r.pacer.tick();
+    expect(r.pacer.progressLine()).toMatch(/^Starting in \d+:\d\d\. Graphics chip's voice: 0 of 326 MB\.$/);
+    // Pressing the key again downloads nothing more.
+    r.pacer.testGpu();
+    expect(r.gpuAsks).toBe(1);
+    expect(r.gpuSends).toBe(0);
+    r.pacer.gpuReady();
+    expect(r.gpuSends).toBe(1);
+  });
+
+  it("while playing, it is sent only once 30 s are made ahead of the listener", () => {
+    expect(TEST_AHEAD_S).toBe(30);
+    const r = rig(60, 30, false);
+    r.pacer.speed(choiceOf(4), entryOf(4), BYTES);
+    r.pacer.ready();
+    make(r, 11.6, 2.9);
+    expect(r.pacer.waiting).toBe(false);
+    r.pacer.testGpu();
+    r.pacer.gpuReady();
+    expect(r.gpuSends).toBe(0);
+    make(r, 11.6, 2.9);
+    r.sched.pos = 2;
+    r.pacer.tick();
+    // 21.2 s ahead: not yet.
+    expect(r.gpuSends).toBe(0);
+    make(r, 11.6, 2.9);
+    // 32.8 s ahead: the test's pause cannot be heard.
+    expect(r.gpuSends).toBe(1);
+  });
+
+  it("plans again once the test has switched the engine", () => {
+    const r = rig(60, 30, true);
+    r.pacer.speed(choiceOf(0.6), entryOf(0.6), 0);
+    r.pacer.ready();
+    make(r, 11.6, 19);
+    expect(r.pacer.waiting).toBe(true);
+    const tested: SpeedChoice = { backend: "webgpu", rtf: 8, trials: [{ backend: "wasm", rtf: 0.6, ok: true }, { backend: "webgpu", rtf: 8, ok: true }], cached: false };
+    r.pacer.speed(tested, { ...entryOf(8), backend: "webgpu", gpuRtf: 8 }, 0);
+    expect(r.gauge.shown.at(-1)).toBe("webgpu");
+    expect(r.said.at(-1)).toMatch(/on this device's graphics chip \(0\.60× on its processor\), measured just now/);
+    // At 8x the made line covers the first 10 s: playback starts.
+    expect(r.pacer.waiting).toBe(false);
+  });
+
+  it("is offered once a visit: a later hold does not offer it again", () => {
+    const r = rig(60, 30, false);
+    r.pacer.speed(choiceOf(0.9), entryOf(0.9), BYTES);
+    r.pacer.ready();
+    make(r, 11.6, 12);
+    r.pacer.startAnyway();
+    r.sched.pos = r.sched.madeSeconds;
+    r.pacer.tick();
+    expect(r.pacer.waiting).toBe(true);
+    expect(r.asks.slice(1).every((a) => a.options.gpuBytes === 0)).toBe(true);
+    expect(r.asks.filter((a) => a.options.gpuBytes > 0)).toHaveLength(1);
+  });
+
+  it("a graphics chip the browser stops is said plainly, and the gauge moves to the processor", () => {
+    const r = rig(60, 30, false);
+    r.pacer.speed({ backend: "webgpu", rtf: 12, trials: [], cached: true }, { ...entryOf(12), backend: "webgpu" }, 0);
+    r.pacer.ready();
+    make(r, 11.6, 1);
+    r.pacer.speed({ backend: "wasm", rtf: 0, trials: [], cached: false }, entryOf(1), 0);
+    expect(r.said.at(-1)).toBe(GPU_LOST_LINE);
+    expect(r.gauge.shown.at(-1)).toBe("wasm");
+    // Its speed is measured afresh from the processor's next line.
+    make(r, 11.6, 10.5);
+    expect(r.gauge.values.at(-1)).toBeCloseTo(11.6 / 10.5);
+  });
+
+  it("a failed download says why, and names the fix when there was no room", () => {
+    const r = rig(60, 30, false);
+    r.pacer.speed(choiceOf(0.9), entryOf(0.9), BYTES);
+    r.pacer.ready();
+    r.pacer.testGpu();
+    r.pacer.gpuFailed(true);
+    expect(r.said.at(-1)).toBe(gpuNoRoomLine(BYTES));
+  });
+});
+
+// ---- The render loop (speed/render-loop.ts) with fake engines ------------------------------
+
+interface FakeEngine extends Speaker {
+  calls: string[];
+  disposed: number;
+}
+
+/** An engine that makes `rtf` seconds of speech per second on the fake clock; `failAt`: its nth call throws (a lost device); `wrong`: it says things at the wrong length. */
+function engine(clock: { ms: number }, rtf: number, opts: { failAt?: number; hangAt?: number; wrong?: boolean } = {}): FakeEngine {
+  const e: FakeEngine = {
+    calls: [],
+    disposed: 0,
+    model: { dispose: () => void e.disposed++ },
+    async generate(text: string) {
+      e.calls.push(text);
+      if (opts.failAt !== undefined && e.calls.length === opts.failAt) throw new Error("GPUDeviceLostError: lost");
+      // A crashed GPU process: the call is never answered.
+      if (opts.hangAt !== undefined && e.calls.length === opts.hangAt) return new Promise<never>(() => undefined);
+      const seconds = (text.length / 15) * (opts.wrong ? 1.5 : 1);
+      clock.ms += (seconds / rtf) * 1000;
+      return { audio: new Float32Array(Math.round(seconds * 100)).fill(0.1), sampling_rate: 100 };
+    },
+  };
+  return e;
+}
+
+function loopRig(opts: { held: boolean; gpuRtf: number; gpuFailAt?: number; gpuHangAt?: number; gpuWrong?: boolean; kept?: SpeedEntry | null }) {
+  const clock = { ms: 0 };
+  const cpu = engine(clock, 1);
+  const gpu = engine(clock, opts.gpuRtf, { failAt: opts.gpuFailAt, hangAt: opts.gpuHangAt, wrong: opts.gpuWrong });
+  const reopened: FakeEngine[] = [];
+  const msgs: FromWorker[] = [];
+  const opened: string[] = [];
+  const state = { held: opts.held, drops: 0, cpuOpened: true, watchdogs: [] as number[] };
+  const manifest: LoopManifest = { sha256: "m", runtimeSha256: "r", voices: { am_michael: "p" }, gpu: { bytes: BYTES } };
+  let loop: RenderLoop<LoopManifest>;
+  const deps: LoopDeps<LoopManifest> = {
+    loadVoice: async (_v, _p, openCpu) => {
+      state.cpuOpened = openCpu;
+      return { tts: openCpu ? cpu : null, manifest, kept: true };
+    },
+    openVoice: async (_m, backend) => {
+      opened.push(backend);
+      if (backend === "webgpu") return gpu;
+      const again = engine(clock, 1);
+      reopened.push(again);
+      return again;
+    },
+    gpuModelHeld: async () => state.held,
+    dropGpuModel: async () => {
+      state.drops++;
+      state.held = false;
+    },
+    hasGpu: async () => true,
+    post: (m) => void msgs.push(m),
+    flushRequests: () => undefined,
+    turn: () => Promise.resolve(),
+    // The watchdog fires on the next task: a line that answers (in microtasks) always wins the race.
+    sleep: (ms) => {
+      state.watchdogs.push(ms);
+      return new Promise((resolve) => setTimeout(resolve, 0));
+    },
+    now: () => clock.ms,
+  };
+  loop = new RenderLoop(deps);
+  const cues = ["The first line of the work.", "The second line, a little longer than the first.", "A third."].map((spoken, i) => ({ spoken, text: spoken, start: i, end: i + 1, pauseAfterMs: 0 }));
+  const run = () => loop.render({ type: "render", cues: cues as never, voices: ["am_michael", "am_michael", "am_michael"] as never, kept: opts.kept ?? null });
+  return { loop, run, msgs, opened, state, cpu, gpu, reopened, deps, manifest };
+}
+
+const cuesMade = (msgs: FromWorker[]) => msgs.filter((m) => m.type === "cue").map((m) => (m as { index: number }).index);
+
+describe("the render loop: the engine choice, as behaviour", () => {
+  it("never downloads or opens the graphics chip on its own: without its model it offers the size and makes on the processor", async () => {
+    const r = loopRig({ held: false, gpuRtf: 10 });
+    await r.run();
+    expect(r.opened).toEqual([]);
+    const speed = r.msgs.find((m) => m.type === "speed") as Extract<FromWorker, { type: "speed" }>;
+    expect(speed.choice.backend).toBe("wasm");
+    expect(speed.gpuOffer).toBe(BYTES);
+    expect(r.msgs.some((m) => m.type === "testing")).toBe(false);
+    expect(cuesMade(r.msgs)).toEqual([0, 1, 2]);
+    // Measured from its first line, after a warm-up phrase.
+    expect(r.cpu.calls[0]).toBe(WARM_UP);
+  });
+
+  it("a graphics chip that loses is let go and its model deleted from this device", async () => {
+    const r = loopRig({ held: true, gpuRtf: 0.5 });
+    await r.run();
+    expect(r.cpu.calls).toContain(BENCH_SENTENCE);
+    expect(r.gpu.calls).toContain(BENCH_SENTENCE);
+    expect(r.state.drops).toBe(1);
+    expect(r.gpu.disposed).toBe(1);
+    const speed = r.msgs.find((m) => m.type === "speed") as Extract<FromWorker, { type: "speed" }>;
+    expect(speed.choice.backend).toBe("wasm");
+    expect(speed.entry.gpuRtf).toBeCloseTo(0.5);
+    expect(cuesMade(r.msgs)).toEqual([0, 1, 2]);
+  });
+
+  it("one that says the sentence wrongly is refused and deleted, however fast", async () => {
+    const r = loopRig({ held: true, gpuRtf: 20, gpuWrong: true });
+    await r.run();
+    expect(r.state.drops).toBe(1);
+    expect((r.msgs.find((m) => m.type === "speed") as Extract<FromWorker, { type: "speed" }>).entry.gpuRtf).toBe(0);
+  });
+
+  it("one that wins makes the work; the processor's session is never let go while it runs (that breaks WebGPU)", async () => {
+    const r = loopRig({ held: true, gpuRtf: 10 });
+    await r.run();
+    const speed = r.msgs.find((m) => m.type === "speed") as Extract<FromWorker, { type: "speed" }>;
+    expect(speed.choice.backend).toBe("webgpu");
+    expect(r.state.drops).toBe(0);
+    expect(r.cpu.disposed).toBe(0);
+    expect(r.gpu.calls.filter((c) => c !== WARM_UP && c !== BENCH_SENTENCE)).toHaveLength(3);
+  });
+
+  const keptGpu: SpeedEntry = { v: 1, model: "m", runtime: "r", gpu: true, backend: "webgpu", rtf: 14, gpuRtf: 12 };
+
+  it("a later visit on a device that chose its graphics chip never opens the processor's session", async () => {
+    const r = loopRig({ held: true, gpuRtf: 10, kept: keptGpu });
+    await r.run();
+    expect(r.state.cpuOpened).toBe(false);
+    expect(r.opened).toEqual(["webgpu"]);
+    expect(r.cpu.calls).toEqual([]);
+    expect(r.msgs.some((m) => m.type === "testing")).toBe(false);
+    expect(cuesMade(r.msgs)).toEqual([0, 1, 2]);
+  });
+
+  it("a graphics chip the browser stops: this worker says where, and a fresh one carries on from that line on the processor, untested", async () => {
+    // Its calls: line 1, then line 2 fails.
+    const r = loopRig({ held: true, gpuRtf: 10, gpuFailAt: 2, kept: keptGpu });
+    await r.run();
+    expect(r.opened).toEqual(["webgpu"]);
+    const speeds = r.msgs.filter((m) => m.type === "speed") as Extract<FromWorker, { type: "speed" }>[];
+    expect(speeds.map((s) => s.choice.backend)).toEqual(["webgpu", "wasm"]);
+    expect(speeds[1]!.entry.gpu).toBe(false);
+    expect(cuesMade(r.msgs)).toEqual([0]);
+    const lost = r.msgs.at(-1) as Extract<FromWorker, { type: "lost" }>;
+    expect(lost.type).toBe("lost");
+    expect(lost.index).toBe(1);
+    expect(r.gpu.disposed).toBe(1);
+    // The fresh worker (a new loop, the same device): the processor from line 2, no test, no second session.
+    const again = loopRig({ held: true, gpuRtf: 10 });
+    await again.loop.render({ type: "render", cues: [{ spoken: "a", text: "a", start: 0, end: 1, pauseAfterMs: 0 }, { spoken: "The second line.", text: "b", start: 1, end: 2, pauseAfterMs: 0 }] as never, voices: ["am_michael", "am_michael"] as never, from: lost.index, kept: { ...lost.kept, model: "m", runtime: "r" } });
+    expect(again.msgs.some((m) => m.type === "testing")).toBe(false);
+    expect(again.opened).toEqual([]);
+    expect(cuesMade(again.msgs)).toEqual([1]);
+  });
+
+  it("a graphics chip that stops answering (a crashed GPU process) is treated as stopped after its watchdog", async () => {
+    const r = loopRig({ held: true, gpuRtf: 10, gpuHangAt: 2, kept: keptGpu });
+    await r.run();
+    expect(r.msgs.at(-1)?.type).toBe("lost");
+    expect(cuesMade(r.msgs)).toEqual([0]);
+    // Watchdogs only on the graphics chip's lines: five times real time for their words, never under 15 s.
+    expect(r.state.watchdogs).toEqual([15_000, 18_000]);
+    // main.ts starts the fresh worker on "lost", and ignores its warming.
+    const main = read("web/src/main.ts");
+    expect(main).toMatch(/if \(msg\.type === "lost"\) \{[\s\S]*?next\.postMessage\(\{ type: "render", cues, voices: cast\.voices, from: msg\.index, kept: msg\.kept \} satisfies ToWorker\);/);
+    expect(gpuWatchdogMs(Array.from({ length: 300 }, () => "w").join(" "))).toBe(600_000);
+  });
+
+  it("the kept choice with its model gone (cleared site data): the processor makes the work", async () => {
+    const r = loopRig({ held: false, gpuRtf: 10, kept: keptGpu });
+    await r.run();
+    expect(r.opened).toEqual(["wasm"]);
+    const speed = r.msgs.find((m) => m.type === "speed") as Extract<FromWorker, { type: "speed" }>;
+    expect(speed.choice.backend).toBe("wasm");
+    expect(cuesMade(r.msgs)).toEqual([0, 1, 2]);
+  });
+
+  it("the model arriving mid-render (the listener's key) is tested between two lines, never before it arrives", async () => {
+    const r = loopRig({ held: false, gpuRtf: 10 });
+    const post = r.deps.post;
+    r.deps.post = (m, t) => {
+      post(m, t);
+      if (m.type === "cue" && m.index === 0) {
+        r.state.held = true;
+        r.loop.onMessage({ type: "gpu" });
+      }
+    };
+    await r.run();
+    const kinds = r.msgs.map((m) => (m.type === "cue" ? `cue${m.index}` : m.type));
+    expect(kinds.indexOf("testing")).toBeGreaterThan(kinds.indexOf("cue0"));
+    expect(kinds.indexOf("testing")).toBeLessThan(kinds.indexOf("cue1"));
+    expect(r.opened).toEqual(["webgpu"]);
   });
 });

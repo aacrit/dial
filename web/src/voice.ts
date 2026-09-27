@@ -29,7 +29,11 @@ export interface VoiceManifest extends VoicePins, SizedManifest, FilePins {
 /** Whether the graphics chip's model is on this device (speed/gpu-model.ts downloads it, at the listener's choice). */
 export async function gpuModelHeld(m: VoiceManifest): Promise<boolean> {
   if (!m.gpu) return false;
-  return !!(await heldGpuModel(await caches.open(voiceCacheName(m)), { repo: m.repo, gpu: m.gpu }));
+  const cache = await caches.open(voiceCacheName(m));
+  if (await heldGpuModel(cache, { repo: m.repo, gpu: m.gpu })) return true;
+  // A copy kept under an older pin (a bumped model) is never used again: free its space.
+  await cache.delete(gpuModelKey({ repo: m.repo, gpu: m.gpu }));
+  return false;
 }
 
 /** Lets the graphics chip's model go from this device (it lost to the processor, or spoke wrongly, so it would only take space). */
@@ -42,7 +46,8 @@ export type VoiceProgress = (loaded: number, total: number, need: Need, missingV
 
 /** kept: every file was stored on this device; false when a write failed (for example, no space). */
 export interface LoadedVoice {
-  tts: KokoroTTS;
+  /** The processor's session; null when the caller will run on the graphics chip and asked for none. */
+  tts: KokoroTTS | null;
   manifest: VoiceManifest;
   kept: boolean;
 }
@@ -74,7 +79,7 @@ async function dropIfUnpinned(cache: Cache, key: string, pin: string): Promise<A
 }
 
 /** Loads the model, the runtime and exactly the voices in `wanted` (the work's cast), each checked against its pin. */
-export async function loadVoice(wanted: readonly string[], onProgress: VoiceProgress): Promise<LoadedVoice> {
+export async function loadVoice(wanted: readonly string[], onProgress: VoiceProgress, openCpu = true): Promise<LoadedVoice> {
   const manifestRes = await fetch("/voice/manifest.json");
   if (!manifestRes.ok) throw new Error(`voice manifest: ${manifestRes.status}`);
   const manifest = (await manifestRes.json()) as VoiceManifest;
@@ -179,7 +184,8 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
     if (!(await voices.match(voiceKey(id)))) throw new Error("QuotaExceededError: there is no room to keep the voice on this device");
   }
 
-  const tts = await openVoice(manifest, "wasm");
+  // The processor's session only when it is wanted: a device that runs on its graphics chip never holds both (T7).
+  const tts = openCpu ? await openVoice(manifest, "wasm") : null;
   // The runtime's .mjs is imported by the runtime itself while the model
   // loads; once the voice is ready, every byte in the total is in place.
   onProgress(total, total, need, missingVoices);

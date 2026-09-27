@@ -137,16 +137,15 @@ describe("web/privacy.html, claim by claim", () => {
   it("the speed test (T7) is measured in the tab and never sent; the graphics chip's voice downloads only at the listener's choice, from this site", () => {
     expect(text).toContain("How fast your device makes speech is measured in your browser tab, from the lines it makes and, where you choose to test your graphics chip, from one short sentence. The speed test's results are shown on the radio and never sent, not even as a count.");
     expect(text).toContain("Testing the graphics chip downloads a second copy of the voice from this site, its size shown before you choose; it is kept in cache storage like the first, and deleted again if the graphics chip does not make speech faster than the processor.");
-    const worker = read("web/src/narrate.worker.ts");
-    const test = worker.slice(worker.indexOf("async function hasGpu("), worker.indexOf("/** The last line this worker may make yet"));
+    const loop = read("web/src/speed/render-loop.ts");
     // Paired: the timing code sends nothing and keeps nothing; the page keeps the result (speed/store.ts), never sends it.
-    for (const [f, src] of [["bench.ts", read("web/src/bench.ts")], ["speed/backend.ts", read("web/src/speed/backend.ts")], ["speed/plan.ts", read("web/src/speed/plan.ts")], ["speed/pacer.ts", read("web/src/speed/pacer.ts")], ["speed/gauge.ts", read("web/src/speed/gauge.ts")], ["narrate.worker.ts speed test", test]]) {
+    for (const [f, src] of [["bench.ts", read("web/src/bench.ts")], ["speed/backend.ts", read("web/src/speed/backend.ts")], ["speed/plan.ts", read("web/src/speed/plan.ts")], ["speed/pacer.ts", read("web/src/speed/pacer.ts")], ["speed/gauge.ts", read("web/src/speed/gauge.ts")], ["speed/render-loop.ts", loop]]) {
       expect(src, f).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|sendBeacon|noteSend|Storage\b|indexedDB/);
     }
-    // The graphics chip's model: fetched only by gpu-model.ts, only from this origin, only when askGpu runs (the listener's key).
+    // The graphics chip's model: fetched only by gpu-model.ts, only from this origin, each part checked (tests/speed.test.ts runs it).
     const gpuModel = read("web/src/speed/gpu-model.ts");
-    expect([...gpuModel.matchAll(/fetch\(\s*([^,)]+)/g)].map((m) => m[1])).toEqual(['"/voice/manifest.json"']);
-    expect(gpuModel).toMatch(/stitchModel\(\{ repo: m\.repo, parts: gpu\.parts, sizes: m\.sizes, sha256: gpu\.sha256 \}/);
+    expect([...gpuModel.matchAll(/fetch\(\s*([^,)]+)/g)].map((m) => m[1])).toEqual(['"/voice/manifest.json"', "`/voice/models/${m.repo}/onnx/${gpu.parts[i]}`"]);
+    expect(gpuModel).toMatch(/if \(\(await deps\.sha256\(buf\)\) !== gpu\.partSha256\[i\]\) throw/);
     expect(read("web/src/main.ts")).toMatch(/speedGpu\.addEventListener\("click", \(\) => session\?\.pacer\?\.testGpu\(\)\);/);
     expect(read("web/src/speed/pacer.ts")).toMatch(/testGpu\(\): void \{\s*if \(this\.gpuAsked \|\| !\(this\.gpuBytes > 0\)\) return;\s*this\.gpuAsked = true;\s*this\.h\.hideAsk\(\);\s*this\.h\.askGpu\(\);/);
     // Kept with the pin it was checked against, answered to the runtime only while that pin is the manifest's, never fetched by the loader; dropped when it loses.
@@ -154,7 +153,8 @@ describe("web/privacy.html, claim by claim", () => {
     const files = read("web/src/voice-files.ts");
     expect(files).toMatch(/if \(m\.gpu && key === gpuModelKey\(\{ repo: m\.repo, gpu: m\.gpu \}\)\) \{\s*return \(await heldGpuModel\(cache, \{ repo: m\.repo, gpu: m\.gpu \}\)\) \?\? failingResponse\(/);
     expect(files).toMatch(/return hit && hit\.headers\.get\(GPU_PIN_HEADER\) === m\.gpu\.sha256 \? hit : undefined;/);
-    expect(worker).toMatch(/if \(!tested\.gpuTts\) await dropGpuModel\(manifest\);/);
+    // Deleted when it loses: tests/speed.test.ts "a graphics chip that loses" drives it.
+    expect(loop).toMatch(/if \(choice\.backend !== "webgpu"\) \{\s*await release\(gpuTts\);\s*gpuTts = null;\s*await deps\.dropGpuModel\(manifest\);/);
   });
 
   it("the narration is made on the device: the render worker only receives text and posts audio back, and the voice sits in cache storage", () => {
@@ -163,8 +163,7 @@ describe("web/privacy.html, claim by claim", () => {
     // Paired with the allowlist every fetch in web/src is checked against (tests/no-network.test.ts).
     expect(JSON.parse(read("privacy-allowlist.json")).sends).toEqual(["/e", "/feedback"]);
     expect(text).toContain("kept in your browser's cache storage");
-    const worker = read("web/src/narrate.worker.ts");
-    expect(worker).not.toMatch(/\bfetch\(/);
+    for (const f of ["narrate.worker.ts", "speed/render-loop.ts"]) expect(read(`web/src/${f}`), f).not.toMatch(/\bfetch\(/);
     expect(read("web/src/voice.ts")).toMatch(/caches\.open\(/);
     // tests/no-network.test.ts checks every fetch in web/src against privacy-allowlist.json.
   });

@@ -1,5 +1,7 @@
 // The no-stall pacer for a work made on this device (T7): it holds playback
-// until the plan (speed/plan.ts) says it will never catch the making, shows
+// until the plan (speed/plan.ts), at four fifths of the measured speed,
+// forecasts it will not catch the making (a forecast, not a promise: CoS
+// decision O words it "should not pause"), shows
 // the countdown and the speed gauge, offers a choice past two minutes (and
 // the graphics chip, where there is one to test), and, should the device
 // slow down anyway, holds cleanly at a line boundary ("Making the next
@@ -14,7 +16,7 @@
 
 import { WORDS_PER_MINUTE, countWords } from "../catalogue";
 import { measuredEntry, type Backend, type SpeedChoice, type SpeedEntry } from "./backend";
-import { GPU_FAILED_LINE, HOLD_LINE, MEASURING_LINE, MEASURING_SHORT, SHORT_LEAD_LINE, TESTING_LINE, askLine, countdownLine, gpuLoadingLine, gpuProgress, planSentence, valveCountdown } from "./copy";
+import { GPU_FAILED_LINE, GPU_LOST_LINE, HOLD_LINE, MEASURING_LINE, MEASURING_SHORT, SHORT_LEAD_LINE, TESTING_LINE, askLine, countdownLine, gpuLoadingLine, gpuNoRoomLine, gpuProgress, planSentence, valveCountdown, valveResuming } from "./copy";
 import type { Gauge } from "./gauge";
 import { MIN_LEAD_S, aheadLimit, branchFor, leadWait, nextRate, paceScale, planRate, refillLines, type PlanLine } from "./plan";
 
@@ -47,14 +49,18 @@ export interface PacerHooks {
   repaint: () => void;
   /** The device may make lines up to this index (chapter-ahead within the memory cap). */
   allow: (upTo: number) => void;
-  /** Asks the render worker for the graphics chip's model and its test. */
+  /** Downloads the graphics chip's model (the listener pressed its key); the page calls gpuLoading, gpuReady or gpuFailed. */
   askGpu: () => void;
+  /** Tells the render worker the model is here: it tests it between two lines, a pause in the making. */
+  sendGpu: () => void;
   /** Keeps this device's measured speed on this device (speed/store.ts). */
   keep: (entry: SpeedEntry) => void;
   /** Pause pressed while playback waits: the key reads Resume while the listener holds it. */
   setPauseLabel: (paused: boolean) => void;
   /** Seconds, for measuring the making. */
   now: () => number;
+  /** Playback runs again after a hold: the page says it is on air again. */
+  resumed: () => void;
 }
 
 type Mode = "loading" | "wait" | "hold" | "playing" | "off";
@@ -65,6 +71,8 @@ const GO_S = 0.25;
 const CAUGHT_S = 0.05;
 /** The measured speed is kept after this many lines, and again when the work is made. */
 const KEEP_EVERY = 10;
+/** While playing, the graphics chip is tested (the making pauses for it, about 7 to 11 s here) only with this much made ahead of the listener. */
+export const TEST_AHEAD_S = 30;
 
 export class Pacer {
   private mode: Mode = "loading";
@@ -84,10 +92,15 @@ export class Pacer {
   private choiceShown = false;
   private gpuBytes = 0;
   private gpuAsked = false;
+  /** The graphics chip was offered once this visit: not again on a later hold. */
+  private gpuOffered = false;
+  /** Its model is here, waiting for a safe moment to be tested. */
+  private gpuPending = false;
   private gpuLine = "";
   private firstWait = 0;
   private allowed = Infinity;
   private text: string | null = null;
+  private shortText: string | null = null;
   private readonly estimates: number[];
 
   constructor(private readonly h: PacerHooks) {
@@ -99,7 +112,8 @@ export class Pacer {
   /** The line under the status while playback waits (the countdown), else null. */
   progressLine(): string | null {
     // The graphics chip's voice arriving, beside the countdown, or alone once playing.
-    if (this.gpuLine) return this.text ? `${this.text} ${this.gpuLine}` : this.gpuLine;
+    // Beside the download, the countdown keeps only its time, so the line fits the radio's panel on a small screen.
+    if (this.gpuLine) return this.text ? `${this.shortText ?? this.text} ${this.gpuLine}` : this.gpuLine;
     return this.text;
   }
 
@@ -118,6 +132,8 @@ export class Pacer {
   /** The engine in use (after loading, a test, or a graphics chip the browser stopped) and what to keep. */
   speed(choice: SpeedChoice, entry: SpeedEntry, gpuOffer: number): void {
     const switched = choice.backend !== this.backend;
+    // The browser stopped the graphics chip (not a test's result): say so; the plan follows the processor's speed.
+    if (switched && this.backend === "webgpu" && !choice.trials.length && this.mode !== "loading") this.h.announce(GPU_LOST_LINE);
     this.choice = choice;
     this.backend = choice.backend;
     this.entry = entry;
@@ -166,6 +182,7 @@ export class Pacer {
     this.h.gauge.set(this.measured);
     if (this.lines_ % KEEP_EVERY === 1) this.keepMeasured();
     this.pace();
+    this.maybeSendGpu();
     if (!this.waiting || this.mode === "loading") return;
     if (first) {
       // The first line measured the device: now the plan has a speed.
@@ -187,6 +204,7 @@ export class Pacer {
   tick(): void {
     if (this.mode === "off" || this.mode === "loading") return;
     this.pace();
+    this.maybeSendGpu();
     if (this.mode === "wait" || this.mode === "hold") return this.evaluate();
     const s = this.h.sched;
     if (!this.renderDone && this.h.audio.state === "running" && s.made < this.h.cues.length && s.position() >= s.madeSeconds - CAUGHT_S) this.hold();
@@ -231,12 +249,25 @@ export class Pacer {
     this.h.repaint();
   }
 
-  gpuFailed(): void {
+  /** Its model is kept on this device: tested at the next safe moment. */
+  gpuReady(): void {
+    this.gpuPending = true;
+    this.maybeSendGpu();
+  }
+
+  /** It could not be downloaded or kept; `noRoom`: there was no room for it, and the listener is told the fix. */
+  gpuFailed(noRoom = false): void {
+    const bytes = this.gpuBytes;
     this.gpuBytes = 0;
     this.gpuLine = "";
     if (this.mode === "off") return;
-    this.h.announce(GPU_FAILED_LINE);
+    this.h.announce(noRoom ? gpuNoRoomLine(bytes) : GPU_FAILED_LINE);
     this.h.repaint();
+  }
+
+  /** A fresh render worker carries on (the graphics chip stopped): it hears the current allowance at the next tick. */
+  restarted(): void {
+    this.allowed = Infinity;
   }
 
   dispose(): void {
@@ -275,20 +306,27 @@ export class Pacer {
     return leadWait(lines, s.made, pos, planRate(this.measured), this.h.now() - this.lastCueAt);
   }
 
-  private options(forChoice: boolean): AskOptions {
-    const choice = forChoice || this.choiceShown;
-    return { recording: choice && this.h.hasRecording(), anyway: choice, gpuBytes: this.gpuAsked ? 0 : this.gpuBytes };
-  }
-
-  /** Past two minutes, the choice; with a real countdown, the graphics chip where there is one to test. */
+  /** Past two minutes, the choice; with a real countdown, the graphics chip where there is one to test, once a visit. */
   private offer(wait: number): void {
     if (!Number.isFinite(wait)) return;
     const branch = branchFor(wait);
     const choice = branch === "choice" && !this.mayPause && !this.choiceShown;
-    const gpu = branch !== "short" && this.gpuBytes > 0 && !this.gpuAsked;
+    const gpu = branch !== "short" && this.gpuBytes > 0 && !this.gpuAsked && !this.gpuOffered;
     if (!choice && !gpu) return;
     if (choice) this.choiceShown = true;
-    this.h.showAsk(askLine({ wait, choice: this.choiceShown, hasRecording: this.h.hasRecording(), gpuBytes: gpu ? this.gpuBytes : 0 }), this.options(choice));
+    if (gpu) this.gpuOffered = true;
+    const gpuBytes = gpu ? this.gpuBytes : 0;
+    const recording = this.choiceShown && this.h.hasRecording();
+    this.h.showAsk(askLine({ wait, choice: this.choiceShown, hasRecording: this.h.hasRecording(), gpuBytes }), { recording, anyway: this.choiceShown, gpuBytes });
+  }
+
+  /** The graphics chip's model is tested only while playback waits, or with TEST_AHEAD_S made ahead, so the pause in the making is never heard. */
+  private maybeSendGpu(): void {
+    if (!this.gpuPending || this.mode === "off" || this.mode === "loading") return;
+    const s = this.h.sched;
+    if (!this.waiting && s.madeSeconds - s.position() < TEST_AHEAD_S) return;
+    this.gpuPending = false;
+    this.h.sendGpu();
   }
 
   /** What is really made ahead of the listener covers the first MIN_LEAD_S (or the rest of the work): never started on an estimate alone. */
@@ -308,9 +346,12 @@ export class Pacer {
     // The plan says go but the lines are not here yet (the device is running late): no figure, just what it is doing.
     const late = known && wait < GO_S;
     const counting = known && !late && (this.mode === "hold" || branchFor(this.firstWait) !== "short");
-    this.text = counting ? countdownLine(wait) : late && this.mode === "hold" ? HOLD_LINE : known ? SHORT_LEAD_LINE : MEASURING_SHORT;
+    // A hold says only what it is doing (CoS decision O); the valve counts it down.
+    const holding = this.mode === "hold";
+    this.text = holding ? HOLD_LINE : counting ? countdownLine(wait, this.mayPause) : known ? SHORT_LEAD_LINE : MEASURING_SHORT;
+    this.shortText = !holding && counting ? countdownLine(wait, true) : null;
     const share = this.firstWait > 0 && known && Number.isFinite(this.firstWait) ? Math.max(0.08, Math.min(1, 1 - wait / this.firstWait)) : 0.08;
-    this.h.setValve(share, counting ? valveCountdown(wait) : known ? "Warming" : "Measuring");
+    this.h.setValve(share, counting ? (holding ? valveResuming(wait) : valveCountdown(wait)) : holding ? "Making" : known ? "Warming" : "Measuring");
     this.h.repaint();
   }
 
@@ -326,7 +367,9 @@ export class Pacer {
 
   private go(): void {
     if (this.mode === "playing" || this.mode === "off") return;
+    const fromHold = this.mode === "hold";
     this.mode = "playing";
+    if (fromHold) this.h.resumed();
     this.text = null;
     this.h.hideAsk();
     this.h.setValve(1, "Voice ready");

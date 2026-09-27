@@ -64,6 +64,7 @@ import { mountSealWidget } from "./seal-widget";
 import { mountGauge } from "./speed/gauge";
 import { gpuButton } from "./speed/copy";
 import type { FromGpuDownload } from "./speed/gpu-download.worker";
+import { gpuOfferAllowed, type DeviceHints } from "./speed/gpu-model";
 import { Pacer, type AskOptions } from "./speed/pacer";
 import { keepSpeed, readSpeed } from "./speed/store";
 
@@ -763,7 +764,7 @@ function setupRadio(): void {
         showAsk: (question, options) => mine() && showSpeedAsk(question, options),
         hideAsk: hideSpeedAsk,
         repaint: () => mine() && paintProgress(),
-        allow: (upTo) => worker.postMessage({ type: "allow", upTo } satisfies ToWorker),
+        allow: (upTo) => own.worker?.postMessage({ type: "allow", upTo } satisfies ToWorker),
         // The page downloads the graphics chip's model while the worker keeps making lines, then the worker tests it.
         askGpu: () => {
           const dl = new Worker(new URL("./speed/gpu-download.worker.ts", import.meta.url), { type: "module" });
@@ -778,9 +779,10 @@ function setupRadio(): void {
             if (m.type === "progress") return mine() && own.pacer?.gpuLoading(m.loaded, m.total);
             end();
             if (!mine()) return;
-            if (m.type === "done") worker.postMessage({ type: "gpu" } satisfies ToWorker);
+            // Kept: the pacer sends it to the render worker at a safe moment (sendGpu).
+            if (m.type === "done") own.pacer?.gpuReady();
             // Not fetched, not matching its pin, or no room to keep it: the processor carries on.
-            else own.pacer?.gpuFailed();
+            else own.pacer?.gpuFailed(/NoRoom|Quota/i.test(m.message));
           };
           dl.onerror = () => {
             end();
@@ -788,12 +790,15 @@ function setupRadio(): void {
           };
           dl.postMessage("start");
         },
+        sendGpu: () => own.worker?.postMessage({ type: "gpu" } satisfies ToWorker),
         // Kept on this device only, so the speed test runs once (speed/store.ts); never sent.
         keep: keepSpeed,
         setPauseLabel: (paused) => {
           pause.textContent = paused ? "Resume" : "Pause";
         },
         now: () => performance.now() / 1000,
+        // After "Making the next line…", the status says it is on air again.
+        resumed: () => mine() && announce(onAirLine(work.title, own.kept)),
       });
     }
     let warmingStated = false;
@@ -988,11 +993,33 @@ function setupRadio(): void {
       measureStrip(own);
     }
 
-    worker!.onmessage = (event: MessageEvent<FromWorker>) => {
+    /** A fresh worker carrying on after the graphics chip stopped: its warming and ready are not the broadcast's. */
+    let restarting = false;
+    const onWorker = (event: MessageEvent<FromWorker>) => {
       // The worker's own requests go to the Seal's log, whatever the broadcast is doing.
       if (event.data.type === "requests") return recordEntries(event.data.entries);
       if (session !== own || !own.live) return;
       const msg = event.data;
+      if (restarting && (msg.type === "loading" || msg.type === "ready")) {
+        if (msg.type === "ready") restarting = false;
+        return;
+      }
+      if (msg.type === "lost") {
+        // The browser stopped the graphics chip: that worker's runtime cannot be trusted any more, so a fresh
+        // worker carries on on the processor from the line it was making (T7).
+        const old = own.worker!;
+        old.onmessage = null;
+        old.onerror = null;
+        old.terminate();
+        restarting = true;
+        const next = new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
+        own.worker = next;
+        next.onmessage = onWorker;
+        next.onerror = onWorkerError;
+        own.pacer?.restarted();
+        next.postMessage({ type: "render", cues, voices: cast.voices, from: msg.index, kept: msg.kept } satisfies ToWorker);
+        return;
+      }
       if (msg.type === "loading") {
         if (!warmingStated) {
           warmingStated = true;
@@ -1022,7 +1049,8 @@ function setupRadio(): void {
       } else if (msg.type === "testing") {
         own.pacer?.testing();
       } else if (msg.type === "speed") {
-        own.pacer?.speed(msg.choice, msg.entry, msg.gpuOffer);
+        // The graphics chip's model is offered only on a device that can hold it, never on a phone (speed/gpu-model.ts).
+        own.pacer?.speed(msg.choice, msg.entry, gpuOfferAllowed(navigator as DeviceHints, matchMedia("(pointer: coarse) and (max-width: 900px)").matches) ? msg.gpuOffer : 0);
       } else if (msg.type === "cue") {
         const cue = cues[msg.index]!;
         own.wav ??= new WavChunks(msg.sampleRate);
@@ -1044,9 +1072,9 @@ function setupRadio(): void {
         paintTransport();
         paintRibbon();
       } else if (msg.type === "done") {
-        worker!.onmessage = null;
-        worker!.onerror = null;
-        worker!.terminate();
+        own.worker!.onmessage = null;
+        own.worker!.onerror = null;
+        own.worker!.terminate();
         own.renderDone = true;
         // One object URL at a time: the previous file's is released first.
         if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -1077,10 +1105,12 @@ function setupRadio(): void {
       }
     };
     // A worker that fails to start or throws outside its own handler.
-    worker!.onerror = (event) => {
+    const onWorkerError = (event: ErrorEvent) => {
       event.preventDefault();
       stopped(stopLine(event.message || ""));
     };
+    worker!.onmessage = onWorker;
+    worker!.onerror = onWorkerError;
     worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length, kept: readSpeed() } satisfies ToWorker);
   };
 

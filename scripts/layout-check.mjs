@@ -130,8 +130,8 @@ function stubMadeHere() {
   set("#speed-gauge .gv", "0.94× real time");
   set("#speed-gauge .ge", "Graphics chip");
   set("#broadcast-status", "This device makes speech at 0.94× real time on this device's processor (1.5× on its graphics chip), as measured on an earlier listen. Dial plans on 0.75× to be safe.");
-  set("#broadcast-progress", "Starting in 21:53 so it never pauses.");
-  set("#speed-q", "To play without a pause, this device would make the first 21:53 before starting. Dial's own recording can play now instead. Dial can also test this device's graphics chip, which may be faster. It needs its own copy of the voice, about 326 MB, downloaded once and kept on this device.");
+  set("#broadcast-progress", "Starting in 21:53. Planned at four fifths of this device's speed, so it should not pause.");
+  set("#speed-q", "To play without a pause, this device needs 21:53 of making before it starts. Dial's own recording can play now instead. Dial can also test this device's graphics chip, which may be faster. It needs its own copy of the voice, about 326 MB, downloaded once and kept on this device.");
   set("#speed-gpu", "Test the graphics chip (about 326 MB)");
   set("#t-el", "00:00");
   set("#t-total", "about 20:12");

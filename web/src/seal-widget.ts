@@ -3,9 +3,9 @@
 // sentence, today's counts from this tab, the counts switch, and "Show every
 // request" collapsed. Everything it says comes from this tab's request log
 // (request-recorder.ts) and the switch (telemetry.ts). It sends nothing of its
-// own, and counts nothing. The speed test moved out with the page: it
-// belongs to the radio's gauge (T7), whose engine is bench.ts and the
-// render worker's "bench".
+// own, and counts nothing. The speed test moved out with the page: it is
+// the radio's gauge now (T7, speed/gauge.ts), measured by the render worker
+// (speed/render-loop.ts).
 
 import { eyePath } from "./device/needle";
 import { motion } from "./device/reduced-motion";

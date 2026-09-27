@@ -433,15 +433,17 @@ describe("speed of this device: processor only, results never sent", () => {
 
   it("no send in the test's path: the render worker's speed test posts only timings and counts nothing", () => {
     const worker = read("web/src/narrate.worker.ts");
-    const testFn = worker.slice(worker.indexOf("async function hasGpu("), worker.indexOf("/** The last line this worker may make yet"));
-    for (const [name, src] of [["bench.ts", read("web/src/bench.ts")], ["speed test", testFn]] as const) {
+    const loop = read("web/src/speed/render-loop.ts");
+    const testFn = loop.slice(loop.indexOf("async function timeSentence("), loop.indexOf("export class RenderLoop"));
+    for (const [name, src] of [["bench.ts", read("web/src/bench.ts")], ["speed test", testFn], ["narrate.worker.ts", worker]] as const) {
       expect(src, name).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|sendBeacon|\/e\b|noteSend/);
     }
     // It times the one fixed sentence on each engine it compares, with the voice already loaded.
-    expect(testFn).toMatch(/await tts\.generate\(BENCH_SENTENCE, \{ voice \}\)/);
-    // The worker never loads the page's rendering code or the voice table, and the sentence has its own module.
+    expect(testFn).toMatch(/await say\(tts, BENCH_SENTENCE, voice\)/);
+    // The worker never loads the page's rendering code or the voice table (types only), and the sentence has its own module.
     expect(worker).not.toMatch(/^import \{[^}]*\} from "\.\/(engine\/cast|bench|render)";$/m);
-    expect(worker).toContain('import { BENCH_SENTENCE } from "./bench-sentence";');
+    expect(loop).not.toMatch(/^import \{[^}]*\} from "\.\.\/(engine\/cast|bench|render)";$/m);
+    expect(loop).toContain('import { BENCH_SENTENCE } from "../bench-sentence";');
   });
 
   it("T7's gauge fills the slot on the glass, from the render worker's speed and every line made; the Seal widget starts nothing", () => {

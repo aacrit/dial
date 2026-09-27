@@ -266,10 +266,10 @@ describe("the cast's voices are staged and pinned", () => {
   });
 
   it("the worker speaks each cue in its cast voice, and only a pinned one", () => {
-    const worker = read("web/src/narrate.worker.ts");
+    const worker = read("web/src/speed/render-loop.ts");
     // On whichever engine the speed test chose (T7): the same cue, the same voice.
-    expect(worker).toMatch(/engine\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
-    expect(worker).not.toMatch(/generate\(cues\[i\]!\.spoken, \{ voice, /);
+    expect(worker).toMatch(/engine\.generate\(cues\[i\]!\.spoken, \{ voice: voice as never \}\)/);
+    expect(worker).not.toMatch(/generate\(cues\[i\]!\.spoken, \{ voice: voice as never, /);
     expect(worker).toMatch(/Object\.hasOwn\(manifest\.voices, voice\)/);
     expect(worker).not.toMatch(/manifest\.narrator/);
     expect(read("web/src/main.ts")).toContain('worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length, kept: readSpeed() } satisfies ToWorker);');
@@ -466,7 +466,7 @@ describe("T2b review: the size shown is what actually downloads", () => {
   });
 
   it("the worker loads, and the loader fetches and keeps, only the voices the work's cast uses", () => {
-    expect(read("web/src/narrate.worker.ts")).toContain("await loadVoice([...new Set(voices)],");
+    expect(read("web/src/speed/render-loop.ts")).toContain("await d.loadVoice([...new Set(voices)],");
     const voice = read("web/src/voice.ts");
     expect(voice).toMatch(/for \(const id of cast\) \{\s*const pin = manifest\.voices\[id\]!;\s*if \(heldVoices\.has\(id\)\) continue;/);
     expect(voice).not.toMatch(/Object\.entries\(manifest\.voices\)/);

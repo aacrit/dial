@@ -164,10 +164,16 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
 
   const gpuBuf = await cached(GPU_MODEL.file, GPU_MODEL.sha256);
   const gpuParts = [];
+  // Each part's SHA-256, from the whole's checked bytes: the page streams the
+  // parts into Cache Storage one at a time, checking each against its pin, so
+  // it never holds the 326 MB model in memory (speed/gpu-model.ts).
+  const gpuPartSha256 = [];
   for (let i = 0, n = 0; i < gpuBuf.length; i += PART_BYTES, n++) {
     const name = `model.part${n}`;
-    writeFileSync(path.join(modelDir, "onnx", name), gpuBuf.subarray(i, i + PART_BYTES));
+    const part = gpuBuf.subarray(i, i + PART_BYTES);
+    writeFileSync(path.join(modelDir, "onnx", name), part);
     gpuParts.push(name);
+    gpuPartSha256.push(sha256(part));
   }
 
   mkdirSync(path.join(voiceOut, "voices"), { recursive: true });
@@ -199,7 +205,7 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
         model: "onnx/model_quantized.onnx",
         sha256: MODEL_FILES["onnx/model_quantized.onnx"],
         parts,
-        gpu: { model: GPU_MODEL.file, sha256: GPU_MODEL.sha256, parts: gpuParts, bytes: gpuBuf.length },
+        gpu: { model: GPU_MODEL.file, sha256: GPU_MODEL.sha256, parts: gpuParts, partSha256: gpuPartSha256, bytes: gpuBuf.length },
         files: modelFilePins(),
         voices: VOICES,
         runtime: ORT_WASM,

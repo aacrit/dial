@@ -67,7 +67,9 @@ describe("the download is built from 16-bit chunks, never a whole-work Float32 c
     for (const release of ["s.worker.onmessage = null", "s.worker.onerror = null", "s.audio.onstatechange = null", "s.wav = null"]) {
       expect(offAir).toContain(release);
     }
-    expect(main).toMatch(/msg\.type === "done"\) \{\s*worker!\.onmessage = null;\s*worker!\.onerror = null;/);
+    // own.worker: after a stopped graphics chip it is the fresh worker that carries on (T7).
+    expect(main).toMatch(/msg\.type === "done"\) \{\s*own\.worker!\.onmessage = null;\s*own\.worker!\.onerror = null;/);
+    expect(main).toMatch(/const old = own\.worker!;\s*old\.onmessage = null;\s*old\.onerror = null;\s*old\.terminate\(\);/);
   });
 });
 

@@ -39,6 +39,12 @@ export function gaugeName(rtf: number, backend: Backend): string {
   return `Speed of this device: ${figure}, on ${engineWords(backend)}`;
 }
 
+/** The meter's aria-valuenow: the speed on the gauge's scale, pinned at its ends (the text carries the real figure). */
+export function gaugeValueNow(rtf: number): string {
+  const x = Math.max(0, Math.min(GAUGE_MAX, Number.isFinite(rtf) ? rtf : 0));
+  return String(Math.round(x * 100) / 100);
+}
+
 /** The needle's angle for a speed: -60° at 0, +60° at 4×, pinned at both ends. */
 export function needleAngle(rtf: number): number {
   const x = Math.max(0, Math.min(GAUGE_MAX, Number.isFinite(rtf) ? rtf : 0));
@@ -56,7 +62,11 @@ export interface Gauge {
 /** Mounts the gauge in its slot on the glass (index.html #speed-gauge). */
 export function mountGauge(slot: HTMLElement): Gauge {
   slot.innerHTML = `${gaugeSvg(0)}<span class="il gv" data-numeral></span><span class="il ge"></span>`;
-  slot.setAttribute("role", "img");
+  // A meter, like the Voice meter: its value is the measured speed on the gauge's 0 to 4 scale, its text says it in words.
+  slot.setAttribute("role", "meter");
+  slot.setAttribute("aria-label", "Speed of this device");
+  slot.setAttribute("aria-valuemin", "0");
+  slot.setAttribute("aria-valuemax", String(GAUGE_MAX));
   const needle = slot.querySelector<SVGLineElement>(".g-nd")!;
   const value = slot.querySelector<HTMLElement>(".gv")!;
   const engine = slot.querySelector<HTMLElement>(".ge")!;
@@ -76,7 +86,8 @@ export function mountGauge(slot: HTMLElement): Gauge {
   const paint = () => {
     value.textContent = gaugeReadout(rtf);
     engine.textContent = engineLabel(backend);
-    slot.setAttribute("aria-label", gaugeName(rtf, backend));
+    slot.setAttribute("aria-valuenow", gaugeValueNow(rtf));
+    slot.setAttribute("aria-valuetext", gaugeName(rtf, backend));
     spring.to(needleAngle(rtf));
     if (motion.reduce || slot.hidden) {
       spring.snap();
