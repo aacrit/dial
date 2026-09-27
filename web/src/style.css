@@ -574,6 +574,15 @@ body[data-on-air="true"] .dw-needle .nd-cap {
   color: var(--color-cream-muted);
 }
 
+/* "Or make it on this device": a small secondary link under Tune in, never its peer. */
+.tunein .make-here {
+  font-size: 0.84rem;
+  flex-basis: 100%;
+  justify-content: flex-start;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .onair-panel {
   display: grid;
   gap: 10px;

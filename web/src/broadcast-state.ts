@@ -49,3 +49,17 @@ export function wavName(station: string, title: string): string {
     .replace(/^-|-$/g, "");
   return `dial-514-${station}-${slug}.wav`;
 }
+
+/** Where a broadcast's audio comes from: Dial's prepared recording, or made on this device. */
+export type ListenKind = "prepared" | "made";
+
+/**
+ * chapter_rendered, the success event, once per listen (founder, G2 round
+ * 1): a work made on this device counts when its last line is made; Dial's
+ * prepared recording counts when the listen reaches its end. Never both,
+ * and never twice: `sent` is whether this listen has already counted.
+ */
+export function countsAsRendered(kind: ListenKind, moment: "all-made" | "ended", sent: boolean): boolean {
+  if (sent) return false;
+  return kind === "made" ? moment === "all-made" : moment === "ended";
+}

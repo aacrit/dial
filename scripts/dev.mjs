@@ -7,11 +7,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveBinPath } from "./lib/run-bin.mjs";
 import { stage as stageVoice } from "./fetch-voice.mjs";
+import { stage as stageRecordings } from "./fetch-recordings.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const webDir = path.join(repoRoot, "web");
 
 await stageVoice();
+await stageRecordings();
 
 const children = [
   spawn(process.execPath, [resolveBinPath("vite", "vite")], { cwd: webDir, stdio: "inherit", shell: false }),

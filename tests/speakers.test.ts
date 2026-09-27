@@ -270,7 +270,7 @@ describe("the cast's voices are staged and pinned", () => {
     expect(worker).toMatch(/tts\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
     expect(worker).toMatch(/Object\.hasOwn\(manifest\.voices, voice\)/);
     expect(worker).not.toMatch(/manifest\.narrator/);
-    expect(read("web/src/main.ts")).toContain('worker.postMessage({ type: "render", cues, voices: cast.voices } satisfies ToWorker);');
+    expect(read("web/src/main.ts")).toContain('worker!.postMessage({ type: "render", cues, voices: cast.voices } satisfies ToWorker);');
   });
 });
 

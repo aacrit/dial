@@ -61,13 +61,13 @@ describe("the download is built from 16-bit chunks, never a whole-work Float32 c
 
   it("the page keeps no Float32 copy or whole-work buffer, and lets go of the chunks and the worker's handlers", () => {
     expect(main).not.toMatch(/assemble\(|encodeWav\(|rendered\.push/);
-    expect(main).toContain("own.wav.add(msg.audio, cue.pauseAfterMs);");
+    expect(main).toContain("own.wav.add(samples, cue.pauseAfterMs);");
     expect(main).toMatch(/new Blob\(own\.wav\.parts\(\), \{ type: "audio\/wav" \}\)[\s\S]*?own\.wav = null;/);
     const offAir = block(main, "const offAir = () => {")!;
     for (const release of ["s.worker.onmessage = null", "s.worker.onerror = null", "s.audio.onstatechange = null", "s.wav = null"]) {
       expect(offAir).toContain(release);
     }
-    expect(main).toMatch(/msg\.type === "done"\) \{\s*worker\.onmessage = null;\s*worker\.onerror = null;/);
+    expect(main).toMatch(/msg\.type === "done"\) \{\s*worker!\.onmessage = null;\s*worker!\.onerror = null;/);
   });
 });
 
@@ -111,11 +111,14 @@ describe("the live region announces state changes only", () => {
 
   it("a new cue or a new line repaints the progress, never the announcement (except the first line going on air)", () => {
     const cue = /msg\.type === "cue"\) \{([\s\S]*?)\} else if \(msg\.type === "done"\)/.exec(main)![1]!;
-    expect(cue).toContain("paintProgress()");
-    expect(cue).not.toContain("announce(");
+    expect(cue.trim()).toBe("schedule(msg.index, msg.audio, msg.sampleRate);");
+    // Every line, made here or fed from Dial's recording, is scheduled by schedule(), which repaints the progress only.
+    const schedule = block(main, "const schedule = (index: number, samples: Float32Array<ArrayBuffer>, sampleRate: number) => {", 4)!;
+    expect(schedule).toContain("paintProgress()");
+    expect(schedule).not.toContain("announce(");
     const follow = block(main, "const follow = () => {", 4)!;
     expect([...follow.matchAll(/announce\(/g)].length).toBe(1);
-    expect(follow).toMatch(/if \(own\.line < 0 && audio\.state === "running"\) announce\(onAirLine/);
+    expect(follow).toMatch(/if \(own\.line < 0 && audio\.state === "running"\) announce\(rec \? preparedOnAirLine\(work\.translator\) : onAirLine/);
   });
 
   it("the progress line names the work, the heard line and how far it is made, and says Paused when paused", () => {
@@ -131,7 +134,8 @@ describe("tuning away while a work is on air", () => {
     const offAir = block(main, "const offAir = () => {")!;
     expect(offAir).toContain("hideAsk();");
     const done = /msg\.type === "done"\) \{([\s\S]*?)\n {6}\} else \{/.exec(main)![1]!;
-    expect(done).toContain("hideAsk();");
+    expect(done).toContain("allMade();");
+    expect(block(main, "const allMade = () => {", 4)).toContain("hideAsk();");
     const hideAsk = block(main, "const hideAsk = () => {")!;
     expect(hideAsk).toMatch(/rescueFocus\(askYes, askNo\);\s*ask\.hidden = true;/);
   });
@@ -152,7 +156,7 @@ describe("tuning away while a work is on air", () => {
     expect(switchQuestion("the Meditations", "Crito")).toBe("Stop the Meditations and tune in to Crito? The Meditations' recording so far will be lost.");
     expect(main).not.toMatch(/\bconfirm\(/);
     expect(main).toMatch(
-      /if \(s\?\.live && s\.work !== work && !s\.renderDone\) \{\s*pending = work;\s*askQ\.textContent = switchQuestion\(s\.work\.called, work\.called\);\s*ask\.hidden = false;/,
+      /if \(s\?\.live && s\.work !== work && s\.kind === "made" && !s\.renderDone\) \{\s*pending = \{ work, kind \};\s*askQ\.textContent = switchQuestion\(s\.work\.called, work\.called\);\s*ask\.hidden = false;/,
     );
   });
 

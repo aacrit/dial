@@ -17,12 +17,23 @@
       <section class="card">
         <h2>What stays on your device</h2>
         <p>
-          The narration is made in your browser tab. The voice, its runtime
-          and the text are downloaded from this site, and the recording is
-          made from them on your device. The words and the audio are never
+          When a work is made on your device, the narration is made in your
+          browser tab. The voice, its runtime and the text are downloaded
+          from this site, and the recording is made from them on your device. The words and the audio are never
           sent anywhere; the only things this page sends are the daily counts
           and any feedback you choose to send, described below. The voice is kept in your browser's cache storage so
           it downloads only once; clearing this site's data removes it.
+        </p>
+      </section>
+
+      <section class="card" id="prepared-recordings">
+        <h2>Recordings Dial made in advance</h2>
+        <p>
+          A work with a recording Dial made in advance plays that recording.
+          It is downloaded from this site, a part at a time as you listen,
+          and Dial keeps it on your device only if you save the work for
+          offline. Nothing is made or sent while it plays; when you reach
+          the end, the daily count of finished listens goes up by one.
         </p>
       </section>
 
@@ -31,7 +42,9 @@
         <p>
           "Save for offline" keeps a work's text, the voice it needs and this
           site's own page files in your browser's cache storage on this
-          device, so the work plays with no connection. Saving only downloads
+          device, so the work plays with no connection. For a work with a
+          recording Dial made in advance, it keeps that recording instead of
+          the voice. Saving only downloads
           this site's own files: nothing about what you save is sent. An
           offline helper (a service worker) hands those files to the page
           when there is no connection. It never stores the daily counts or
@@ -40,7 +53,7 @@
           list them.
         </p>
         <p>
-          Remove deletes that work's text and any voice no other saved work
+          Remove deletes that work's text, its saved recording, and any voice no other saved work
           uses. The voice model stays, because every work uses it; clearing
           this site's data removes everything. On the first save, Dial asks
           the browser to keep saved works (persistent storage); if the

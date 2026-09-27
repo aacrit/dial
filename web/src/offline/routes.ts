@@ -53,19 +53,24 @@ export function pinsOf(m: unknown): VoicePinSet | null {
 }
 
 /**
- * The offline-compatibility key: a hash (FNV-1a, 32 bit) of the voice pins
- * and the casting rule's version. The helper compiles its build's key in
+ * The offline-compatibility key: a hash (FNV-1a, 32 bit) of the voice pins,
+ * the casting rule's version and the prepared recordings' pins (each work's
+ * timing index SHA-256; none, and the key is what it was before T5). The helper compiles its build's key in
  * (sw.ts); the page compiles its own (vite.config.ts). A work shows "Saved"
  * only when the two match: then the helper that answers offline serves the
  * same voice and the same cast the page would use. Null pins give no key.
  */
-export function offlineKey(pins: VoicePinSet | null, castVersion: string): string | null {
+export function offlineKey(pins: VoicePinSet | null, castVersion: string, recordings: Readonly<Record<string, string>> = {}): string | null {
   if (!pins) return null;
   const voices = Object.keys(pins.voices)
     .sort()
     .map((id) => `${id}=${pins.voices[id]}`)
     .join(",");
-  const text = `model=${pins.sha256};runtime=${pins.runtimeSha256};voices=${voices};cast=${castVersion}`;
+  const recorded = Object.keys(recordings)
+    .sort()
+    .map((slug) => `${slug}=${recordings[slug]}`)
+    .join(",");
+  const text = `model=${pins.sha256};runtime=${pins.runtimeSha256};voices=${voices};cast=${castVersion}${recorded ? `;recordings=${recorded}` : ""}`;
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);
@@ -96,7 +101,7 @@ export function isNeverCached(pathname: string): boolean {
  * - ignore: not answered; the browser fetches it as if there were no helper.
  * - page: a page; the network first (so a release shows at once), the shell cache when offline.
  * - shell: a hashed script, style, font, icon or the app manifest; the shell cache first.
- * - saved: a work's text, the voice manifest or the runtime's script; the network first, the saved cache when offline.
+ * - saved: a work's text, the voice manifest, the runtime's script or a prepared recording's files; the network first, the saved cache when offline.
  */
 export type Route = "ignore" | "page" | "shell" | "saved";
 
@@ -106,8 +111,10 @@ export function route(url: URL, method: string, origin: string, mode?: string): 
   const p = url.pathname;
   if (isNeverCached(p)) return "ignore";
   if (/^\/works\/[a-z0-9-]+\.txt$/.test(p) || p === "/voice/manifest.json" || /^\/ort\/[^/]+\.mjs$/.test(p)) return "saved";
+  // A prepared recording: the list, each work's index and parts. Kept only when the listener saves the work.
+  if (p === "/recordings/manifest.json" || /^\/recordings\/[a-z0-9-]+\/(index\.json|part\d+\.webm)$/.test(p)) return "saved";
   // The model's parts, the voices and the runtime's .wasm are kept by the page itself (voice.ts, offline/store.ts).
-  if (p.startsWith("/voice/") || p.startsWith("/ort/") || p.startsWith("/works/")) return "ignore";
+  if (p.startsWith("/voice/") || p.startsWith("/ort/") || p.startsWith("/works/") || p.startsWith("/recordings/")) return "ignore";
   // A work's Broadcast, /play/<slug>, is a page like the home page (T3).
   if (mode === "navigate" || p === "/" || p.endsWith(".html") || p === "/privacy" || p.startsWith("/play/")) return "page";
   return "shell";

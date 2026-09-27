@@ -76,17 +76,60 @@ export interface Progress {
   renderDone: boolean;
 }
 
-/** "On air: Crito, line 21 of 252. Made up to line 40." */
-export function progressLine(p: Progress): string {
+/** "On air: Crito, line 21 of 252. Made up to line 40."; for Dial's prepared recording, only where the listener is. */
+export function progressLine(p: Progress & { prepared?: boolean }): string {
   const where = `${p.paused ? "Paused" : "On air"}: ${p.title}, line ${Math.max(1, p.heard)} of ${p.total}.`;
+  if (p.prepared) return where;
   return p.renderDone ? `${where} All lines made.` : `${where} Made up to line ${p.made}.`;
+}
+
+// ---- Dial's prepared recording ---------------------------------------------
+// Played from files Dial made in advance and this site serves: nothing is
+// made on the device, and nothing is sent while it plays (the one count,
+// chapter_rendered, is sent once the listen has reached its end).
+
+/** Under Tune in, for a work whose prepared recording this page can play. */
+export const PLAYS_AT_ONCE = "Plays at once: Dial made this recording in advance.";
+
+/** The small secondary link beside it: today's render, made on the device. */
+export const MAKE_IT_HERE = "Or make it on this device (the voice downloads once)";
+
+/** "Jowett's": the translator's surname, possessive. */
+function translatorsWords(translator: string): string {
+  const surname = translator.split(" ").at(-1) ?? translator;
+  return surname.endsWith("s") ? `${surname}'` : `${surname}'s`;
+}
+
+/** A prepared recording that stopped, in plain words with the fix. */
+export function recordingStopLine(raw: string): string {
+  if (/: \d{3}$/.test(raw)) return "Dial could not send its recording. Try again later, or make it on this device.";
+  if (/Failed to fetch|NetworkError|Load failed|network/i.test(raw)) return STOP_OFFLINE;
+  if (/pin/i.test(raw)) return "Dial's recording arrived damaged. Press Tune in to try again.";
+  if (/EncodingError|decode|Decoding/i.test(raw)) return "This browser could not play Dial's recording. Make it on this device instead.";
+  return "Dial's recording stopped unexpectedly. Press Tune in to try again.";
+}
+
+/** Between Tune in and the first line: the first part is on its way. */
+export function preparedTuningLine(title: string): string {
+  return `Tuning in to Dial's recording of ${title}.`;
+}
+
+/** The first line is playing. */
+export function preparedOnAirLine(translator: string): string {
+  return `Playing a recording Dial made in advance from ${translatorsWords(translator)} words. Nothing is made or sent while you listen.`;
+}
+
+/** The listen reached the end. */
+export function preparedDoneLine(title: string, seconds: number): string {
+  return `Played Dial's recording of ${title} to the end, ${clock(seconds)}.`;
 }
 
 // ---- Before Tune in, and the works themselves ------------------------------
 
 /**
- * Where the audio will come from. No work has a recording Dial made in
- * advance yet. The keeping clause is dropped once the voice could not be kept.
+ * Where the audio will come from, for a work made on the device (a work
+ * whose prepared recording plays says PLAYS_AT_ONCE instead). The keeping
+ * clause is dropped once the voice could not be kept.
  */
 export function madeHere(voiceKept: boolean): string {
   return voiceKept

@@ -16,9 +16,10 @@ import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeade
 declare const __BUILD_TAG__: string;
 declare const __SHELL__: string[];
 declare const __VOICE_PINS__: unknown;
+declare const __RECORDING_PINS__: Record<string, string>;
 
 /** This build's offline-compatibility key (offline/routes.ts offlineKey). */
-const KEY = offlineKey(pinsOf(__VOICE_PINS__), CAST_ENGINE_VERSION);
+const KEY = offlineKey(pinsOf(__VOICE_PINS__), CAST_ENGINE_VERSION, __RECORDING_PINS__);
 
 interface ExtendableEvent extends Event {
   waitUntil(p: Promise<unknown>): void;

@@ -33,3 +33,5 @@ coverage/
 .scratch/
 web/public/voice/
 web/public/ort/
+# the prepared recordings, staged from recordings.lock.json (scripts/fetch-recordings.mjs)
+web/public/recordings/

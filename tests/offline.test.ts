@@ -174,7 +174,7 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(store).toContain("const helper = \"serviceWorker\" in navigator ? navigator.serviceWorker.controller : null;");
     expect(store).toContain("resolve({ ok: e.data?.ok === true, key: typeof e.data?.key === \"string\" ? e.data.key : null });");
     expect(store).toContain('return askHelper("shell-status", timeoutMs);');
-    expect(read("web/src/offline/ui.ts")).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION));");
+    expect(read("web/src/offline/ui.ts")).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, hooks.recordingPins()));");
   });
 
   it("the save row shows only where the helper also serves the render worker's requests", () => {
@@ -252,7 +252,8 @@ describe("save and remove", () => {
     expect(store).toContain("[VOICES_HEADER]: [...voices].join(\",\")");
     expect(store).toMatch(/export async function removeWork\(m: VoiceManifest, slug: string, todayCasts: ReadonlyMap<string, readonly string\[\]>\): Promise<void> \{\s*const records = await savedVoiceRecords\(\);/);
     // Each refresh widens a saved work's record to cover today's cast.
-    expect(read("web/src/offline/ui.ts")).toMatch(/await coverVoiceRecord\(slug, voices\);\s*const plan = await planFor/);
+    // (A work saved with its prepared recording records no voices, so its record is never widened.)
+    expect(read("web/src/offline/ui.ts")).toMatch(/if \(!rec\) await coverVoiceRecord\(slug, voices\);\s*const plan = rec \? await recordingPlanFor\(manifest, rec, textBytes\) : await planFor/);
   });
 
   it("recast: A saved with voice c, B saved before a recast that now needs c; removing A keeps c", () => {
@@ -501,7 +502,7 @@ describe("the offline-compatibility key", () => {
     // Matching data and helper.
     expect(savedState(plan, oldHelper, offlineKey(oldPins, "1"))).toBe("saved");
     const ui = read("web/src/offline/ui.ts");
-    expect(ui).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION));");
+    expect(ui).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION, hooks.recordingPins()));");
     expect(ui).not.toContain("PAGE_KEY");
   });
 
@@ -526,7 +527,8 @@ describe("the offline-compatibility key", () => {
   it("the helper compiles its build's pins and casting version; the page compares it with the saved data's", () => {
     expect(CAST_ENGINE_VERSION).toMatch(/^\d+$/);
     const sw = read("web/src/sw.ts");
-    expect(sw).toContain("const KEY = offlineKey(pinsOf(__VOICE_PINS__), CAST_ENGINE_VERSION);");
+    expect(sw).toContain("const KEY = offlineKey(pinsOf(__VOICE_PINS__), CAST_ENGINE_VERSION, __RECORDING_PINS__);");
+    expect(read("scripts/build.mjs")).toContain("__RECORDING_PINS__: JSON.stringify(recordings)");
     expect(sw).toMatch(/port\.postMessage\(\{ type: "shell", ok, build: __BUILD_TAG__, key: KEY \}\)/);
     expect(read("scripts/build.mjs")).toContain("__VOICE_PINS__: JSON.stringify(pins)");
     const built = path.join(root, "dist", "sw.js");

@@ -57,8 +57,10 @@ describe("the catalogue: three stations, every printed claim true", () => {
     expect(isPublicDomainWorldwide({ pd: { published: 1931, translatorDied: 1900, publishedAs: "Published" } })).toBe(false);
   });
 
-  it("claims no prepared recording yet: every work is made on the device (T5 adds them)", () => {
-    for (const w of WORKS) expect(w.preparedRecording, w.slug).toBe(false);
+  it("a work says it plays at once only where its prepared recording opened; the catalogue types no such claim (T5)", () => {
+    for (const w of WORKS) expect(w, w.slug).not.toHaveProperty("preparedRecording");
+    expect(main).toMatch(/const hasRecording = !!text\?\.cast && prepared\.has\(w\.slug\);/);
+    expect(main).toMatch(/if \(opened\.recording\) prepared\.set\(w\.slug, opened\.recording\);/);
     for (const kept of [true, false]) {
       expect(madeHere(kept)).toMatch(/^Made on your device as you listen/);
       expect(madeHere(kept)).not.toMatch(/in advance|at once/);
@@ -67,7 +69,7 @@ describe("the catalogue: three stations, every printed claim true", () => {
     expect(madeHere(true)).toContain("then is kept on this device");
     expect(madeHere(false)).not.toMatch(/is kept/);
     expect(main).toMatch(/voiceKept = msg\.kept;\s*paintAvail\(\);/);
-    expect(main).toMatch(/avail\.textContent = text && !text\.cast \? CAST_FAILED : madeHere\(voiceKept\);/);
+    expect(main).toMatch(/avail\.textContent = text && !text\.cast \? CAST_FAILED : hasRecording \? PLAYS_AT_ONCE : madeHere\(voiceKept\);/);
   });
 
   it("computes word counts from the text, never types them (they match the spec's checked counts)", () => {
@@ -238,9 +240,11 @@ describe("work_opened: once per station per page load, within the ceilings' shar
 
   it("the page sends it only when Tune in starts a work, through firstOpen; tuning and browsing send nothing (founder, 2026-09-26)", () => {
     expect([...main.matchAll(/sendEvent\("work_opened"\)/g)].length).toBe(1);
-    const start = /const start = \(work: Work\) => \{([\s\S]*?)\n {2}\};/.exec(main)?.[1];
-    // A work that could not be cast cannot start, so it is never counted as opened.
-    expect(start).toMatch(/^\s*const text = [^\n]*\n\s*const cast = text\.cast;\n\s*if \(!cast\) return;\n\s*\/\/[^\n]*\n\s*if \(firstOpen\(opened, work\.slug\)\) sendEvent\("work_opened"\);/);
+    const start = /const start = \(work: Work, kind: ListenKind\) => \{([\s\S]*?)\n {2}\};/.exec(main)?.[1];
+    // A work that could not be cast (or a prepared recording that is not there) cannot start, so it is never counted as opened.
+    expect(start).toMatch(
+      /^\s*const text = [^\n]*\n\s*const cast = text\.cast;\n\s*if \(!cast\) return;\n\s*const rec = [^\n]*\n\s*if \(kind === "prepared" && !rec\) return;\n\s*\/\/[^\n]*\n\s*if \(firstOpen\(opened, work\.slug\)\) sendEvent\("work_opened"\);/,
+    );
     const onTune = /onTune: \(\) => \{([\s\S]*?)\n {4}\},/.exec(main)?.[1];
     expect(onTune).toBeDefined();
     expect(onTune).not.toMatch(/sendEvent|firstOpen|start\(/);
@@ -291,7 +295,7 @@ describe("the broadcast's rules", () => {
 
   it("one object URL at a time, and the previous finished file stays until the new one is made", () => {
     expect(main).toMatch(/if \(downloadUrl\) URL\.revokeObjectURL\(downloadUrl\);\s*downloadUrl = own\.wav \? URL\.createObjectURL\(/);
-    const start = /const start = \(work: Work\) => \{([\s\S]*?)\n {2}\};/.exec(main)![1]!;
+    const start = /const start = \(work: Work, kind: ListenKind\) => \{([\s\S]*?)\n {2}\};/.exec(main)![1]!;
     const beforeDone = start.slice(0, start.indexOf('msg.type === "done"'));
     expect(beforeDone).not.toMatch(/revokeObjectURL|download\.hidden = true|removeAttribute\("href"\)/);
   });

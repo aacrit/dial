@@ -188,6 +188,44 @@ checks:
     path: /ort/ort-wasm-simd-threaded.jsep.mjs
     expect: 200
 
+  # T5: Dial's prepared recordings, staged from recordings.lock.json by
+  # scripts/fetch-recordings.mjs: each work's list entry, timing index and
+  # first part (tests/recordings.test.ts keeps these in step with the lock).
+  - name: the prepared recordings' list is served
+    type: status
+    path: /recordings/manifest.json
+    expect: 200
+
+  - name: the Cave's prepared recording index is served
+    type: status
+    path: /recordings/cave/index.json
+    expect: 200
+
+  - name: the Cave's prepared recording, part 0, is served
+    type: status
+    path: /recordings/cave/part0.webm
+    expect: 200
+
+  - name: Crito's prepared recording index is served
+    type: status
+    path: /recordings/crito/index.json
+    expect: 200
+
+  - name: Crito's prepared recording, part 0, is served
+    type: status
+    path: /recordings/crito/part0.webm
+    expect: 200
+
+  - name: the Meditations' prepared recording index is served
+    type: status
+    path: /recordings/meditations/index.json
+    expect: 200
+
+  - name: the Meditations' prepared recording, part 0, is served
+    type: status
+    path: /recordings/meditations/part0.webm
+    expect: 200
+
   # T4: the installable app and the offline helper (web/src/sw.ts, built
   # to dist/sw.js), both static files from this origin.
   - name: the app manifest is served

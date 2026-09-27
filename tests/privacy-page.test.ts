@@ -146,6 +146,31 @@ describe("web/privacy.html, claim by claim", () => {
     expect(JSON.parse(read("privacy-allowlist.json")).sends).toEqual(["/e", "/feedback"]);
   });
 
+  // T5: Dial's prepared recordings.
+  it("a prepared recording is downloaded from this site as it plays, and kept only if the work is saved", () => {
+    expect(text).toContain("A work with a recording Dial made in advance plays that recording. It is downloaded from this site, a part at a time as you listen, and Dial keeps it on your device only if you save the work for offline.");
+    // Downloads only, from this origin: the allowlist names /recordings/, and sends stay the counts and feedback.
+    const allow = JSON.parse(read("privacy-allowlist.json"));
+    expect(allow.downloads).toContain("/recordings/");
+    expect(allow.sends).toEqual(["/e", "/feedback"]);
+    // Playing never stores: the source keeps decoded parts in memory only.
+    const source = read("web/src/recording/source.ts");
+    expect(source).not.toMatch(/caches\.|cache\.put|localStorage|indexedDB/);
+    expect(source).toMatch(/fetch\(`\/recordings\/\$\{slug\}\/\$\{file\}`\)/);
+    // Only Save for offline puts recording files in cache storage, and the offline helper only refreshes what is already there.
+    const store = read("web/src/offline/store.ts");
+    expect(store).toMatch(/export async function saveRecording[\s\S]*await put\(saved, f\.path, new Response\(buf/);
+    expect(read("web/src/sw.ts")).toContain("const had = res.ok ? await cache.match(key) : undefined;");
+  });
+
+  it("nothing is made or sent while a prepared recording plays; the count goes up at the end", () => {
+    expect(text).toContain("Nothing is made or sent while it plays; when you reach the end, the daily count of finished listens goes up by one.");
+    const main = read("web/src/main.ts");
+    // No render worker for a prepared recording, and its one count is sent from ended(), after the last line.
+    expect(main).toContain('const worker = rec ? null : new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });');
+    expect(main).toMatch(/const ended = \(\) => \{[\s\S]*?count\("ended"\);/);
+  });
+
   it("the shell (about 3 MB) is kept for every visitor, and the model and runtime stay after the last Remove", () => {
     expect(text).toContain("The offline helper also keeps this site's page files (about 3 MB: the pages, scripts, styles, fonts and icons) in cache storage for every visitor");
     expect(text).toContain("The voice model and its runtime stay after the last Remove");
@@ -167,7 +192,7 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("Remove deletes the work's text and any voice no other saved work uses; the model stays", async () => {
-    expect(text).toContain("Remove deletes that work's text and any voice no other saved work uses. The voice model stays, because every work uses it");
+    expect(text).toContain("Remove deletes that work's text, its saved recording, and any voice no other saved work uses. The voice model stays, because every work uses it");
     const { voicesToRemove } = await import("../web/src/offline/plan");
     const saved = new Map([["cave", ["bm_george"]], ["crito", ["bm_george", "bm_fable"]]]);
     expect(voicesToRemove("crito", saved, saved)).toEqual(["bm_fable"]);

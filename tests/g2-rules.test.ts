@@ -89,16 +89,18 @@ describe("the meter never outlives the work", () => {
   });
 
   it("a failure hides the meter and marks the status as an error", () => {
-    const stopped = /const stopped = \(message: string\) => \{([\s\S]*?)\n {4}\};/.exec(main)?.[1];
+    const stopped = /const stopped = \(line: string\) => \{([\s\S]*?)\n {4}\};/.exec(main)?.[1];
     expect(stopped).toBeDefined();
     expect(stopped).toContain("meter.hidden = true");
     // Plain words, never the raw engine text, announced as an error.
-    expect(stopped).toContain("announce(stopLine(message), true)");
+    expect(stopped).toContain("announce(line, true)");
+    // A prepared recording that stops says so in its own plain words (T5).
+    expect(main).toMatch(/stopped\(recordingStopLine\(/);
     expect(main).toMatch(/const announce = \(line: string, error = false\) => \{\s*if \(error\) status\.dataset\.state = "error";/);
     // The worker's error message (a failed manifest fetch or parse lands
     // there) and a worker that fails outright both end in stopped().
-    expect(main).toMatch(/\} else \{\s*stopped\(msg\.message\);/);
-    expect(main).toMatch(/worker\.onerror = [\s\S]*?stopped\(/);
+    expect(main).toMatch(/\} else \{\s*stopped\(stopLine\(msg\.message\)\);/);
+    expect(main).toMatch(/worker!\.onerror = [\s\S]*?stopped\(stopLine\(/);
   });
 });
 
@@ -119,7 +121,8 @@ describe("the lamp is lit only while a render or playback is live", () => {
     expect([...main.matchAll(/dataset\.onAir = /g)].length).toBe(1);
     const setLamp = block("setLamp");
     expect(setLamp).toMatch(/const lit = lampLit\(lampState\(\)\);/);
-    expect(main).toContain('const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone };');
+    // Nothing is made while Dial's prepared recording plays, so its lamp follows playback alone (T5).
+    expect(main).toContain('const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone || session.kind === "prepared" };');
     expect(setLamp).toMatch(/if \(lit\) document\.body\.dataset\.onAir = "true";\s*else delete document\.body\.dataset\.onAir;/);
   });
 
@@ -279,7 +282,7 @@ describe("true copy: the first voice download", () => {
   it("the page's offline claims ship with the offline helper that makes them true (T4)", () => {
     // Offline exists from T4: the helper is registered from main.ts and built to dist/sw.js.
     expect(main).toMatch(/^registerOfflineHelper\(\);$/m);
-    expect(read("scripts/build.mjs")).toContain("await buildServiceWorker(tag, shell, readVoicePins());");
+    expect(read("scripts/build.mjs")).toContain("await buildServiceWorker(tag, shell, readVoicePins(), stagedRecordingPins());");
     expect(privacyHtml).toContain("Saved for offline");
   });
 });
