@@ -94,7 +94,7 @@ describe("web/privacy.html, claim by claim", () => {
     }
     expect([...sent].sort()).toEqual(["chapter_rendered", "page_view", "work_opened"]);
     const main0 = read("web/src/main.ts");
-    const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("allMade();\n      } else {"));
+    const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("sched.renderFinished();\n      } else {"));
     expect(done).toContain('count("all-made");');
     expect([...main0.matchAll(/reportCoreSuccess\(\);/g)]).toHaveLength(1);
     // Paired with tests/seal.test.ts, which runs sendEvent with the switch off; the feedback form does not consult it.

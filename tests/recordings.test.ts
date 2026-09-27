@@ -50,6 +50,7 @@ import { bookplateHtml, madeOn, recordingSentence } from "../web/src/render";
 import { assetUrl, indexMatchesLock, lockFrom, lockProblems, privateIndexEntries, releaseTag } from "../scripts/lib/recordings-lock.mjs";
 import { stage } from "../scripts/fetch-recordings.mjs";
 import { whatItWas } from "../web/src/request-log";
+import { Scheduler } from "../web/src/player/scheduler";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f: string) => readFileSync(path.join(root, f), "utf8");
@@ -233,6 +234,47 @@ describe("the prepared recording as a source of lines", () => {
     expect(recordingStopLine("Error: recording: a part did not match its pin")).toMatch(/arrived damaged/);
     expect(recordingStopLine("EncodingError: Unable to decode audio data")).toMatch(/make it on this device instead/i);
     expect(recordingStopLine("weird")).toMatch(/stopped unexpectedly/);
+  });
+});
+
+describe("a prepared recording plays through the one scheduler, and seeks across the whole work", () => {
+  it("every line goes to the scheduler at once, fully made, so a seek anywhere lands and the end fires once", async () => {
+    const idx = fakeIndex(Array.from({ length: 6 }, () => ({ speech: 24000 * 10, pause: 24000 })), 2);
+    const rec = new Recording("cave", idx, { bytes: 1, sha256: "i" }, async () => new Float32Array(0), async () => new ArrayBuffer(0));
+    let now = 0;
+    let completed = 0;
+    const asked: number[] = [];
+    const sched = new Scheduler<number>(rec.lineCount, {
+      now: () => now,
+      samples: (i) => {
+        asked.push(i);
+        return new Int16Array(24000 * 10);
+      },
+      start: (i) => i,
+      stop: () => undefined,
+      complete: () => completed++,
+    });
+    for (let i = 0; i < rec.lineCount; i++) sched.add(i, rec.line(i).speech, rec.line(i).pause);
+    sched.renderFinished();
+    expect(sched.madeSeconds).toBeCloseTo(66, 6);
+    // Line 5 starts at 55 s: a seek to 60 s lands 5 s into it, although playback has barely begun.
+    const to = sched.seek(60)!;
+    expect(to).toMatchObject({ index: 5, beyond: false, finished: false });
+    expect(to.offset).toBeCloseTo(5, 6);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(asked).toContain(5);
+    // Past the end, the listen is over, once.
+    expect(sched.seek(1e6)!.finished).toBe(true);
+    expect(completed).toBe(1);
+  });
+
+  it("the page gives the scheduler every line of the recording, fully made, and its samples from the recording", () => {
+    const main = read("web/src/main.ts");
+    expect(main).toMatch(/if \(rec\) \{[\s\S]*?for \(let i = 0; i < rec\.lineCount; i\+\+\) \{\s*const l = rec\.line\(i\);\s*sched\.add\(i, l\.speech, l\.pause\);[\s\S]*?own\.renderDone = true;[\s\S]*?sched\.renderFinished\(\);\s*return;/);
+    expect(main).toMatch(/if \(rec\) \{\s*return rec\.samples\(i\)\.catch\(/);
+    expect(main).toContain("let sampleRate = rec ? RECORDING_RATE : 24_000;");
+    // One analyser for both paths: the wave, meters and eye read the recording like a render.
+    expect(main.match(/audio\.createAnalyser\(\)/g)).toHaveLength(1);
   });
 });
 
