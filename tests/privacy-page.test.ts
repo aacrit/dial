@@ -77,7 +77,7 @@ describe("web/privacy.html, claim by claim", () => {
     expect(text).toContain("Remove deletes that work's text and any voice no other saved work uses. The voice model stays, because every work uses it");
     const { voicesToRemove } = await import("../web/src/offline/plan");
     const saved = new Map([["cave", ["bm_george"]], ["crito", ["bm_george", "bm_fable"]]]);
-    expect(voicesToRemove("crito", saved)).toEqual(["bm_fable"]);
+    expect(voicesToRemove("crito", saved, saved)).toEqual(["bm_fable"]);
     const store = read("web/src/offline/store.ts");
     expect(store).toMatch(/const records = await savedVoiceRecords\(\);[\s\S]*await cache\.delete\(workKey\(slug\)\);[\s\S]*for \(const id of voicesToRemove\(slug, records, todayCasts\)\) await kv\.delete/);
     expect(store.slice(store.indexOf("export async function removeWork"))).not.toMatch(/voiceCacheName|runtimeCacheName/);

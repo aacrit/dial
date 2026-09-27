@@ -20,24 +20,26 @@ export function workVoices(voices: readonly string[]): string[] {
  * every voice another saved work records or uses in today's cast. `saved`
  * maps each saved work (the removed one included) to its voices as
  * recorded, or null where no record exists; `todayCasts` maps saved works
- * to the voices today's casting rule gives them, where the text is at hand
- * (a recast after saving can make a work need a voice its record lacks).
- * With any record unknown, no voice is deleted: one might be needed, and a
- * voice left behind costs only space.
+ * to the voices today's casting rule gives them (a recast after saving can
+ * make a work need a voice its record lacks). With any other saved work's
+ * record unknown, or its cast today unknown (its text is not on the page),
+ * no voice is deleted: one might be needed, and a voice left behind costs
+ * only space.
  */
 export function voicesToRemove(
   removing: string,
   saved: ReadonlyMap<string, readonly string[] | null>,
-  todayCasts: ReadonlyMap<string, readonly string[]> = new Map(),
+  todayCasts: ReadonlyMap<string, readonly string[]>,
 ): string[] {
   const mine = saved.get(removing);
   if (!mine) return [];
   const kept = new Set<string>();
   for (const [slug, voices] of saved) {
     if (slug === removing) continue;
-    if (voices === null) return [];
+    const today = todayCasts.get(slug);
+    if (voices === null || !today) return [];
     for (const v of voices) kept.add(v);
-    for (const v of todayCasts.get(slug) ?? []) kept.add(v);
+    for (const v of today) kept.add(v);
   }
   return workVoices(mine).filter((v) => !kept.has(v));
 }
@@ -146,18 +148,26 @@ export function onDeviceBytes(m: SizedManifest, voices: readonly string[], textB
 }
 
 export const SAVE_OFFLINE_NOT_SAVED = "Needs a connection to save or play.";
-export const SAVED_OLDER = "Saved on an older version";
-export const SAVED_OLDER_LINE = "Reopen Dial with a connection to update it.";
+export const SAVED_OLDER = "Saved for the new version of Dial";
+export const SAVED_OLDER_LINE = "Close every Dial tab, then reopen it with a connection.";
 
 /**
  * The saved state: "saved" when every piece is here and the serving helper's
- * offline-compatibility key is the page's; "older" when every piece is here
- * but the helper is another version's (it would play a different voice or
- * cast offline); otherwise not saved.
+ * offline-compatibility key is the key of the saved data (the voice
+ * manifest the page read: online the site's, offline the saved copy);
+ * "older" when every piece is here but the helper is an older Dial's, which
+ * would play a different voice or cast offline; otherwise not saved.
  */
-export function savedState(p: SavePlan, shell: { ok: boolean; key: string | null }, pageKey: string | null): "saved" | "older" | "no" {
+export function savedState(p: SavePlan, shell: { ok: boolean; key: string | null }, dataKey: string | null): "saved" | "older" | "no" {
   if (!isSaved(p, shell.ok)) return "no";
-  return pageKey !== null && shell.key === pageKey ? "saved" : "older";
+  return dataKey !== null && shell.key === dataKey ? "saved" : "older";
+}
+
+/** Said once a save ends, matching what the row then shows. */
+export function saveEndLine(state: "saved" | "older" | "no", called: string): string {
+  if (state === "saved") return `Saved ${called} for offline.`;
+  if (state === "older") return `Saved ${called} for the new version of Dial. Close every Dial tab, then reopen it with a connection.`;
+  return `${called.charAt(0).toUpperCase()}${called.slice(1)} was not saved on this device.`;
 }
 export const WORK_NOT_ON_DEVICE = "This work isn't saved on this device. It needs a connection to play.";
 export const OFFLINE_NOTICE = "Offline. Works saved on this device play as usual. The others need a connection.";

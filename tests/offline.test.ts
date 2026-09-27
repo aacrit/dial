@@ -23,6 +23,7 @@ import {
   SAVED_OLDER,
   SAVED_OLDER_LINE,
   savedState,
+  saveEndLine,
   unionVoices,
   kilobytes,
   offlineExtras,
@@ -172,7 +173,7 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(store).toContain("const helper = \"serviceWorker\" in navigator ? navigator.serviceWorker.controller : null;");
     expect(store).toContain("resolve({ ok: e.data?.ok === true, key: typeof e.data?.key === \"string\" ? e.data.key : null });");
     expect(store).toContain('return askHelper("shell-status", timeoutMs);');
-    expect(read("web/src/offline/ui.ts")).toContain("const saved = savedState(plan, await shellState(), PAGE_KEY);");
+    expect(read("web/src/offline/ui.ts")).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION));");
   });
 
   it("the save row shows only where the helper also serves the render worker's requests", () => {
@@ -180,8 +181,8 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     // The default cache: the probe asks about routing, not freshness.
     expect(probe).toContain('fetch("/voice/manifest.json")');
     expect(probe).not.toContain("no-store");
-    // After a no, the next station asks again.
-    expect(read("web/src/offline/store.ts")).toMatch(/\.then\(\(ok\) => \{\s*if \(!ok\) probe = null;/);
+    // After a no, it asks again only once a helper takes control (never on every station).
+    expect(read("web/src/offline/store.ts")).toMatch(/if \(!ok && "serviceWorker" in navigator\) \{\s*navigator\.serviceWorker\.addEventListener\(\s*"controllerchange",\s*\(\) => \{\s*probe = null;/);
     expect(read("web/src/sw.ts")).toContain("headers.set(OFFLINE_HEADER, \"1\");");
     const ui = read("web/src/offline/ui.ts");
     expect(ui).toContain("let supported = false;");
@@ -233,8 +234,12 @@ describe("save and remove", () => {
       ["cave", ["bm_george"]],
       ["crito", null],
     ]);
-    expect(voicesToRemove("cave", saved)).toEqual([]);
-    expect(voicesToRemove("crito", saved)).toEqual([]);
+    const today = new Map([
+      ["cave", ["bm_george"]],
+      ["crito", ["bm_george", "bm_fable"]],
+    ]);
+    expect(voicesToRemove("cave", saved, today)).toEqual([]);
+    expect(voicesToRemove("crito", saved, today)).toEqual([]);
     expect(parseVoices(null)).toBeNull();
     expect(parseVoices("")).toBeNull();
     expect(parseVoices("bm_george,<img src=x>")).toBeNull();
@@ -254,14 +259,16 @@ describe("save and remove", () => {
       ["a", ["c"]],
       ["b", ["x"]], // recorded before the recast
     ]);
-    // Without today's cast the record alone would let c go.
-    expect(voicesToRemove("a", records)).toEqual(["c"]);
     // With B's cast today (x and c), c survives.
     expect(voicesToRemove("a", records, new Map([["b", ["x", "c"]]]))).toEqual([]);
-    // And once refresh has widened B's record, c survives even without the text at hand.
+    // B's cast today unknown (its text is not on the page): no voice is deleted at all.
+    expect(voicesToRemove("a", records, new Map())).toEqual([]);
+    // Once refresh has widened B's record, it covers c too.
     const widened = new Map(records).set("b", unionVoices(records.get("b")!, ["x", "c"]));
     expect(widened.get("b")).toEqual(["x", "c"]);
-    expect(voicesToRemove("a", widened)).toEqual([]);
+    expect(voicesToRemove("a", widened, new Map([["b", ["x"]]]))).toEqual([]);
+    // Control: a voice nobody else records or casts today does go.
+    expect(voicesToRemove("a", records, new Map([["b", ["x"]]]))).toEqual(["c"]);
     expect(unionVoices(null, ["c"])).toEqual(["c"]);
     expect(unionVoices(["x", "c"], ["c"])).toEqual(["x", "c"]);
     // A refresh by the helper keeps the record.
@@ -274,11 +281,11 @@ describe("save and remove", () => {
       ["meditations", ["bm_george"]],
       ["crito", ["bm_george", "bm_fable", "bm_lewis"]],
     ]);
-    expect(voicesToRemove("cave", saved)).toEqual([]);
-    expect(voicesToRemove("crito", saved)).toEqual(["bm_fable", "bm_lewis"]);
+    expect(voicesToRemove("cave", saved, saved)).toEqual([]);
+    expect(voicesToRemove("crito", saved, saved)).toEqual(["bm_fable", "bm_lewis"]);
     saved.delete("meditations");
     saved.delete("crito");
-    expect(voicesToRemove("cave", saved)).toEqual(["bm_george"]);
+    expect(voicesToRemove("cave", saved, saved)).toEqual(["bm_george"]);
   });
 
   it("the real works: removing the Cave keeps the narrator the Meditations still use", () => {
@@ -288,7 +295,7 @@ describe("save and remove", () => {
     ]);
     const shared = castOf("cave").filter((v) => castOf("meditations").includes(v));
     expect(shared.length).toBeGreaterThan(0);
-    for (const v of shared) expect(voicesToRemove("cave", saved)).not.toContain(v);
+    for (const v of shared) expect(voicesToRemove("cave", saved, saved)).not.toContain(v);
   });
 
   it("the extras an offline Tune in needs are the voice manifest and the runtime's script, not its .wasm", () => {
@@ -441,6 +448,26 @@ describe("the app manifest and icons", () => {
   });
 });
 
+// Each real work's voice set under the casting rule, pinned per
+// CAST_ENGINE_VERSION. A change to casting that changes any set must bump
+// the version (so saved works show the new-version state), then pin here.
+const CAST_PINS: Record<string, Record<string, string>> = {
+  "1": { cave: "bm_george", crito: "bm_fable,bm_lewis", meditations: "bm_george" },
+};
+
+describe("CAST_ENGINE_VERSION follows the cast", () => {
+  it("each real work's voice set matches the pin for this version (else: bump CAST_ENGINE_VERSION)", () => {
+    const now: Record<string, string> = {};
+    for (const w of WORKS) {
+      const c = tryCast(segment(read(`web/public/works/${w.slug}.txt`)), w.cast);
+      now[w.slug] = c ? workVoices(c.voices).join(",") : "(no cast)";
+    }
+    const pinned = CAST_PINS[CAST_ENGINE_VERSION];
+    expect(pinned, `no voice-set pin for CAST_ENGINE_VERSION ${CAST_ENGINE_VERSION}: add one to tests/offline.test.ts`).toBeDefined();
+    expect(now, "the cast output changed: bump CAST_ENGINE_VERSION in web/src/engine/cast.ts, then pin the new sets here").toEqual(pinned);
+  });
+});
+
 describe("the offline-compatibility key", () => {
   const pins = { sha256: "m".repeat(64), runtimeSha256: "r".repeat(64), voices: { bm_george: "g", af_heart: "h" } };
 
@@ -458,6 +485,31 @@ describe("the offline-compatibility key", () => {
     expect(pinsOf({})).toBeNull();
   });
 
+  it("the key is the saved data's: new page online with an old helper, and old helper offline with a newer saved manifest, are both the new-version state", () => {
+    const plan = savePlan(M, ["bm_george"], everything(["bm_george"]), 17_000, true, []);
+    const oldPins = pins;
+    const newPins = { ...pins, voices: { ...pins.voices, am_michael: "n" } };
+    const oldHelper = { ok: true, key: offlineKey(oldPins, "1") };
+    // Online: the page read the site's (new) manifest; the helper is still the old build's.
+    expect(savedState(plan, oldHelper, offlineKey(newPins, "1"))).toBe("older");
+    // Offline: the old helper serves a saved manifest it refreshed to the new one.
+    expect(savedState(plan, oldHelper, offlineKey(newPins, "1"))).toBe("older");
+    // Same pins, but the casting rule moved on.
+    expect(savedState(plan, oldHelper, offlineKey(oldPins, "2"))).toBe("older");
+    // Matching data and helper.
+    expect(savedState(plan, oldHelper, offlineKey(oldPins, "1"))).toBe("saved");
+    const ui = read("web/src/offline/ui.ts");
+    expect(ui).toContain("const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION));");
+    expect(ui).not.toContain("PAGE_KEY");
+  });
+
+  it("the save announcement matches the row", () => {
+    expect(saveEndLine("saved", "the Cave")).toBe("Saved the Cave for offline.");
+    expect(saveEndLine("older", "the Cave")).toBe("Saved the Cave for the new version of Dial. Close every Dial tab, then reopen it with a connection.");
+    expect(saveEndLine("no", "the Cave")).toBe("The Cave was not saved on this device.");
+    expect(read("web/src/offline/ui.ts")).toContain('say(saveEndLine(end === "saved" ? "saved" : end === "older" ? "older" : "no", w.called));');
+  });
+
   it("Saved only when the helper's key is the page's; otherwise the older-version state", () => {
     const plan = savePlan(M, ["bm_george"], everything(["bm_george"]), 17_000, true, []);
     expect(savedState(plan, { ok: true, key: "k1" }, "k1")).toBe("saved");
@@ -465,17 +517,15 @@ describe("the offline-compatibility key", () => {
     expect(savedState(plan, { ok: true, key: null }, "k1")).toBe("older");
     expect(savedState(plan, { ok: true, key: "k1" }, null)).toBe("older");
     expect(savedState(plan, { ok: false, key: "k1" }, "k1")).toBe("no");
-    expect(SAVED_OLDER).toBe("Saved on an older version");
-    expect(SAVED_OLDER_LINE).toBe("Reopen Dial with a connection to update it.");
+    expect(SAVED_OLDER).toBe("Saved for the new version of Dial");
+    expect(SAVED_OLDER_LINE).toBe("Close every Dial tab, then reopen it with a connection.");
   });
 
-  it("the helper and the page compile the same pins and the same casting version", () => {
+  it("the helper compiles its build's pins and casting version; the page compares it with the saved data's", () => {
     expect(CAST_ENGINE_VERSION).toMatch(/^\d+$/);
     const sw = read("web/src/sw.ts");
     expect(sw).toContain("const KEY = offlineKey(pinsOf(__VOICE_PINS__), CAST_ENGINE_VERSION);");
     expect(sw).toMatch(/port\.postMessage\(\{ type: "shell", ok, build: __BUILD_TAG__, key: KEY \}\)/);
-    expect(read("web/src/offline/store.ts")).toContain("export const PAGE_KEY = offlineKey(pinsOf(typeof __VOICE_PINS__ === \"undefined\" ? null : __VOICE_PINS__), CAST_ENGINE_VERSION);");
-    expect(read("web/vite.config.ts")).toContain("define: { __VOICE_PINS__: JSON.stringify(pins) },");
     expect(read("scripts/build.mjs")).toContain("__VOICE_PINS__: JSON.stringify(pins)");
     const built = path.join(root, "dist", "sw.js");
     expect(existsSync(built), "dist/sw.js: run npm run build first").toBe(true);

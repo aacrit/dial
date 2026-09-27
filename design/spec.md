@@ -237,6 +237,7 @@ In the Studio, "Keep" is a third thing: an encrypted copy of a production, on th
   - Crito: "29 kB of text, plus the voice, once (115 MB)". Meditations: "13 kB of text, plus the voice, once (115 MB)"; once the voice is saved: "13 kB of text. The voice is already saved."
   - While saving: "Saving…", "48.2 of 114.6 MB", a progress line, Cancel.
   - Saved: green pip, "Saved for offline", the size, and Remove.
+  - Saved for the new version (T4): every piece is on the device, but the offline helper serving it is an older Dial's (its voice pins or casting rule differ from the saved data's). No pip. "Saved for the new version of Dial" / "Close every Dial tab, then reopen it with a connection." and Remove. The announcement when a save ends matches the row: "Saved the Cave for the new version of Dial. Close every Dial tab, then reopen it with a connection."
   - **The Cave saves differently, and says so.** It stores the recording Dial made in advance (Opus, about 7.3 MB at 48 kbps; the real size comes from the catalogue manifest), with no voice download. Works without a prepared recording store their text and the voice, and the audio is made on the device when played, offline too.
 - Bookplate (drill, collapsed): Source, Public domain, Voices, Corrections, Direction, Also.
 

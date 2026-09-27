@@ -15,6 +15,7 @@ import {
   SAVED_OLDER,
   SAVED_OLDER_LINE,
   SAVE_OFFLINE_NOT_SAVED,
+  saveEndLine,
   savedState,
   offlineExtras,
   onDeviceBytes,
@@ -26,7 +27,9 @@ import {
   workVoices,
   type SavePlan,
 } from "./plan";
-import { PAGE_KEY, coverVoiceRecord, isPersisted, offlineWorks, planFor, readManifest, removeWork, requestPersistence, saveWork, savedSlugs, shellState, type Manifest } from "./store";
+import { CAST_ENGINE_VERSION } from "../engine/cast";
+import { offlineKey, pinsOf } from "./routes";
+import { coverVoiceRecord, isPersisted, offlineWorks, planFor, readManifest, removeWork, requestPersistence, saveWork, savedSlugs, shellState, type Manifest } from "./store";
 
 type RowState =
   | { kind: "idle"; plan: SavePlan; error?: string }
@@ -178,7 +181,8 @@ export function mountOffline(hooks: OfflineHooks) {
       // A saved work's record keeps covering today's cast (a recast may add a voice).
       await coverVoiceRecord(slug, voices);
       const plan = await planFor(manifest, slug, voices, textBytes);
-      const saved = savedState(plan, await shellState(), PAGE_KEY);
+      // The key of the data actually saved: the manifest this page read (the site's online, the saved copy offline).
+      const saved = savedState(plan, await shellState(), offlineKey(pinsOf(manifest.manifest), CAST_ENGINE_VERSION));
       if (saved === "older") states.set(slug, { kind: "older" });
       else if (saved === "saved") {
         const extras = offlineExtras(manifest.manifest).map((p) => ({ path: p, bytes: p === "/voice/manifest.json" ? manifest!.bytes : (manifest!.manifest.sizes[p] ?? 0) }));
@@ -218,7 +222,8 @@ export function mountOffline(hooks: OfflineHooks) {
       });
       states.delete(w.slug);
       await refresh(w.slug);
-      say(states.get(w.slug)?.kind === "saved" ? `Saved ${w.called} for offline.` : `${w.called.charAt(0).toUpperCase()}${w.called.slice(1)} was not saved on this device.`);
+      const end = states.get(w.slug)?.kind;
+      say(saveEndLine(end === "saved" ? "saved" : end === "older" ? "older" : "no", w.called));
     } catch (err) {
       const cancelled = ctrl.signal.aborted;
       states.delete(w.slug);

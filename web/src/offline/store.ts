@@ -21,14 +21,9 @@
 import type { VoiceManifest } from "../voice";
 import { runtimeCacheKey, runtimeCacheName, voiceCacheName, type Held } from "../voice-cache";
 import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
-import { CAST_ENGINE_VERSION } from "../engine/cast";
 import { offlineExtras, parseVoices, savePlan, unionVoices, voicesToRemove, type SavePlan } from "./plan";
-import { SAVED_CACHE, offlineKey, pinsOf } from "./routes";
+import { SAVED_CACHE } from "./routes";
 
-declare const __VOICE_PINS__: unknown;
-
-/** This page's offline-compatibility key: its build's voice pins and casting rule. */
-export const PAGE_KEY = offlineKey(pinsOf(typeof __VOICE_PINS__ === "undefined" ? null : __VOICE_PINS__), CAST_ENGINE_VERSION);
 
 /** On a saved text: the work's voices, comma separated, as cast when it was saved. */
 export const VOICES_HEADER = "x-dial-voices";
@@ -46,8 +41,9 @@ let probe: Promise<boolean> | null = null;
 /**
  * Whether offline saving works in this browser: Cache Storage, an offline
  * helper in control of this page, and that helper answering the render
- * worker's requests too (offline/probe.worker.ts). A yes is kept for the
- * visit; after a no, the next call asks again.
+ * worker's requests too (offline/probe.worker.ts). The answer is kept for
+ * the visit; after a no, it is asked again only once a helper takes control
+ * of the page (controllerchange), never on every station.
  */
 export function offlineWorks(timeoutMs = 10_000): Promise<boolean> {
   probe ??= (async (): Promise<boolean> => {
@@ -69,7 +65,15 @@ export function offlineWorks(timeoutMs = 10_000): Promise<boolean> {
       w.onerror = () => done(false);
     });
   })().then((ok) => {
-    if (!ok) probe = null;
+    if (!ok && "serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener(
+        "controllerchange",
+        () => {
+          probe = null;
+        },
+        { once: true },
+      );
+    }
     return ok;
   });
   return probe;

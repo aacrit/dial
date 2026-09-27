@@ -43,7 +43,7 @@ export function stampHtml(text, tag, tokens) {
   return tokens ? stampTokens(stamped, tokens) : stamped;
 }
 
-/** The staged voice manifest's pins (web/vite.config.ts reads the same file for the page). */
+/** The staged voice manifest's pins, compiled into the offline helper for its offline-compatibility key. */
 export function readVoicePins() {
   const m = JSON.parse(readFileSync(path.join(webDir, "public", "voice", "manifest.json"), "utf8"));
   return { sha256: m.sha256, runtimeSha256: m.runtimeSha256, voices: m.voices };
