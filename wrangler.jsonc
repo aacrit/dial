@@ -39,12 +39,14 @@
     // 404 status from Workers Static Assets, never the Worker (T11, M2): an
     // unknown path costs no invocation. /seal is one of them.
     "not_found_handling": "404-page",
-    // Only the Worker's own routes run the Worker: every static page,
-    // script, stylesheet and font is served by Workers Static Assets
-    // directly, with its headers from dist/_headers (scripts/build.mjs), and
-    // costs no Worker invocation (the free plan's 100,000 a day are shared by
-    // the whole account). Add a product's API routes here.
-    "run_worker_first": ["/e", "/feedback", "/healthz", "/api/*"]
+    // The Worker's own routes, and the pages (T12: the Worker sends a plain
+    // http:// page request to https://, worker/src/https.ts; a page on https
+    // goes straight to the assets, with no rate limit and no D1). Every
+    // script, stylesheet, font and recording is served by Workers Static
+    // Assets directly, with its headers from dist/_headers
+    // (scripts/build.mjs), and costs no Worker invocation (the free plan's
+    // 100,000 a day are shared by the whole account).
+    "run_worker_first": ["/e", "/feedback", "/healthz", "/api/*", "/", "/index.html", "/privacy", "/privacy.html", "/play/*"]
   },
   // Per-client rate limit (worker/src/guard.ts). The binding counts per
   // client network in memory at each Cloudflare location and stores
@@ -91,7 +93,7 @@
         "directory": "./dist",
         "binding": "ASSETS",
         "not_found_handling": "404-page",
-        "run_worker_first": ["/e", "/feedback", "/healthz", "/api/*"]
+        "run_worker_first": ["/e", "/feedback", "/healthz", "/api/*", "/", "/index.html", "/privacy", "/privacy.html", "/play/*"]
       },
       "ratelimits": [
         { "name": "RL_API", "namespace_id": "7311", "simple": { "limit": 20, "period": 10 } },

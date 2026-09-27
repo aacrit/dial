@@ -228,7 +228,8 @@ describe("contract runner: deployed-only burst checks", () => {
       expect(burst.pass).toBe(true);
       // The result says where the burst ran: the summary names the base, and it did not run there.
       expect(burst.detail).toBe(`via http://127.0.0.1:${port}`);
-      expect(bursts).toBe(2);
+      // The burst stops at the first refusal: one wave of one request was enough.
+      expect(bursts).toBe(1);
 
       // A burst host serving another build is not the production Worker: the burst fails, and nothing is sent.
       otherBuild = "release/older";
@@ -428,6 +429,31 @@ describe("contract runner: requests that fail below HTTP", () => {
       expect(calls).toBe(2);
     } finally {
       globalThis.fetch = realFetch;
+    }
+  });
+});
+
+describe("contract runner: burst pacing (T12)", () => {
+  it("wave_gap_ms pauses between waves, and a burst stops at its first refusal", async () => {
+    let n = 0;
+    const times: number[] = [];
+    const srv = createServer((_req, res) => {
+      n++;
+      times.push(Date.now());
+      const limited = n > 4;
+      res.writeHead(limited ? 429 : 200, { "content-type": "application/json" });
+      res.end(limited ? '{"error":"rate_limited"}' : "{}");
+    });
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const [r] = await runContract({ checks: [{ name: "b", type: "burst", path: "/", count: 40, concurrency: 2, wave_gap_ms: 150, expect_status: 429, expect_error: "rate_limited" }] }, `http://127.0.0.1:${port}`);
+      expect(r.pass).toBe(true);
+      // Waves 1 and 2 pass, wave 3 is refused and the burst stops: 6 of 40 sent.
+      expect(n).toBe(6);
+      expect(times[2]! - times[1]!).toBeGreaterThanOrEqual(140);
+    } finally {
+      srv.close();
     }
   });
 });

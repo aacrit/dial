@@ -461,11 +461,15 @@ checks:
   # page (also a 429), and it waits out the WAF's 10 s window first. The
   # binding counts permissively, so the burst goes 20 at a time: 25
   # sequential requests never tripped it (Dial's Spark release, 2026-09-26).
+  # Its count also settles only after a few seconds, so up to 8 waves go a
+  # second apart and the check stops at the first refusal: 80 back to back
+  # passed 1 run in 3 on the preview (2026-09-27).
   - name: rate limit bites on the Worker (deployed only)
     type: burst
     path: /healthz
-    count: 80
+    count: 160
     concurrency: 20
+    wave_gap_ms: 1000
     expect_status: 429
     expect_error: rate_limited
     pause_before_seconds: 11
@@ -480,8 +484,12 @@ checks:
     path: /e
     method: POST
     body: { name: "not_an_event" }
-    count: 20
+    # Four waves, not two: the binding's count settles a moment after the
+    # requests that raised it, so two tight waves of 10 could all pass
+    # before it bit (seen twice on the preview, 2026-09-27).
+    count: 40
     concurrency: 10
+    wave_gap_ms: 400
     expect_status: 429
     expect_error: rate_limited
     pause_before_seconds: 11
@@ -494,6 +502,7 @@ checks:
     body: { text: "" }
     count: 12
     concurrency: 6
+    wave_gap_ms: 400
     expect_status: 429
     expect_error: rate_limited
     pause_before_seconds: 11

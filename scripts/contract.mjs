@@ -155,9 +155,14 @@ async function runCheck(check, baseUrl, originalBase = baseUrl) {
           // Not the Worker's JSON (a WAF or proxy page): does not count.
         }
       };
+      // With `wave_gap_ms`, a pause between waves: the binding's count settles
+      // a moment after the requests that raised it, so back-to-back waves
+      // can all pass before it bites; a short gap lets it catch up.
       const wave = Math.max(1, check.concurrency ?? 1);
       for (let sent = 0; sent < check.count; sent += wave) {
+        if (sent && check.wave_gap_ms) await new Promise((resolve) => setTimeout(resolve, check.wave_gap_ms));
         await Promise.all(Array.from({ length: Math.min(wave, check.count - sent) }, one));
+        if (matched) break;
       }
       const want = check.expect_error === undefined ? `${check.expect_status}` : `${check.expect_status} with {"error":"${check.expect_error}"}`;
       return { label, pass: matched, detail: matched ? undefined : `no ${want} in ${check.count} requests (got ${[...new Set(statuses)].join(", ")})` };
