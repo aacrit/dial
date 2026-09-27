@@ -322,6 +322,10 @@ export function whatItWas(r: Pick<RequestRecord, "path" | "own" | "dir" | "event
   const voice = /^\/voice\/voices\/([a-z_]+)\.bin$/.exec(p)?.[1];
   if (voice) return Object.hasOwn(VOICE_NAMES, voice) ? `Voice: ${VOICE_NAMES[voice as VoiceId]}` : "A voice";
   if (p.startsWith("/ort/")) return "Voice runtime";
+  if (p === "/recordings/manifest.json") return "Dial's recordings: the list";
+  const recPart = /^\/recordings\/[a-z0-9-]+\/part(\d+)\.webm$/.exec(p);
+  if (recPart) return `Dial's recording, part ${Number(recPart[1]) + 1}`;
+  if (/^\/recordings\/[a-z0-9-]+\/index\.json$/.test(p)) return "Dial's recording: where each line starts";
   if (p.endsWith(".woff2") || p.endsWith(".woff")) return "Typeface";
   if (p.endsWith(".css")) return "Styles";
   if (p.endsWith(".js") || p.endsWith(".mjs")) return "App code";

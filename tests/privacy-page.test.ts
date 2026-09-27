@@ -82,19 +82,20 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the counts switch: off means no count at all, feedback still goes; each count is named for what it counts", () => {
-    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no work fully made on this device. A feedback message you choose to send still goes, because you sent it.");
+    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no work played to the end (made on this device, or Dial's recording heard to its end). A feedback message you choose to send still goes, because you sent it.");
     expect(text).not.toMatch(/finished listen/);
+    expect(text).toContain("Nothing is made or sent while it plays; reaching the end counts as one work played to the end");
     const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-    expect(seal).toContain("Totals per day of page views, works tuned in, and works fully made on this device, and nothing more.");
-    // Paired with the code: the three counts the page sends, and chapter_rendered only once every line is made.
+    expect(seal).toContain("Totals per day of page views, works tuned in, and works played to the end (made on this device, or Dial's recording heard to its end), and nothing more.");
+    // Paired with the code: the three counts the page sends, and chapter_rendered once per listen: every line made here, or Dial's recording heard to its end (tests/recordings.test.ts).
     const sent = new Set<string>();
     for (const f of (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((x) => x.endsWith(".ts"))) {
       for (const m of read(`web/src/${f}`).matchAll(/sendEvent\("([a-z_]+)"\)/g)) sent.add(m[1]!);
     }
     expect([...sent].sort()).toEqual(["chapter_rendered", "page_view", "work_opened"]);
     const main0 = read("web/src/main.ts");
-    const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("ended();\n      } else {"));
-    expect(done).toContain("reportCoreSuccess();");
+    const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("allMade();\n      } else {"));
+    expect(done).toContain('count("all-made");');
     expect([...main0.matchAll(/reportCoreSuccess\(\);/g)]).toHaveLength(1);
     // Paired with tests/seal.test.ts, which runs sendEvent with the switch off; the feedback form does not consult it.
     const main = read("web/src/main.ts");
@@ -164,7 +165,7 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("nothing is made or sent while a prepared recording plays; the count goes up at the end", () => {
-    expect(text).toContain("Nothing is made or sent while it plays; when you reach the end, the daily count of finished listens goes up by one.");
+    expect(text).toContain("Nothing is made or sent while it plays; reaching the end counts as one work played to the end");
     const main = read("web/src/main.ts");
     // No render worker for a prepared recording, and its one count is sent from ended(), after the last line.
     expect(main).toContain('const worker = rec ? null : new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });');

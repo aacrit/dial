@@ -49,6 +49,7 @@ import { preparedDoneLine, preparedOnAirLine, progressLine, recordingStopLine, P
 import { bookplateHtml, madeOn, recordingSentence } from "../web/src/render";
 import { assetUrl, indexMatchesLock, lockFrom, lockProblems, privateIndexEntries, releaseTag } from "../scripts/lib/recordings-lock.mjs";
 import { stage } from "../scripts/fetch-recordings.mjs";
+import { whatItWas } from "../web/src/request-log";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f: string) => readFileSync(path.join(root, f), "utf8");
@@ -487,6 +488,18 @@ describe("the committed lock, the staged recordings and the contract", () => {
       index.lines.forEach((l, i) => expect(l.pause, `${slug} line ${i + 1}`).toBe(Math.round((cues[i]!.pauseAfterMs / 1000) * RECORDING_RATE)));
       for (const p of index.parts) expect(p.bytes, `${slug}/${p.file}`).toBeLessThan(20 * 1024 * 1024);
     }
+  });
+});
+
+describe("the Seal logs a prepared recording's requests like any other", () => {
+  it("names each one in plain words, all from this origin", () => {
+    const row = (p: string) => whatItWas({ path: p, own: true, dir: "fetched", event: undefined } as never);
+    expect(row("/recordings/manifest.json")).toBe("Dial's recordings: the list");
+    expect(row("/recordings/cave/index.json")).toBe("Dial's recording: where each line starts");
+    expect(row("/recordings/cave/part0.webm")).toBe("Dial's recording, part 1");
+    expect(row("/recordings/cave/part17.webm")).toBe("Dial's recording, part 18");
+    // No new origin: the page's fetches of recordings name same-origin paths (tests/no-network.test.ts).
+    expect(read("web/src/recording/source.ts")).not.toMatch(/https?:\/\//);
   });
 });
 
