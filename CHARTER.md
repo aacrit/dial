@@ -7,7 +7,7 @@ At most 5 surfaces for v1. Any surface added later needs a charter amendment.
 | **Repertory** `/` | The catalogue as a programme guide, each work with its Bookplate. At Spark it holds one work, 514 · No. 001, the Cave, and plays it in place | `work_opened` (Forge; at Spark, `page_view`) | 2026-12-31 |
 | **Broadcast** `/play/<work>` | The player: the script page with the live line, cue scrubbing, VU pair, download. At Spark, a plain narration rendered in the tab and a WAV download on `/` | `chapter_rendered` | 2026-12-31 |
 | **Studio** `/studio` | Import, structure, voice palette, Direction report and local overrides, Corrections sheet, render, attestation, export | `production_exported` | 2027-02-28 |
-| **Seal** `/seal` | Privacy proof (magic eye, request log, the counts switch), the speed-of-this-device test (amended 2026-09-26 per design spec 0.4 R2), plus the on-device `/verify` provenance checker | `verify_run` | 2026-12-31 |
+| **Seal**, a widget on the radio (amended 2026-09-27, design spec 00) | Privacy proof on the work panel: the magic eye, one plain sentence, today's counts, the counts switch, and every request collapsed. `/seal` is gone (404); the speed-of-this-device test moves to the radio's gauge (T7); the on-device `/verify` provenance checker is still to come | `verify_run` | 2026-12-31 |
 | Worker | `/e`, licence check, Polar webhook | Polar order | 2027-02-28 |
 | `/privacy.html` | Disclosure for the aggregate-count telemetry, the feedback form, the rate limit and what stays on the device; linked from the home page | `page_view` (same page load as home) | tied to the product's own kill date |
 

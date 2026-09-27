@@ -37,7 +37,7 @@ describe("web/privacy.html, claim by claim", () => {
     expect(text).toContain("The counts switch: one setting in local storage, whether to send daily counts, written only when you change it.");
     expect(text).toContain("Besides the voice, saved works and page files described above, Dial keeps two small things, both on your device and never sent.");
     expect(text).not.toMatch(/Three things/);
-    expect(text).toContain("This tab's request log: the path, size and time of each request Dial's pages and their voice helpers made in this tab, of each request the offline helper made for this tab, and, marked as shared, of what the offline helper fetched for itself for every Dial tab (and, for a count, its name, and whether a send was not delivered), kept in session storage so the Seal can show it; never any text or audio, and erased when the tab closes.");
+    expect(text).toContain("This tab's request log: the path, size and time of each request Dial's pages and their voice helpers made in this tab, of each request the offline helper made for this tab, and, marked as shared, of what the offline helper fetched for itself for every Dial tab (and, for a count, its name, and whether a send was not delivered), kept in session storage so the Seal widget on the radio can show it; never any text or audio, and erased when the tab closes.");
     // Per tab: the helper notes the page each request is for, sends each page only its own entries, and marks the rest shared.
     const sw = read("web/src/sw.ts");
     expect(sw).toContain('const client = event.clientId || event.resultingClientId || "";');
@@ -48,10 +48,10 @@ describe("web/privacy.html, claim by claim", () => {
       const body = sw.slice(sw.indexOf(`async function ${fn}(`), sw.indexOf("\n}\n", sw.indexOf(`async function ${fn}(`)));
       expect(body, fn).toMatch(/forPage\(request, client\);\s*(return await |return |const res = await )?fetch\(request\)/);
     }
-    const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-    expect(seal).toContain("every request its offline helper (the service worker) made for this tab");
-    expect(seal).toContain('each tab\'s log lists it once, marked "made by the offline helper, which every Dial tab shares", and counts it apart from this tab\'s own requests.');
+    // The Seal widget's list marks the helper's shared rows on the row itself, and counts them apart in its totals.
     expect(read("web/src/request-log.ts")).toContain('"made by the offline helper, which every Dial tab shares"');
+    expect(read("web/src/request-log.ts")).toContain("Offline helper, shared by every tab:");
+    expect(read("web/src/seal-widget.ts")).toMatch(/tot\.innerHTML = totalsHtml\(s\);[\s\S]*rows\.innerHTML = html;/);
     // The voice helpers and the offline helper post their own record to the page, which records it.
     expect(read("web/src/sw.ts")).toMatch(/watchWorkerRequests\(tell\)/);
     expect(read("web/src/narrate.worker.ts")).toMatch(/watchWorkerRequests\(/);
@@ -63,10 +63,10 @@ describe("web/privacy.html, claim by claim", () => {
     const telemetry = read("web/src/telemetry.ts");
     expect(telemetry).toContain('export const COUNTS_KEY = "dial.counts";');
     expect([...telemetry.matchAll(/\.setItem\(([^,]+),/g)].map((m) => m[1])).toEqual(["COUNTS_KEY"]);
-    // Written only when the listener changes it: setCounts is the one writer, called from the Seal's switch only.
+    // Written only when the listener changes it: setCounts is the one writer, called from the Seal widget's switch only.
     const setters = files.filter((f) => f !== "telemetry.ts" && /\bsetCounts\(/.test(read(`web/src/${f}`)));
-    expect(setters).toEqual(["seal.ts"]);
-    expect(read("web/src/seal.ts")).toMatch(/sw\.addEventListener\("click", \(\) => \{\s*const on = !countsOn\(\);\s*const kept = setCounts\(on\);/);
+    expect(setters).toEqual(["seal-widget.ts"]);
+    expect(read("web/src/seal-widget.ts")).toMatch(/sw\.addEventListener\("click", \(\) => \{\s*const on = !countsOn\(\);\s*const kept = setCounts\(on\);/);
     // sessionStorage: request-recorder.ts only, under LOG_KEY, and only the record's own keys.
     const session = files.filter((f) => /\bsessionStorage\b/.test(read(`web/src/${f}`)));
     expect(session).toEqual(["request-recorder.ts"]);
@@ -87,8 +87,11 @@ describe("web/privacy.html, claim by claim", () => {
     expect(text).toContain("Once you have heard four fifths of a work, one listen is counted");
     // One wording on both pages (CoS decision D), paired with HEARD_SHARE = 0.8.
     expect(text).not.toMatch(/80%/);
-    const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-    expect(seal).toContain("Totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more.");
+    const seal = read("web/index.html").replace(/<[^>]+>/g, " ").replace(/s+/g, " ");
+    expect(seal).toContain("The switch: totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more.");
+    expect(seal).not.toMatch(/works fully made|80%/);
+    expect(read("web/index.html")).toContain('<span id="sw-l">Send anonymous counts</span>');
+    expect(text).toContain('You can turn the counts off in the Seal widget on the radio, with the switch "Send anonymous counts".');
     // Paired with the code: the three counts the page sends, and chapter_rendered once per listen, when 80% is heard on either path (broadcast-state.ts countsAsListen; tests/recordings.test.ts).
     const sent = new Set<string>();
     for (const f of (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((x) => x.endsWith(".ts"))) {
@@ -108,18 +111,23 @@ describe("web/privacy.html, claim by claim", () => {
     expect(feedback).not.toMatch(/countsOn/);
   });
 
-  it("the Seal sends no count; a setting the browser will not keep changes nothing, and the Seal disables the switch and says so", () => {
-    expect(text).toContain("The Seal itself sends no count, not even a page view.");
-    expect(read("web/src/seal.ts")).not.toMatch(/sendEvent|reportCoreSuccess/);
-    expect(text).toContain("If your browser will not let Dial keep the setting, the Seal disables the switch and says so; counts stay as they were.");
+  it("the Seal widget sends and counts nothing; a setting the browser will not keep changes nothing, and the widget disables the switch and says so", () => {
+    expect(text).toContain("The Seal widget itself sends nothing and counts nothing.");
+    expect(text).not.toContain("The Seal itself sends no count, not even a page view.");
+    expect(read("web/src/seal-widget.ts")).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|noteSend/);
+    expect(text).toContain("If your browser will not let Dial keep the setting, the Seal widget disables the switch and says so; counts stay as they were.");
     // A refused write changes nothing (counts stay on), and the Seal disables the switch with the reason.
     expect(read("web/src/telemetry.ts")).toMatch(/store\.setItem\(COUNTS_KEY, on \? "on" : "off"\);\s*return true;\s*\} catch \{\s*return false;/);
     expect(read("web/src/telemetry.ts")).not.toMatch(/pageOnly/);
-    expect(read("web/src/seal.ts")).toMatch(/const refuse = \(\) => \{\s*sw\.disabled = true;\s*note\.textContent = STORAGE_REFUSED;/);
+    expect(read("web/src/seal-widget.ts")).toMatch(/const refuse = \(\) => \{\s*sw\.disabled = true;\s*note\.textContent = STORAGE_REFUSED;/);
   });
 
-  it("the speed test keeps no results and sends nothing; it keeps the voice as the radio does", () => {
-    expect(text).toContain("The speed test on the Seal keeps no results and sends nothing: its results stay on the screen, and are gone when you leave the page. If the voice is not on this device yet, the test downloads it and keeps it, as the radio does.");
+  it("no speed test is offered until the radio's gauge (T7), so the page makes no claim about one; its engine still sends nothing", () => {
+    // The Seal page and its test are gone (design/spec.md 00); the gauge that replaces it is T7's, with its own claim.
+    expect(text).not.toMatch(/speed test/i);
+    const files = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
+    const starters = files.filter((f) => /type: "bench"/.test(read(`web/src/${f}`)) && f !== "narrate.worker.ts");
+    expect(starters).toEqual([]);
     const worker = read("web/src/narrate.worker.ts");
     const bench = worker.slice(worker.indexOf("async function bench("), worker.indexOf("ctx.onmessage"));
     expect(bench).toMatch(/await loadVoice\(/);
@@ -188,7 +196,7 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the offline helper never stores the daily counts or feedback", async () => {
-    expect(text).toContain("It never stores the daily counts or feedback, and it sends nothing of its own. It tells Dial's open pages which requests it made, on this device only, so the Seal can list them.");
+    expect(text).toContain("It never stores the daily counts or feedback, and it sends nothing of its own. It tells Dial's open pages which requests it made, on this device only, so the Seal widget on the radio can list them.");
     // Its only messages go to this origin's own window clients.
     const sw = read("web/src/sw.ts");
     expect(sw).toMatch(/matchAll\(\{ type: "window", includeUncontrolled: true \}\)/);

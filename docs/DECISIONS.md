@@ -74,3 +74,8 @@ The privacy page and the Seal both say a listen is "a work heard for at least fo
 
 ## 2026-09-27: The kill threshold stays at 300 (CoS decision E)
 `chapter_rendered` now counts listens heard to four fifths (decision A), not renders completed. The threshold stays at 300 until the first G4 recalibrates it. CHARTER.md's kill criteria carry one line saying what the count means, and contract.yaml's comment on the event says the same.
+
+## 2026-09-27: T8 build: /seal answers 404, and the Seal widget counts "from this tab"
+The no-scroll build (design/spec.md 00). /seal answers 404 rather than redirecting to /?panel=work: there is no page left to send anyone to, a 404 needs no _redirects rule (Workers Static Assets keeps not_found_handling "none"), and every link Dial itself prints already points at the radio. contract.yaml checks the 404 and the widget's words on / and /play/crito.
+The approved count line was "Today Dial sent 2 anonymous counts." The widget reads this tab's request log, which cannot see another Dial tab, so the line is "Today Dial sent 2 anonymous counts from this tab." (and "No counts sent today from this tab."; with counts off, "Counts are off. No count has been sent from this tab since 21:26.", the time of the tab's last count). Truth wins over the approved words, as in the entry on "Made on this device" above. The switch reads "Send anonymous counts" as mocked; its full description sits with the request list. The speed test left with the page; T7 builds the gauge in the slot left on the glass. The feedback form moved into a sheet opened from The work widget, so no panel grows to hold it.
+

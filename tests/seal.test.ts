@@ -1,7 +1,9 @@
-// T6: the Seal at /seal. The request log's classification (sent, fetched,
-// blocked; this origin or not) as pure functions, the counts switch that
-// stops every sendEvent, the speed test's words and its no-send path, and
-// the escaping of everything the log renders.
+// T6, and T8's Seal widget: the Seal was a page at /seal and is now a
+// widget on the radio's work panel (design/spec.md 00). The request log's
+// classification (sent, fetched, blocked; this origin or not) as pure
+// functions, the widget's words in every state, the counts switch that stops
+// every sendEvent, the speed test engine's words and its no-send path (its
+// gauge is T7's), and the escaping of everything the log renders.
 
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -17,7 +19,11 @@ import {
   isSealed,
   logRowsHtml,
   confirmSend,
+  countLineHtml,
+  countsToday,
   footHtml,
+  requestsIntroHtml,
+  sealLineHtml,
   markFailed,
   newHelperRows,
   newestHelperRow,
@@ -353,8 +359,8 @@ describe("the counts switch stops every sendEvent", () => {
     expect(canKeepSetting(null)).toBe(false);
     expect(canKeepSetting(memoryStore())).toBe(true);
     expect(STORAGE_REFUSED).toBe("This browser will not keep the setting, so Dial cannot turn counts off here.");
-    expect(read("web/src/seal.ts")).toMatch(/if \(!canKeepSetting\(\)\) refuse\(\);/);
-    expect(read("web/src/seal.ts")).toMatch(/if \(!kept\) refuse\(\);/);
+    expect(read("web/src/seal-widget.ts")).toMatch(/if \(!canKeepSetting\(\)\) refuse\(\);/);
+    expect(read("web/src/seal-widget.ts")).toMatch(/if \(!kept\) refuse\(\);/);
   });
 
   it("every count in web/src goes through telemetry.ts sendEvent: no other /e sender, no second definition", () => {
@@ -392,7 +398,7 @@ describe("speed of this device: processor only, results never sent", () => {
     expect(verdictHtml(1.02).replace(/<[^>]+>/g, "")).toBe("Dial will use the processor: 1.0×, as fast as real time.");
     // No planning claim reaches the page before T7.
     for (const x of [0.5, 1, 3]) expect(verdictHtml(x)).not.toMatch(/plan|80|margin/i);
-    for (const f of ["web/seal.html", "web/src/seal.ts"]) expect(read(f), f).not.toMatch(/plans on|80%|PLANNING_MARGIN|plannedSpeed/);
+    for (const f of ["web/index.html", "web/src/seal-widget.ts", "web/src/main.ts"]) expect(read(f), f).not.toMatch(/plans on|80%|PLANNING_MARGIN|plannedSpeed/);
   });
 
   it("before the click, the button line states what the test will download, by the radio's size rules", () => {
@@ -401,8 +407,7 @@ describe("speed of this device: processor only, results never sent", () => {
     expect(benchNeedLine(522_240, "voices", 1)).toBe("The test adds its voice to this device first (about 1 MB).");
     expect(benchNeedLine(NaN, "all")).toBe("The test downloads the voice first if it is not on this device.");
     expect(benchNeedLine(null, null)).toBe("The test downloads the voice first if it is not on this device.");
-    // A presence-only look (voice-files.ts voicePresence): no hashing, and no cache opened that does not exist.
-    expect(read("web/src/seal.ts")).toMatch(/voicePresence\(\[NARRATORS\.m\]\)[\s\S]*?benchNeedLine\(n\.bytes, n\.need, n\.missingVoices\)/);
+    // A presence-only look (voice-files.ts voicePresence), for T7's gauge: no hashing, and no cache opened that does not exist.
     const files = read("web/src/voice-files.ts");
     const presence = files.slice(files.indexOf("export async function voicePresence"));
     expect(presence).not.toMatch(/sha256Hex|arrayBuffer|dropIfUnpinned|\.put\(|\.delete\(/);
@@ -426,13 +431,10 @@ describe("speed of this device: processor only, results never sent", () => {
     }
   });
 
-  it("no send in the test's path: bench.ts, the render worker's bench() and seal.ts's setupBench post nothing and count nothing", () => {
+  it("no send in the test's path: bench.ts and the render worker's bench() post nothing and count nothing", () => {
     const worker = read("web/src/narrate.worker.ts");
     const benchFn = worker.slice(worker.indexOf("async function bench("), worker.indexOf("ctx.onmessage"));
-    const seal = read("web/src/seal.ts");
-    const benchPath = seal.slice(seal.indexOf("function setupBench"), seal.indexOf("\nwatchReducedMotion();"));
-    expect(benchPath.length).toBeGreaterThan(200);
-    for (const [name, src] of [["bench.ts", read("web/src/bench.ts")], ["bench()", benchFn], ["setupBench", benchPath]] as const) {
+    for (const [name, src] of [["bench.ts", read("web/src/bench.ts")], ["bench()", benchFn]] as const) {
       expect(src, name).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|sendBeacon|\/e\b|noteSend/);
     }
     // The worker only loads the voice and times one sentence; the voice's own requests are Law 1 downloads.
@@ -440,56 +442,92 @@ describe("speed of this device: processor only, results never sent", () => {
     // The worker never loads the page's rendering code or the voice table: the Seal names the voice, and the sentence has its own module.
     expect(worker).not.toMatch(/^import \{[^}]*\} from "\.\/(engine\/cast|bench|render)";$/m);
     expect(worker).toContain('import { BENCH_SENTENCE } from "./bench-sentence";');
-    expect(read("web/src/seal.ts")).toContain('w.postMessage({ type: "bench", voice: NARRATORS.m } satisfies ToWorker);');
-    // The speed test shares the render worker, so the speech runtime ships once.
-    expect(read("web/src/seal.ts")).toContain('new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" })');
   });
 
-  it("the voice size follows the radio's truth rules: warmingLine from the manifest's needed bytes", () => {
-    const seal = read("web/src/seal.ts");
-    expect(seal).toContain("warmingLine(msg.total, msg.need, \"the test\", msg.missingVoices)");
-    expect(seal).not.toMatch(/\d+\s*MB/);
-    expect(read("web/seal.html")).not.toMatch(/\d+\s*MB/);
+  it("moved out with the Seal page: nothing on the radio starts the test until T7's gauge, which has a slot on the glass", () => {
+    const html = read("web/index.html");
+    expect(html).toContain('<div class="inst" id="speed-gauge" hidden></div>');
+    expect(html).toMatch(/<!-- The speed gauge and its "Test this device" key go in this slot \(T7/);
+    for (const f of ["main.ts", "seal-widget.ts", "panels-ui.ts"]) expect(read(`web/src/${f}`), f).not.toMatch(/type: "bench"|benchNeedLine|speedHtml/);
   });
 });
 
-describe("the page", () => {
-  const html = read("web/seal.html");
-  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+describe("the Seal widget on the radio (T8, design/spec.md 00)", () => {
+  const html = read("web/index.html");
+  const at = new Date(2026, 8, 27, 21, 26, 5).getTime();
+  const count = (t: number, over: Partial<RequestRecord> = {}): RequestRecord => ({ t, path: "/e", own: true, dir: "sent", bytes: 20, event: "page_view", ...over });
+  const flat = (h: string) => h.replace(/<[^>]+>/g, "");
 
-  it("is a built page, reachable from the radio, and in the contract", () => {
-    expect(read("web/vite.config.ts")).toContain('seal: "seal.html"');
-    expect(read("web/index.html")).toContain('<a href="/seal">Seal</a>');
-    expect(html).toContain('<a href="/seal" aria-current="page">Seal</a>');
-    const checks = parseYaml(read("contract.yaml")).checks as { path: string; type: string; expect?: number }[];
-    expect(checks.some((c) => c.path === "/seal" && c.type === "status" && c.expect === 200)).toBe(true);
+  it("replaced the page: no /seal page, no Seal room link, the contract checks /seal is gone and the widget's words are served", () => {
+    expect(() => read("web/seal.html")).toThrow();
+    expect(read("web/vite.config.ts")).not.toMatch(/seal/);
+    expect(html).not.toMatch(/href="\/seal"/);
+    expect(html).toMatch(/<nav class="rooms" aria-label="Rooms">\s*<a href="\/" id="room-repertory" aria-current="page"><span>Radio<\/span>/);
+    const checks = parseYaml(read("contract.yaml")).checks as { path: string; type: string; expect?: number; text?: string }[];
+    expect(checks.some((c) => c.path === "/seal" && c.type === "status" && c.expect === 404)).toBe(true);
+    expect(checks.some((c) => c.path === "/seal" && c.expect === 200)).toBe(false);
+    for (const text of ["Send anonymous counts", "Show every request"]) expect(checks.some((c) => c.path === "/" && c.type === "contains" && c.text === text), text).toBe(true);
   });
 
-  it("reads before it claims: the headline is \"Reading this tab\" until the browser's first batch arrives", () => {
-    expect(html).toContain('<h1 id="seal-h">Reading this tab</h1>');
-    const seal = read("web/src/seal.ts");
-    expect(seal).toMatch(/let ready = typeof PerformanceObserver !== "function";\s*recordRequests\(\(\) => \{\s*ready = true;/);
-    expect(seal).not.toMatch(/setTimeout\(render/);
+  it("is a widget on the work panel: the eye, one sentence, today's counts, the switch, and every request collapsed", () => {
+    const seal = /<article class="widget w-seal" id="seal"[\s\S]*?<\/article>/.exec(html)![0];
+    expect(html.slice(html.indexOf('<section class="panel p-work" id="work"'), html.indexOf("</main>"))).toContain(seal);
+    expect(seal).toContain('<svg class="seye" id="seal-eye"');
+    expect(seal).toContain('role="switch"');
+    // Collapsed by default: no file names in the default view.
+    expect(seal).toMatch(/<details class="reqs-box" id="seal-reqs">\s*<summary><span class="sh">Show every request<\/span><span class="hd">Hide the requests<\/span><\/summary>/);
+    expect(seal).not.toMatch(/<details[^>]* open/);
+    // Every "check it" link lands on the work panel, where the widget is.
+    expect(read("web/src/panels-ui.ts")).toContain('new URLSearchParams(location.search).get("panel") === "work"');
   });
 
-  it("the Seal itself is not counted", () => {
-    expect(read("web/src/seal.ts")).not.toMatch(/sendEvent|reportCoreSuccess|page_view/);
+  it("reads before it claims: \"Reading this tab\" until the browser's first batch arrives; sealed only while it is", () => {
+    const s0 = summarize([]);
+    expect(flat(sealLineHtml(s0, true, false, "h"))).toBe("Reading this tab. Collecting the browser's record of every request this page has made.");
+    expect(flat(sealLineHtml(s0, true, true, "h"))).toBe("Sealed. Nothing you hear or make leaves this device.");
+    const blocked = summarize([blockedRecord("https://x.example/a", 5, ORIGIN)!]);
+    expect(flat(sealLineHtml(blocked, true, true, "h"))).toBe("Still sealed. Nothing you hear or make leaves this device. The browser blocked 1 request to another site before it left.");
+    const foreign = summarize([fromEntry(entry("https://x.example/a"), ORIGIN)!]);
+    const open = flat(sealLineHtml(foreign, false, true, "h"));
+    expect(open).toMatch(/^Open\. This tab made 1 request to another address/);
+    expect(open).not.toContain("Nothing you hear or make leaves");
+    const widget = read("web/src/seal-widget.ts");
+    expect(widget).toMatch(/let ready = typeof PerformanceObserver !== "function";\s*const render = /);
+    expect(widget).toMatch(/recordRequests\(\(\) => \{\s*ready = true;/);
+    expect(widget).not.toMatch(/setTimeout\(render/);
   });
 
-  it("says what it can and cannot show, and how to check it yourself", () => {
-    expect(text).toContain("What this can and cannot show");
-    expect(text).toContain("Check it yourself: open your browser's developer tools, choose the Network tab, and reload this page.");
-    expect(text).toContain("so under those rules the eye cannot open");
-    expect(text).toContain("Browser extensions and the browser's own services run outside the page, so they cannot appear here");
+  it("today's counts are this tab's delivered counts since local midnight, and say so", () => {
+    const yesterday = new Date(2026, 8, 26, 23, 50).getTime();
+    const recs = [count(yesterday), count(at - 60_000), count(at - 30_000, { event: "work_opened" }), count(at - 20_000, { failed: true }), { ...count(at - 10_000), path: "/feedback", event: undefined }];
+    const today = countsToday(recs, at);
+    expect(today.n).toBe(2);
+    expect(today.last).toBe(at - 30_000);
+    expect(flat(countLineHtml(today, "on"))).toBe("Today Dial sent 2 anonymous counts from this tab.");
+    expect(flat(countLineHtml(countsToday([count(at)], at), "on"))).toBe("Today Dial sent 1 anonymous count from this tab.");
+    expect(flat(countLineHtml(countsToday([count(yesterday)], at), "on"))).toBe("No counts sent today from this tab.");
+    expect(flat(countLineHtml(countsToday([], at), "on"))).toBe("No counts sent today from this tab.");
+    // Counts off: nothing since the last count, at its time; never "Today Dial sent".
+    const off = flat(countLineHtml(countsToday([count(new Date(2026, 8, 27, 21, 26).getTime())], at), "off"));
+    expect(off).toBe("Counts are off. No count has been sent from this tab since 21:26.");
+    expect(flat(countLineHtml(countsToday([], at), "off"))).toBe("Counts are off. No count has been sent from this tab today.");
+    // Old records let go, the oldest kept one from today: the number is a floor.
+    expect(flat(countLineHtml(countsToday([count(at - 5000)], at, 40), "on"))).toBe("Today Dial sent at least 1 anonymous count from this tab.");
+    expect(flat(countLineHtml(countsToday([count(yesterday), count(at)], at, 40), "on"))).toBe("Today Dial sent 1 anonymous count from this tab.");
+    expect(countLineHtml(countsToday([count(at)], at), "on")).toContain('<span data-numeral>1</span>');
   });
 
-  it("the switch says feedback still goes; the graphics chip is not faked; no /verify control yet (F5)", () => {
-    expect(text).toContain("only a feedback message you choose to send leaves this device");
-    expect(html).toContain('role="switch"');
-    expect(text).toContain("Measured in a later update");
-    expect(html).not.toMatch(/navigator\.gpu|requestAdapter/);
-    expect(read("web/src/seal.ts")).not.toMatch(/navigator\.gpu|requestAdapter/);
-    expect(html).not.toMatch(/verify|Check a recording/i);
+  it("the list's sentence is true: what was fetched, what was sent, nowhere else", () => {
+    const own = fromEntry(entry(`${ORIGIN}/`), ORIGIN)!;
+    expect(flat(requestsIntroHtml(summarize([own, count(at)]), true, "dial.voidvision.org"))).toBe("Everything this tab fetched from dial.voidvision.org, and the counts it sent. Nothing went anywhere else. Check it yourself in your browser's developer tools, Network tab.");
+    expect(flat(requestsIntroHtml(summarize([own, { ...count(at), path: "/feedback", event: undefined }]), true, "h"))).toContain("and the counts and feedback it sent");
+    expect(flat(requestsIntroHtml(summarize([own, fromEntry(entry("https://x.example/a"), ORIGIN)!]), false, "h"))).not.toContain("Nothing went anywhere else");
+    expect(requestsIntroHtml(summarize([own]), true, XSS)).not.toContain("<img");
+    expect(sealLineHtml(summarize([fromEntry(entry("https://x.example/a"), ORIGIN)!]), false, true, XSS)).not.toContain("<img");
+  });
+
+  it("sends and counts nothing of its own", () => {
+    expect(read("web/src/seal-widget.ts")).not.toMatch(/sendEvent|reportCoreSuccess|page_view|fetch\(/);
   });
 });
 
