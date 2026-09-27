@@ -10,18 +10,39 @@
 // plus the silence after it from the pause table, exactly as the tab's WAV
 // lays it out (engine/wav.ts). The recording is cut into parts only at the
 // start of a line, so every line's speech lies inside one part.
+//
+// T5b: iPhone and desktop Safari cannot reliably decode Opus in WebM
+// (source.ts canPlayOpusWebm), so every part also has an AAC-LC .m4a
+// encoding of the same audio (scripts/transcode-m4a.mjs), same boundaries
+// and durations. The index stays one file, shared by both encodings: each
+// part's Opus pin (file/bytes/sha256, as before) sits beside its m4a pin,
+// and the timing (start/seconds/from/to, and every line) is common to both,
+// since the AAC container's edit list trims the encoder's priming delay to
+// within one frame (source.ts lineSlice already clamps to what decoded).
 
-/** Bumped when the index's shape or the hash's inputs change. */
-export const RECORDING_FORMAT = 1;
+/** Bumped when the index's shape or the hash's inputs change. T5b (2): every part also carries its m4a pin. */
+export const RECORDING_FORMAT = 2;
 
 /** The rate Kokoro speaks at; line lengths are whole samples at this rate. */
 export const RECORDING_RATE = 24000;
 
-/** The only names a part may have: the page fetches /recordings/<slug>/<file>, so nothing else is ever put in that path. */
+/** AAC-LC encodes in fixed 1024-sample frames at any rate: the bound a part's m4a decode may drift from its Opus decode (encoder priming or the last frame's padding), and the size of the encoder's own priming delay in this build's encoding (measured in scripts/transcode-m4a.mjs). */
+export const AAC_FRAME_SAMPLES = 1024;
+
+/** The only names a part's Opus file may have: the page fetches /recordings/<slug>/<file>, so nothing else is ever put in that path. */
 export const PART_FILE = /^part\d+\.webm$/;
+/** The only names a part's m4a file may have. */
+export const M4A_PART_FILE = /^part\d+\.m4a$/;
+
+/** A part's pin in one encoding: the file this browser fetches, checked byte for byte against this hash and size. */
+export interface FilePin {
+  file: string;
+  bytes: number;
+  sha256: string;
+}
 
 export interface RecordingPart {
-  /** File name under /recordings/<slug>/. */
+  /** File name under /recordings/<slug>/: the Opus encoding. */
   file: string;
   /** Where the part starts in work time (the start of its first line). */
   start: number;
@@ -32,6 +53,8 @@ export interface RecordingPart {
   to: number;
   bytes: number;
   sha256: string;
+  /** The same part, encoded AAC-LC in .m4a, for a browser that cannot decode Opus in WebM (T5b). */
+  m4a: FilePin;
 }
 
 export interface RecordingLine {
@@ -117,6 +140,7 @@ export function indexProblem(index: RecordingIndex, expected: { slug: string; di
   let from = 0;
   for (const p of index.parts) {
     if (!PART_FILE.test(p.file)) return `a part is named ${JSON.stringify(p.file)}`;
+    if (!p.m4a || !M4A_PART_FILE.test(p.m4a.file)) return `a part's m4a file is named ${JSON.stringify(p.m4a?.file)}`;
     if (p.from !== from || p.to <= p.from) return "the parts do not tile the lines";
     from = p.to;
   }
@@ -185,7 +209,19 @@ export function partBreaks(lines: readonly { speech: number; pause: number }[], 
   return breaks;
 }
 
-/** Every byte a saved recording keeps: its parts and the index file itself. */
-export function recordingBytes(index: Pick<RecordingIndex, "parts">, indexBytes: number): number {
-  return index.parts.reduce((n, p) => n + p.bytes, indexBytes);
+/** Every byte a saved recording keeps: its parts (in the format this browser uses, "opus" by default) and the index file itself. */
+export function recordingBytes(index: Pick<RecordingIndex, "parts">, indexBytes: number, format: "opus" | "m4a" = "opus"): number {
+  return index.parts.reduce((n, p) => n + (format === "m4a" ? p.m4a.bytes : p.bytes), indexBytes);
+}
+
+/**
+ * The drift bound between a part's two encodings: an AAC-LC decoder may
+ * trim the encoder's priming delay via the container's edit list, or not,
+ * and the last frame is padded to a full 1024 samples, so the m4a decode
+ * can differ from the Opus decode by up to one AAC frame (CoS decision H).
+ * `driftSamples` is the measured difference (either direction, in samples
+ * at RECORDING_RATE); true when it is within bound.
+ */
+export function withinDriftBound(driftSamples: number): boolean {
+  return Math.abs(driftSamples) <= AAC_FRAME_SAMPLES;
 }

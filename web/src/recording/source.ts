@@ -16,15 +16,20 @@
 
 import { sha256Hex } from "../voice-files";
 import { CAST_ENGINE_VERSION } from "../engine/cast-version";
-import { PART_FILE, RECORDING_RATE, expectedDigest, indexProblem, lineSlice, partOfLine, type RecordingIndex } from "./timing";
+import { M4A_PART_FILE, PART_FILE, RECORDING_RATE, expectedDigest, indexProblem, lineSlice, partOfLine, type FilePin, type RecordingIndex } from "./timing";
+
+/** Which encoding of Dial's prepared recording this browser plays: Opus in WebM, or AAC-LC in .m4a (T5b, for Safari). */
+export type RecordingFormat = "opus" | "m4a";
 
 /** One work's entry in the staged list (scripts/fetch-recordings.mjs). */
 export interface RecordingEntry {
-  /** The index's SHA-256. */
+  /** The index's SHA-256: covers every part's pin in both encodings, since the index embeds both (T5b). */
   index: string;
-  /** Every byte of the recording: its parts and its index. */
+  /** Every byte of the Opus recording: its parts and its index. */
   bytes: number;
   parts: number;
+  /** Every byte of the m4a recording: its parts (the index is shared, counted above). */
+  m4a: { bytes: number; parts: number };
   seconds: number;
   /** The day it was made, YYYY-MM-DD, in the maker's local time. */
   made: string;
@@ -49,22 +54,43 @@ export function recordingPins(m: RecordingsManifest): Record<string, string> {
   return Object.fromEntries(Object.entries(m.works).map(([slug, w]) => [slug, w.index]));
 }
 
-/** The recordings this page may try to play: none where this browser cannot play Opus in WebM, so every work is made on the device. */
-export function playableRecordings(m: RecordingsManifest, canPlay: boolean): Record<string, RecordingEntry> {
-  return canPlay ? m.works : {};
+/** The recordings this page may try to play: none where this browser cannot play either encoding, so every work is made on the device. */
+export function playableRecordings(m: RecordingsManifest, format: RecordingFormat | null): Record<string, RecordingEntry> {
+  return format ? m.works : {};
 }
 
 export const MAX_DECODED_PARTS = 3;
 /** A part that fails to arrive is asked for once more after this pause, before the broadcast stops. */
 export const PART_RETRY_MS = 800;
 
-/** Whether this browser can play Opus in WebM, the recordings' format. Where it cannot, every work is made on the device. */
-export function canPlayRecordings(): boolean {
+/** Whether this browser claims to decode Opus in WebM (canPlayType: a claim, not a guarantee, since some browsers answer yes and still fail to decode a real part). */
+function canPlayOpusWebm(): boolean {
   try {
     return typeof OfflineAudioContext !== "undefined" && new Audio().canPlayType('audio/webm; codecs="opus"') !== "";
   } catch {
     return false;
   }
+}
+
+/**
+ * The format Dial tries first (T5b): Opus where this browser claims to
+ * decode it, otherwise m4a (AAC-LC), which iPhone and desktop Safari play.
+ * A claim of Opus support that turns out false on the first part falls
+ * back to m4a at runtime (nextOnDecodeFailure), before made-on-device.
+ */
+export function choosePlaybackFormat(): RecordingFormat {
+  return canPlayOpusWebm() ? "opus" : "m4a";
+}
+
+/**
+ * What a decode failure on `format`'s part `partIndex` (0-based) does next,
+ * the fallback order Opus, then m4a, then made-on-device (CoS decision H):
+ * only an Opus failure on the very first part retries once as m4a (a later
+ * Opus part failing, or an m4a failure anywhere, hands over to made-on-device
+ * directly). `alreadyRetried` is true once that one retry has been spent.
+ */
+export function nextOnDecodeFailure(format: RecordingFormat, partIndex: number, alreadyRetried: boolean): "retry-m4a" | "made-here" {
+  return format === "opus" && partIndex === 0 && !alreadyRetried ? "retry-m4a" : "made-here";
 }
 
 /** A part that arrived intact but that this browser could not decode (the error the page answers by making the work on the device). */
@@ -100,6 +126,8 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export class Recording {
   private readonly decoded = new Map<number, Promise<Float32Array>>();
+  /** Whether the Opus-part-0 retry (nextOnDecodeFailure) has already been spent. */
+  private m4aRetried = false;
 
   constructor(
     readonly slug: string,
@@ -109,6 +137,8 @@ export class Recording {
     private readonly decode: Decoder = decodeAt24k,
     private readonly fetchPart: (file: string) => Promise<ArrayBuffer> = (file) => fetchRecordingPart(slug, file),
     private readonly retryMs = PART_RETRY_MS,
+    /** Which encoding this recording fetches. Mutable: retryAsM4a() moves it after a part-0 Opus retry. */
+    public format: RecordingFormat = "opus",
   ) {}
 
   get lineCount(): number {
@@ -126,10 +156,17 @@ export class Recording {
     return this.index.samples / this.index.sampleRate;
   }
 
+  /** This part's pin in the encoding this recording currently fetches. */
+  private partPin(p: number): FilePin {
+    const part = this.index.parts[p]!;
+    return this.format === "m4a" ? part.m4a : part;
+  }
+
   /** A part's bytes, checked against its pin; a failure is tried once more after a short pause. */
   private async fetched(p: number): Promise<ArrayBuffer> {
-    const pin = this.index.parts[p]!;
-    if (!PART_FILE.test(pin.file)) throw new Error(`recording: a part is named ${JSON.stringify(pin.file)}`);
+    const pin = this.partPin(p);
+    const namePattern = this.format === "m4a" ? M4A_PART_FILE : PART_FILE;
+    if (!namePattern.test(pin.file)) throw new Error(`recording: a part is named ${JSON.stringify(pin.file)}`);
     const once = async () => {
       const bytes = await this.fetchPart(pin.file);
       if (bytes.byteLength !== pin.bytes || (await sha256Hex(bytes)) !== pin.sha256) throw new Error("recording: a part did not match its pin");
@@ -181,6 +218,18 @@ export class Recording {
   get held(): number {
     return this.decoded.size;
   }
+
+  /** What a decode failure on part `partIndex` does next (nextOnDecodeFailure), given this recording's own format and retry history. */
+  nextOnFailure(partIndex: number): "retry-m4a" | "made-here" {
+    return nextOnDecodeFailure(this.format, partIndex, this.m4aRetried);
+  }
+
+  /** The one Opus-part-0 retry: switches to m4a and forgets anything already fetched or decoded, so the next samples() re-fetches in the new encoding. */
+  retryAsM4a(): void {
+    this.format = "m4a";
+    this.m4aRetried = true;
+    this.decoded.clear();
+  }
 }
 
 async function fetchRecordingPart(slug: string, file: string): Promise<ArrayBuffer> {
@@ -199,6 +248,7 @@ export async function openRecording(
   entry: RecordingEntry,
   cues: readonly { start: number; end: number; spoken: string; pauseAfterMs: number }[],
   voices: readonly string[],
+  format: RecordingFormat = "opus",
 ): Promise<{ recording: Recording; problem: null } | { recording: null; problem: string }> {
   const res = await fetch(`/recordings/${slug}/index.json`);
   if (!res.ok) throw new Error(`recording index: ${res.status}`);
@@ -207,5 +257,5 @@ export async function openRecording(
   const index = JSON.parse(new TextDecoder().decode(buf)) as RecordingIndex;
   const problem = indexProblem(index, { slug, digest: await expectedDigest(cues, voices), lines: cues.length, castVersion: CAST_ENGINE_VERSION });
   if (problem) return { recording: null, problem };
-  return { recording: new Recording(slug, index, { bytes: buf.byteLength, sha256: entry.index }), problem: null };
+  return { recording: new Recording(slug, index, { bytes: buf.byteLength, sha256: entry.index }, undefined, undefined, undefined, format), problem: null };
 }

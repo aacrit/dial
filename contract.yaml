@@ -210,6 +210,7 @@ checks:
   # T5: Dial's prepared recordings, staged from recordings.lock.json by
   # scripts/fetch-recordings.mjs: each work's list entry, timing index and
   # first part (tests/recordings.test.ts keeps these in step with the lock).
+  # T5b: the same first part in m4a (AAC-LC), for iPhone and desktop Safari.
   - name: the prepared recordings' list is served
     type: status
     path: /recordings/manifest.json
@@ -225,6 +226,11 @@ checks:
     path: /recordings/cave/part0.webm
     expect: 200
 
+  - name: the Cave's prepared recording, part 0 in m4a, is served
+    type: status
+    path: /recordings/cave/part0.m4a
+    expect: 200
+
   - name: Crito's prepared recording index is served
     type: status
     path: /recordings/crito/index.json
@@ -235,6 +241,11 @@ checks:
     path: /recordings/crito/part0.webm
     expect: 200
 
+  - name: Crito's prepared recording, part 0 in m4a, is served
+    type: status
+    path: /recordings/crito/part0.m4a
+    expect: 200
+
   - name: the Meditations' prepared recording index is served
     type: status
     path: /recordings/meditations/index.json
@@ -243,6 +254,11 @@ checks:
   - name: the Meditations' prepared recording, part 0, is served
     type: status
     path: /recordings/meditations/part0.webm
+    expect: 200
+
+  - name: the Meditations' prepared recording, part 0 in m4a, is served
+    type: status
+    path: /recordings/meditations/part0.m4a
     expect: 200
 
   # T4: the installable app and the offline helper (web/src/sw.ts, built

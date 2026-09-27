@@ -101,7 +101,10 @@ export async function stage({ from = null, lockFile = LOCK_FILE, out = RECORDING
     if (mismatch.length) throw new Error(`fetch-recordings: ${slug}/index.json: ${mismatch.join("; ")}`);
     const parts = [];
     for (const p of w.parts) parts.push([p.file, await obtain(lock, slug, p, from, fetchImpl, cache)]);
-    staged[slug] = { index, indexBuf, parts };
+    // The same masters' AAC-LC encoding (T5b), for a browser that cannot decode Opus in WebM.
+    const m4aParts = [];
+    for (const p of w.m4a.parts) m4aParts.push([p.file, await obtain(lock, slug, p, from, fetchImpl, cache)]);
+    staged[slug] = { index, indexBuf, parts, m4aParts };
   }
 
   rmSync(out, { recursive: true, force: true });
@@ -111,10 +114,12 @@ export async function stage({ from = null, lockFile = LOCK_FILE, out = RECORDING
     mkdirSync(path.join(out, slug), { recursive: true });
     writeFileSync(path.join(out, slug, "index.json"), s.indexBuf);
     for (const [file, buf] of s.parts) writeFileSync(path.join(out, slug, file), buf);
+    for (const [file, buf] of s.m4aParts) writeFileSync(path.join(out, slug, file), buf);
     works[slug] = {
       index: lock.works[slug].index.sha256,
       bytes: s.parts.reduce((n, [, b]) => n + b.length, s.indexBuf.length),
       parts: s.parts.length,
+      m4a: { bytes: s.m4aParts.reduce((n, [, b]) => n + b.length, 0), parts: s.m4aParts.length },
       seconds: Math.round((s.index.samples / s.index.sampleRate) * 10) / 10,
       made: s.index.made,
       cast: s.index.engine.cast,

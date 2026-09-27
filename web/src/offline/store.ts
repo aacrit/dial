@@ -308,10 +308,12 @@ export interface RecordingSave {
   /** The index file's size as served, and its pin compiled into this page. */
   indexBytes: number;
   indexSha256: string;
+  /** Which encoding this browser opened the recording in (T5b): what gets saved and kept. */
+  format: "opus" | "m4a";
 }
 
 async function filesOf(man: Manifest, r: RecordingSave): Promise<PinnedFile[]> {
-  return recordingFiles(r.slug, r.index.parts, { bytes: r.indexBytes, sha256: r.indexSha256 }, { bytes: man.bytes, sha256: await sha256Hex(new TextEncoder().encode(man.text).buffer) });
+  return recordingFiles(r.slug, r.index.parts, { bytes: r.indexBytes, sha256: r.indexSha256 }, { bytes: man.bytes, sha256: await sha256Hex(new TextEncoder().encode(man.text).buffer) }, r.format);
 }
 
 /** path@pin for every file already read back and found to hash to its pin, this visit. A changed pin is a new key, so it is read again. */

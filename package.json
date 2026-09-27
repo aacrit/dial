@@ -15,7 +15,8 @@
     "scan-history": "node scripts/scan-history.mjs",
     "gate": "node scripts/gate.mjs",
     "voice-bench": "node scripts/voice-bench.mjs",
-    "layout-check": "node scripts/layout-check.mjs"
+    "layout-check": "node scripts/layout-check.mjs",
+    "transcode-m4a": "node scripts/transcode-m4a.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260924.1",

@@ -81,6 +81,8 @@ function args() {
     repro: pair("--repro"),
     lock: a.includes("--lock"),
     date: val("--date"),
+    // T5b: a suffix on the release tag, so a lock that adds the m4a set does not disturb the Opus assets already published under the plain date tag (CoS decision H).
+    tagSuffix: val("--tag-suffix", ""),
     threads: Number(val("--threads", Math.max(4, Math.floor(os.availableParallelism() / 2)))),
   };
 }
@@ -402,7 +404,7 @@ async function repro({ slug, n }, out, threads) {
 async function main() {
   const a = args();
   if (a.lock) {
-    const lock = lockFrom(a.out, WORKS.map((w) => w.slug), { castVersion: CAST_ENGINE_VERSION, date: a.date ?? today(), repo: RELEASE_REPO });
+    const lock = lockFrom(a.out, WORKS.map((w) => w.slug), { castVersion: CAST_ENGINE_VERSION, date: a.date ?? today(), repo: RELEASE_REPO, tagSuffix: a.tagSuffix });
     writeFileSync(path.join(repoRoot, "recordings.lock.json"), JSON.stringify(lock, null, 1) + "\n");
     console.log(`render-recordings: wrote recordings.lock.json for ${lock.tag}`);
     return;
