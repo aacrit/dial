@@ -49,6 +49,8 @@ export const SMALL_VIEWPORTS = [
   { width: 320, height: 568, name: "narrow phone" },
   { width: 640, height: 360, name: "small phone landscape" },
   { width: 960, height: 540, name: "small laptop" },
+  // Under 600 px wide in landscape: the widgets stack, and the open Seal covers the whole panel (T8 review).
+  { width: 568, height: 320, name: "narrow phone landscape" },
 ] as const;
 
 /**
@@ -89,6 +91,19 @@ export function panelLayout(width: number, height: number): PanelLayout {
   if (matchesQuery(PHONE_PORTRAIT, width, height)) return { panels, snap: true, band: "bottom", work: "stack", scriptFills: true };
   if (matchesQuery(TABLET_PORTRAIT, width, height)) return { panels, snap: true, band: "bottom", work: "two-columns", scriptFills: false };
   return { panels, snap: true, band: "right", work: matchesQuery(NARROW_LANDSCAPE, width, height) ? "stack" : "three-columns", scriptFills: false };
+}
+
+/**
+ * What the Seal covers when its request list is open, so the widgets under
+ * it are made inert (never focusable behind it): everything on a phone
+ * held upright and on a landscape screen under 600 px wide (style.css
+ * gives the open Seal inset 0 there), only the Script column on other short
+ * landscape screens, nothing elsewhere. `matches` answers a media query.
+ */
+export function sealCovers(matches: (query: string) => boolean): "all" | "text" | "none" {
+  if (matches(PHONE_PORTRAIT) || matches(NARROW_LANDSCAPE)) return "all";
+  if (matches(SHORT_LANDSCAPE)) return "text";
+  return "none";
 }
 
 /** The top bar's and the band's heights, in px, per layout (style.css --top and --bandh). */

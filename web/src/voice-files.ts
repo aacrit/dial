@@ -66,19 +66,63 @@ export interface StitchManifest {
   repo: string;
   parts: string[];
   sha256: string;
+  /** Every staged file's size in bytes, by served path: the parts' sizes size the one buffer they are read into. */
+  sizes: Record<string, number>;
 }
 
-/** Fetches the model's parts from this origin, joins them and checks the whole against its pin. */
+/** Where a model part is served: its key in the manifest's sizes (stitchModel fetches the same address, written out for tests/no-network.test.ts). */
+export const partPath = (m: Pick<StitchManifest, "repo">, part: string) => `/voice/models/${m.repo}/onnx/${part}`;
+
+/**
+ * Reads a response's body straight into `into` at `at`, counting bytes as
+ * they arrive; returns the bytes read. A body longer than the room left is
+ * refused (it cannot be the pinned file) before anything past it is kept.
+ */
+export async function readInto(res: Response, into: Uint8Array, at: number, count: (bytes: number) => void): Promise<number> {
+  let n = 0;
+  const put = (chunk: Uint8Array) => {
+    if (at + n + chunk.byteLength > into.byteLength) throw new Error("voice: the model did not match its pin");
+    into.set(chunk, at + n);
+    n += chunk.byteLength;
+    count(chunk.byteLength);
+  };
+  if (!res.body) {
+    put(new Uint8Array(await res.arrayBuffer()));
+    return n;
+  }
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    try {
+      put(value);
+    } catch (err) {
+      await reader.cancel().catch(() => undefined);
+      throw err;
+    }
+  }
+  return n;
+}
+
+/**
+ * Fetches the model's parts from this origin into one buffer sized from the
+ * manifest, checks it against its pin, and hands it back as a Blob-backed
+ * response. The 92 MB model is held once while it arrives (never as the
+ * parts, a Blob of them and a joined copy all at once, as it was before the
+ * pre-Proof audit), and the buffer is let go once the Blob holds the bytes.
+ */
 export async function stitchModel(m: StitchManifest, count: (bytes: number) => void, signal?: AbortSignal): Promise<Response> {
-  const buffers: ArrayBuffer[] = [];
+  const total = m.parts.reduce((sum, part) => sum + (m.sizes[partPath(m, part)] ?? 0), 0);
+  if (!(total > 0)) throw new Error("voice: the manifest does not size the model's parts");
+  const whole = new Uint8Array(total);
+  let at = 0;
   for (const part of m.parts) {
     const res = await fetch(`/voice/models/${m.repo}/onnx/${part}`, { signal });
     if (!res.ok) throw new Error(`voice part ${part}: ${res.status}`);
-    buffers.push(await readCounted(res, count));
+    at += await readInto(res, whole, at, count);
   }
-  const blob = new Blob(buffers);
-  const whole = await blob.arrayBuffer();
-  if ((await sha256Hex(whole)) !== m.sha256) throw new Error("voice: the model did not match its pin");
+  if (at !== total || (await sha256Hex(whole.buffer)) !== m.sha256) throw new Error("voice: the model did not match its pin");
+  const blob = new Blob([whole]);
   return new Response(blob, { headers: { "content-type": "application/octet-stream", "content-length": String(blob.size) } });
 }
 

@@ -57,7 +57,11 @@ export const RATE_LIMITER_ERROR_DAILY_CEILING = 100;
 // Feedback text is capped in UTF-8 bytes, which is what D1 stores, not in
 // UTF-16 code units (JavaScript's .length).
 export const MAX_FEEDBACK_TEXT_BYTES = 4_000;
-export const MAX_FEEDBACK_PAGE_CHARS = 256;
+// The feedback's `page` is stored only when it is one of this site's own
+// paths in this narrow shape ("/", "/play/crito"); anything else is stored
+// as null, so the field can never carry a second free-text message or an
+// identifier smuggled in a query string.
+export const FEEDBACK_PAGE_PATTERN = /^\/[a-z0-9/-]{0,64}$/;
 
 // Raw body caps, checked before JSON.parse (worker/src/http.ts). `/e`'s
 // body is only `{"name":"<event>"}`.

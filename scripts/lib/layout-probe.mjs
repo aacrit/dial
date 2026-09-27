@@ -11,7 +11,8 @@
 //   text in a panel (or an open sheet) lies inside its nearest clipping
 //   ancestor's box, or inside a scroller that can bring it into view; every
 //   such scroller is at least 24 px tall. Text cut short on purpose (a
-//   line clamp) is exempt. The knobs and keys on the device never overlap.
+//   line clamp) is exempt, but the clamped block is at least one line
+//   tall. The knobs and keys on the device never overlap.
 // - Fit, at the panel map's own viewports: every part of a panel in view
 //   (the dial box, each part of the device's side, each widget; marked
 //   data-part) sits inside the panel, clear of the top bar and the band, so
@@ -39,12 +40,21 @@ export function measure(rootIds) {
     const tag = el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}${typeof el.className === "string" && el.className ? `.${el.className.split(" ").filter(Boolean).slice(0, 2).join(".")}` : ""}`;
     return text ? `${tag} "${text}"` : tag;
   };
-  const clamped = (el) => {
+  /** The element that line-clamps `el` (itself or a near ancestor), or null. */
+  const clampOf = (el) => {
     for (let a = el, i = 0; a && i < 4; a = a.parentElement, i++) {
       const lc = getComputedStyle(a).webkitLineClamp;
-      if (lc && lc !== "none") return true;
+      if (lc && lc !== "none") return a;
     }
-    return false;
+    return null;
+  };
+  const clamped = (el) => clampOf(el) !== null;
+  /** A clamped block's height and its one line's height: a clamp may cut text short, never below one line. */
+  const lineBox = (el) => {
+    const cs = getComputedStyle(el);
+    const lh = parseFloat(cs.lineHeight);
+    const line = Number.isFinite(lh) ? lh : (parseFloat(cs.fontSize) || 16) * 1.2;
+    return { height: el.getBoundingClientRect().height, line };
   };
   /** Why a box at `r` inside `el` cannot be seen or reached, or null. */
   const unreachable = (el, r) => {
@@ -87,8 +97,21 @@ export function measure(rootIds) {
     // Every visible control, and every non-empty run of text.
     const clips = [];
     const seen = new Set();
+    // Text cut short on purpose (a line clamp) is exempt from reach, but the clamped block must still show a whole line.
+    const clampedLines = [];
+    const seenClamps = new Set();
     const check = (target, box, interactive) => {
-      if (box.width === 0 || box.height === 0 || clamped(target)) return;
+      if (box.width === 0 || box.height === 0) return;
+      const clamp = clampOf(target);
+      if (clamp) {
+        // Inert content sits under a cover (the open Seal): it is not seen, so its height does not matter.
+        if (!seenClamps.has(clamp) && !clamp.closest("[inert]")) {
+          seenClamps.add(clamp);
+          const lb = lineBox(clamp);
+          if (lb.height > 0) clampedLines.push({ el: name(clamp), ...lb });
+        }
+        return;
+      }
       const u = unreachable(target, box);
       if (!u) return;
       const key = `${name(target)}|${u.why}`;
@@ -126,7 +149,7 @@ export function measure(rootIds) {
         }
       }
     }
-    return { id, top: r.top, bottom: r.bottom, padTop, padBottom, parts, clips, overlaps };
+    return { id, top: r.top, bottom: r.bottom, padTop, padBottom, parts, clips, overlaps, clampedLines };
   });
   // The band selector, where it is drawn: nothing on a panel may sit under it.
   const bandEl = document.getElementById("band");
@@ -168,6 +191,13 @@ export function judge(m, { fit = true } = {}) {
       note(c.px, `#${p.id} ${c.interactive ? "control" : "text"} ${c.el} cannot be reached: ${c.why}`);
     }
     for (const o of p.overlaps ?? []) note(o.px, `#${p.id} ${o.a} overlaps ${o.b}`);
+    // A line clamp may cut the read-along short, but a line squeezed below one line's height shows no whole line at all.
+    for (const c of p.clampedLines ?? []) {
+      if (c.height < c.line - SLACK) {
+        clipped++;
+        note(c.line - c.height, `#${p.id} line-clamped text ${c.el} is ${c.height.toFixed(0)} px tall, less than one line (${c.line.toFixed(0)} px)`);
+      }
+    }
     for (const part of p.parts) {
       if (part.right > m.innerWidth + SLACK) note(part.right - m.innerWidth, `#${p.id} ${part.name} runs off the right edge`);
       if (part.left < -SLACK) note(-part.left, `#${p.id} ${part.name} runs off the left edge`);

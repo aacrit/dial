@@ -339,6 +339,49 @@ checks:
     header: x-frame-options
     expect: DENY
 
+  # HTTPS only once seen over HTTPS (the redirect from http:// is the
+  # zone's "Always Use HTTPS" setting), and no device feature for anyone
+  # (scripts/lib/csp.mjs SECURITY_HEADERS). Pages and the Worker alike.
+  - name: homepage is HTTPS only (HSTS)
+    type: header
+    path: /
+    header: strict-transport-security
+    expect: "max-age=31536000"
+
+  - name: healthz is HTTPS only (HSTS)
+    type: header
+    path: /healthz
+    header: strict-transport-security
+    expect: "max-age=31536000"
+
+  - name: homepage allows no camera, microphone, location or USB
+    type: header
+    path: /
+    header: permissions-policy
+    expect: "camera=(), microphone=(), geolocation=(), usb=()"
+
+  # http:// answers 301 to https:// (CoS decision I). The redirect is the
+  # zone's "Always Use HTTPS" setting, not the Worker's, so this fails until
+  # the founder switches it on; G3 requires it. Only the zone's own host
+  # can pass it: on a workers.dev preview (outside the zone) or localhost
+  # the runner reports it "n/a (production host only)", neither passed nor
+  # skipped.
+  - name: http:// redirects to https:// (production host only)
+    type: redirect
+    path: /
+    scheme: http
+    expect: 301
+    location_starts_with: "https://"
+    host_suffix: voidvision.org
+    requires: deployed
+    failure_note: "Waiting on the founder: switch on Always Use HTTPS for the voidvision.org zone (the open Board ask). G3 requires this check."
+
+  - name: healthz allows no camera, microphone, location or USB
+    type: header
+    path: /healthz
+    header: permissions-policy
+    expect: "camera=(), microphone=(), geolocation=(), usb=()"
+
   # Every file the offline helper keeps (dist/offline-shell.json, the list
   # compiled into /sw.js) is served. Waits out the zone WAF's 10 s window
   # first, since the pages and icons are outside /assets/.
@@ -359,6 +402,34 @@ checks:
     path: /healthz
     count: 80
     concurrency: 20
+    expect_status: 429
+    expect_error: rate_limited
+    pause_before_seconds: 11
+    requires: deployed
+
+  # The write paths' own limits (worker/src/guard.ts RL_EVENTS, 6 a minute,
+  # and RL_FEEDBACK, 2 a minute). Each burst posts a body validation
+  # refuses (400) until the limit bites, so it writes no count and stores
+  # no message. Small waves stay under the WAF's 30 per 10 s.
+  - name: /e has its own tighter limit (deployed only)
+    type: burst
+    path: /e
+    method: POST
+    body: { name: "not_an_event" }
+    count: 20
+    concurrency: 10
+    expect_status: 429
+    expect_error: rate_limited
+    pause_before_seconds: 11
+    requires: deployed
+
+  - name: /feedback has its own tighter limit (deployed only)
+    type: burst
+    path: /feedback
+    method: POST
+    body: { text: "" }
+    count: 12
+    concurrency: 6
     expect_status: 429
     expect_error: rate_limited
     pause_before_seconds: 11

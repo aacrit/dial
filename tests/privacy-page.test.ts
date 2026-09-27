@@ -158,7 +158,7 @@ describe("web/privacy.html, claim by claim", () => {
     expect(store).toContain("await put(saved, workKey(slug), new Response(text");
     expect(store).toMatch(/await put\(kv, hfVoiceKey\(m\.repo, id\)/);
     expect(store).not.toMatch(/method:\s*"POST"|sendBeacon/);
-    expect(read("web/src/sw.ts")).toContain("await cache.put(path, copy);");
+    expect(read("web/src/offline/shell-cache.ts")).toContain("await cache.put(path, copy);");
     // Every fetch in store.ts is an allowlisted download (tests/no-network.test.ts, tests/offline.test.ts).
     expect(JSON.parse(read("privacy-allowlist.json")).sends).toEqual(["/e", "/feedback"]);
   });
@@ -191,14 +191,15 @@ describe("web/privacy.html, claim by claim", () => {
     expect(HEARD_SHARE).toBe(0.8);
   });
 
-  it("the shell (about 3 MB) is kept for every visitor, and the model and runtime stay after the last Remove", () => {
-    expect(text).toContain("The offline helper also keeps this site's page files (about 3 MB: the pages, scripts, styles, fonts and icons) in cache storage for every visitor");
+  it("the core shell (about 0.6 MB) is kept for every visitor, the rest on a save, and the model and runtime stay after the last Remove", () => {
+    expect(text).toContain("The offline helper also keeps this site's page files (about 0.6 MB: the pages, their main script and styles, the fonts' Latin faces and the icons) in cache storage for every visitor");
+    expect(text).toContain("When you save a work it keeps the rest of the page files too (about 2.5 MB more, mostly the script that makes speech on this device).");
     expect(text).toContain("The voice model and its runtime stay after the last Remove");
     // Registered on every page load, not on the first save.
     expect(read("web/src/main.ts")).toMatch(/^registerOfflineHelper\(\);$/m);
     const store = read("web/src/offline/store.ts");
     expect(store.slice(store.indexOf("export async function removeWork"))).not.toMatch(/voiceCacheName|runtimeCacheName/);
-    // "about 3 MB" is the built shell's size (tests/offline.test.ts computes it from dist/).
+    // "about 0.6 MB" and "2.5 MB more" are the built shells' sizes (tests/offline.test.ts computes them from dist/).
   });
 
   it("the offline helper never stores the daily counts or feedback", async () => {
@@ -261,17 +262,22 @@ describe("web/privacy.html, claim by claim", () => {
     expect(text).toContain("Cloudflare keeps a short-lived count in memory");
     const guard = read("worker/src/guard.ts");
     expect(guard).toContain('request.headers.get("cf-connecting-ip")');
-    expect(guard).toContain("::/64");
+    expect(guard).toContain("return `${net.map((x) => x.toString(16)).join(\":\")}::/${v6Prefix}`;");
     for (const f of workerFiles().filter((x) => x !== "guard.ts")) {
       expect(read(`worker/src/${f}`), f).not.toMatch(/cf-connecting-ip|x-forwarded-for|x-real-ip/i);
     }
   });
 
-  it("per-request logs are off and the product's code logs nothing: wrangler.jsonc, and no console call in the Worker", () => {
+  it("per-request logs are off and the product's code logs nothing about who asked or what was sent: one fixed failure line, with the error's name only", () => {
     expect(text).toContain("Cloudflare's per-request logs are turned off for this site");
+    expect(text).toContain("Dial's own code logs nothing about");
     expect(read("wrangler.jsonc")).toMatch(/"invocation_logs": false/);
     expect(read("wrangler.jsonc")).toMatch(/"redact_query_string": true/);
-    for (const f of workerFiles()) expect(read(`worker/src/${f}`), f).not.toMatch(/console\./);
+    for (const f of workerFiles()) {
+      const calls = [...read(`worker/src/${f}`).matchAll(/console\.[a-z]+\(([^)]*\)?)\)/g)].map((m) => m[0]);
+      // The only one (CoS decision L): the failure line, which names the error and nothing else.
+      expect(calls, f).toEqual(f === "index.ts" ? ["console.error(unavailableLogLine(err))"] : []);
+    }
   });
 
   it("deleted automatically in batches on days the site is used: the daily purge and the purge before each insert both exist", () => {

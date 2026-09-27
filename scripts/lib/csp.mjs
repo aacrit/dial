@@ -48,6 +48,14 @@ export const SECURITY_HEADERS = {
   // own, so require-corp blocks nothing it needs.
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
+  // HTTPS only, for a year, once a browser has seen this over HTTPS. The
+  // redirect from http:// is the zone's "Always Use HTTPS" setting, not the
+  // Worker's (only the Worker's own routes run it). No preload yet: a
+  // preload listing is hard to undo, so it waits until the zone setting is on.
+  "Strict-Transport-Security": "max-age=31536000",
+  // Dial asks for no device feature: nothing on a page, and nothing it
+  // could ever frame, may ask for the camera, microphone, location or USB.
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), usb=()",
 };
 
 /**

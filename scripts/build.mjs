@@ -20,7 +20,7 @@ import { cspViolations, headersFile, injectCsp } from "./lib/csp.mjs";
 import { stage as stageVoice } from "./fetch-voice.mjs";
 import { stage as stageRecordings, stagedRecordingPins } from "./fetch-recordings.mjs";
 import { iconFiles, nightTokens, stampTokens } from "./lib/pwa.mjs";
-import { shellPaths } from "./lib/shell.mjs";
+import { coreShellPaths, shellPaths } from "./lib/shell.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const webDir = path.join(repoRoot, "web");
@@ -70,7 +70,7 @@ async function buildServiceWorker(tag, shell, pins, recordings) {
     root: webDir,
     logLevel: "warn",
     publicDir: false,
-    define: { __BUILD_TAG__: JSON.stringify(tag), __SHELL__: JSON.stringify(shell), __VOICE_PINS__: JSON.stringify(pins), __RECORDING_PINS__: JSON.stringify(recordings) },
+    define: { __BUILD_TAG__: JSON.stringify(tag), __SHELL__: JSON.stringify(shell), __CORE_SHELL__: JSON.stringify(coreShellPaths(shell)), __VOICE_PINS__: JSON.stringify(pins), __RECORDING_PINS__: JSON.stringify(recordings) },
     build: {
       outDir: distDir,
       emptyOutDir: false,

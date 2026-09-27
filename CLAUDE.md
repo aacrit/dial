@@ -23,8 +23,10 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
   ceilings' worst case stays within the share `budget.yaml` states
   (`tests/hardening.test.ts` recomputes it from `wrangler.jsonc`). A new
   write path adds its ceiling and a line in `worker/src/config.ts`'s
-  worstCaseDailyWrites. Every Worker request passes the per-client rate
-  limit in `worker/src/guard.ts` (IPv6 per /64, never stored).
+  worstCaseDailyWrites. Every Worker request passes one per-client rate
+  limit in `worker/src/guard.ts` (each write path has its own binding;
+  IPv6 per /64, or /56 on the write paths; never stored), and any failure inside the Worker answers
+  a 503 in JSON, never an error page.
 - **Web baseline.** Every response carries the security headers and CSP from
   `scripts/lib/csp.mjs` (static files through the build's `_headers`, the
   Worker through `worker/src/headers.ts`). POSTs are same-origin JSON only.

@@ -373,7 +373,7 @@ describe("the counts switch stops every sendEvent", () => {
       }
       if (/\bsendEvent\(/.test(src) && f !== "telemetry.ts") expect(src, f).toMatch(/import \{[^}]*\bsendEvent\b[^}]*\} from "\.\/telemetry";/);
     }
-    expect(read("web/src/telemetry.ts")).toMatch(/export function sendEvent\(name: string, deps: SendDeps = defaults\(\)\): void \{\s*if \(!countsOn\(deps\.store\)\) return;/);
+    expect(read("web/src/telemetry.ts")).toMatch(/export function sendEvent\(name: string, deps: SendDeps = defaults\(\), retries = 1\): void \{\s*if \(!countsOn\(deps\.store\)\) return;/);
   });
 });
 

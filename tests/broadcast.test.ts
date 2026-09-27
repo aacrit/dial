@@ -400,6 +400,22 @@ Third.`;
     expect(main).toMatch(/const to = \{ ArrowDown: i \+ 1, ArrowRight: i \+ 1, ArrowUp: i - 1, ArrowLeft: i - 1, Home: 0, End: all\.length - 1 \}\[e\.key\];/);
   });
 
+  it("off air the script is plain text, not a page of disabled buttons, and its scroller takes the tab stop (pre-Proof audit)", () => {
+    const cues = [
+      { start: 0, end: 6, text: "First." },
+      { start: 7, end: 14, text: "Second." },
+    ];
+    const off = scriptHtml("First. Second.", cues, -1, 0, false);
+    expect(off).toBe('<p><span class="sl" data-i="0">First.</span> <span class="sl" data-i="1">Second.</span></p>');
+    expect(off).not.toMatch(/role=|tabindex|aria-disabled/);
+    // On air, the lines are controls again.
+    expect(scriptHtml("First. Second.", cues, 0, 1, true)).toMatch(/role="button" tabindex="0" data-i="0" aria-current="true"/);
+    // The page makes the scroller focusable only while the lines are not.
+    expect(main).toMatch(/if \(s\) scriptPanel\.removeAttribute\("tabindex"\);\s*else scriptPanel\.tabIndex = 0;/);
+    // The pointer and hover underline belong to lines that are controls.
+    expect(read("web/src/style.css")).toMatch(/\.script \.sl\[role="button"\] \{\s*cursor: pointer;/);
+  });
+
   it("the full script is verbatim: for every work, its text with whitespace collapsed is the source's", () => {
     // textContent as a browser computes it: tags removed (never replaced by a space), entities decoded.
     const unescape = (h: string) => h.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -415,7 +431,12 @@ Third.`;
     const crito = read("web/public/works/crito.txt");
     expect((crito.match(/\b(SOCRATES|CRITO):/g) ?? []).length).toBe(95);
     // The page gives the sheet the verbatim cues and the source, never the read-along's lines (readLines drops the label).
-    expect(main).toContain("scriptHtml(text.source, text.cues, s ? s.line : -1, s ? s.made : 0)");
+    expect(main).toContain("scriptHtml(text.source, text.cues, s ? s.line : -1, s ? s.made : 0, !!s)");
+    // Off air it is the same verbatim text, as plain lines.
+    for (const w of WORKS) {
+      const src = read(`web/public/works/${w.slug}.txt`);
+      expect(collapse(unescape(scriptHtml(src, segment(src), -1, 0, false))), w.slug).toBe(collapse(src));
+    }
     expect(/scriptHtml\([^)]*readLines/.test(main)).toBe(false);
   });
 

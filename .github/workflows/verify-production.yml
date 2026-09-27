@@ -6,26 +6,37 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read
   issues: write
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # Every tag, so the deployed release's contract can be read.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm install
-      - name: Run the served-page contract against production
+      # The runner needs only the yaml package: no install scripts, no binaries.
+      - run: npm ci --ignore-scripts
+      # The release production serves (its /healthz build), and that tag's
+      # contract.yaml: main's may describe routes not yet released.
+      - name: Find the deployed release's contract
+        run: node scripts/deployed-contract.mjs --url https://dial.voidvision.org --out "$RUNNER_TEMP/deployed-contract.yaml"
+      - name: Run the deployed release's contract against production
         id: contract
-        run: npm run contract -- --url https://dial.voidvision.org
+        run: npm run contract -- --url https://dial.voidvision.org --contract "$RUNNER_TEMP/deployed-contract.yaml"
       - name: Open or update the prod-red issue on failure
         if: failure()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
+          # The label may not exist yet in this repository; --force makes this idempotent.
+          gh label create prod-red --color B60205 --description "The served-page contract is failing in production" --force
           EXISTING=$(gh issue list --label prod-red --state open --json number --jq '.[0].number')
           BODY="The served-page contract failed against https://dial.voidvision.org at $(date -u +%FT%TZ). See the failed run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. The Agentique Watch routine also reads this label weekly; closing this issue does not require a code change if the maintainer confirms the site is healthy again."
           if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then

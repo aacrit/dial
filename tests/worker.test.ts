@@ -108,6 +108,22 @@ describe("/feedback via handleFeedback", () => {
     expect((await handleFeedback(postJson("/feedback", { text: "x".repeat(4000) }), makeEnv())).status).toBe(202);
   });
 
+  it("stores the page only when it is one of this site's paths, never free text or a query string", async () => {
+    const stored = async (page: unknown) => {
+      const db = createMockD1();
+      expect((await handleFeedback(postJson("/feedback", { text: "Hello.", page }), makeEnv({ DB: db.db }))).status).toBe(202);
+      return db.feedback[0]!.page;
+    };
+    expect(await stored("/")).toBe("/");
+    expect(await stored("/play/crito")).toBe("/play/crito");
+    expect(await stored("my email is someone@example.com")).toBeNull();
+    expect(await stored("/?id=12345")).toBeNull();
+    expect(await stored("/Play/Crito")).toBeNull();
+    expect(await stored(`/${"a".repeat(65)}`)).toBeNull();
+    expect(await stored(42)).toBeNull();
+    expect(await stored(undefined)).toBeNull();
+  });
+
   it("rejects empty feedback", async () => {
     expect((await handleFeedback(postJson("/feedback", { text: "   " }), makeEnv())).status).toBe(400);
   });

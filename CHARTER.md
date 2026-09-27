@@ -17,6 +17,7 @@ Aggregate counts in D1 (`/e`'s `event_counts`), plus payment-provider orders if 
 
 - 2026-12-31: fewer than 300 `chapter_rendered` in total → archive.
 - `chapter_rendered` counts a listen heard to four fifths of its length, on either path (CoS decision A, 2026-09-27).
+- Counts are rate limited per network; large shared networks may undercount; a spike of counts at the daily ceiling is treated as suspect (see "Reading the counts" below: a day whose count equals the ceiling is the signal).
 - 2027-02-28: 0 Studio orders (Polar dashboard) → the Studio is dropped and the Repertory stays free.
 
 Reading the counts: every count is capped by its daily ceiling, and a browser-sent one can be inflated by anyone who posts to `/e`. So the G4 packet shows each count's day-level spikes (days at or near a ceiling, or far above the usual day) next to the totals, and a total carried by a spike is read as suspect, not as progress.

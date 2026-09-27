@@ -1511,12 +1511,13 @@ dialog.sheet::backdrop {
   margin: 0 0 1em;
 }
 
-.script .sl {
+/* Lines are controls only while their work is on air (render.ts scriptHtml); off air they are plain text. */
+.script .sl[role="button"] {
   cursor: pointer;
   border-radius: 4px;
 }
 
-.script .sl:hover {
+.script .sl[role="button"]:hover {
   text-decoration: underline;
   text-decoration-color: var(--color-border);
   text-underline-offset: 4px;

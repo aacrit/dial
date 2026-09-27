@@ -44,13 +44,68 @@ export function isLocalUrl(baseUrl) {
   return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1" || host.endsWith(".localhost");
 }
 
+/** The runner's words for a check that does not apply to this host. The /release skill matches them exactly. */
+export const NOT_APPLICABLE = "n/a (production host only)";
+
+/** Whether `baseUrl`'s host is `suffix` or one of its subdomains. */
+export function onHost(baseUrl, suffix) {
+  const host = new URL(baseUrl).hostname.toLowerCase();
+  const s = String(suffix).toLowerCase().replace(/^\./, "");
+  return host === s || host.endsWith(`.${s}`);
+}
+
 function joinUrl(base, checkPath) {
   return new URL(checkPath, base).toString();
+}
+
+/**
+ * Every request names itself. Node's fetch sends no browser headers at all,
+ * and a scripted client with a bare "node" User-Agent is exactly what a
+ * zone's bot rules are written to challenge; a named one can be told apart
+ * in Security Events and allowed on purpose.
+ */
+export const USER_AGENT = "dial-contract/1 (+https://dial.voidvision.org/privacy)";
+
+/**
+ * Why a fetch failed below HTTP, in words: undici's "fetch failed" hides
+ * the reason (DNS, refused, reset, TLS) in `cause`, and without it a red
+ * production check cannot be told apart from a missing DNS record.
+ */
+export function describeFetchError(err) {
+  const msg = err?.message ?? String(err);
+  const cause = err?.cause;
+  if (!cause) return msg;
+  const code = cause.code ?? cause.errno;
+  const detail = cause.message && cause.message !== msg ? cause.message : "";
+  return [msg, code, detail].filter(Boolean).join(": ");
+}
+
+/**
+ * fetch, with this runner's User-Agent, retried once after `retryMs` when
+ * the request fails below HTTP (a DNS or connection blip on a shared CI
+ * runner). An HTTP answer, whatever its status, is never retried.
+ */
+export async function contractFetch(url, init = {}, retryMs = 2000) {
+  const headers = { "user-agent": USER_AGENT, ...(init.headers ?? {}) };
+  try {
+    return await fetch(url, { ...init, headers });
+  } catch (err) {
+    if (!retryMs) throw err;
+    await new Promise((resolve) => setTimeout(resolve, retryMs));
+    return fetch(url, { ...init, headers });
+  }
 }
 
 async function runCheck(check, baseUrl) {
   const target = joinUrl(baseUrl, check.path ?? "/");
   const label = check.name ?? `${check.type} ${check.path ?? "/"}`;
+
+  // A check about the production zone (host_suffix: voidvision.org) does not
+  // apply to any other host, a workers.dev preview included: reported as not
+  // applicable, never as a skip or a pass (the /release skill matches NOT_APPLICABLE).
+  if (check.host_suffix && !onHost(baseUrl, check.host_suffix)) {
+    return { label, pass: true, notApplicable: true, detail: NOT_APPLICABLE };
+  }
 
   if (check.requires === "deployed" && isLocalUrl(baseUrl)) {
     return { label, pass: true, skipped: true, detail: "skipped: needs deployed runtime" };
@@ -76,10 +131,16 @@ async function runCheck(check, baseUrl) {
       // Workers rate-limit binding counts permissively and is eventually
       // consistent, so a sequential probe at a few requests a second may
       // never trip it even though a real burst does.
+      // With `method` and `body`, each request is that POST (a JSON body):
+      // an invalid body is refused by validation until the limit bites, so
+      // a burst on a write path writes nothing.
       const statuses = [];
       let matched = false;
+      const init = check.method
+        ? { method: check.method, headers: { "content-type": "application/json" }, body: JSON.stringify(check.body ?? {}) }
+        : { cache: "no-store" };
       const one = async () => {
-        const r = await fetch(target, { cache: "no-store" });
+        const r = await contractFetch(target, init, 0);
         const text = await r.text();
         statuses.push(r.status);
         if (r.status !== check.expect_status) return;
@@ -101,7 +162,19 @@ async function runCheck(check, baseUrl) {
       return { label, pass: matched, detail: matched ? undefined : `no ${want} in ${check.count} requests (got ${[...new Set(statuses)].join(", ")})` };
     }
 
-    const response = await fetch(target);
+    if (check.type === "redirect") {
+      // The same host and path over `scheme` (http), not followed: it must
+      // answer `expect` (301) with a Location starting `location_starts_with`.
+      const from = new URL(target);
+      if (check.scheme) from.protocol = `${check.scheme}:`;
+      const r = await contractFetch(from, { redirect: "manual" });
+      await r.arrayBuffer();
+      const location = r.headers.get("location") ?? "";
+      const pass = r.status === check.expect && (check.location_starts_with === undefined || location.startsWith(check.location_starts_with));
+      return { label, pass, detail: pass ? undefined : `${from} answered ${r.status}${location ? ` to ${location}` : ""}, expected ${check.expect} to ${check.location_starts_with ?? "anywhere"}` };
+    }
+
+    const response = await contractFetch(target);
 
     switch (check.type) {
       case "status": {
@@ -138,7 +211,7 @@ async function runCheck(check, baseUrl) {
         if (!Array.isArray(list) || list.length === 0) return { label, pass: false, detail: `no list of paths at ${target}` };
         const bad = [];
         for (const p of list) {
-          const r = await fetch(new URL(p, baseUrl));
+          const r = await contractFetch(new URL(p, baseUrl));
           await r.arrayBuffer();
           if (r.status !== check.expect) bad.push(`${p} ${r.status}`);
         }
@@ -160,14 +233,17 @@ async function runCheck(check, baseUrl) {
         return { label, pass: false, detail: `unknown check type "${check.type}"` };
     }
   } catch (err) {
-    return { label, pass: false, detail: `request to ${target} failed: ${err.message ?? err}` };
+    return { label, pass: false, detail: `request to ${target} failed: ${describeFetchError(err)}` };
   }
 }
 
 export async function runContract(contract, baseUrl) {
   const results = [];
   for (const check of contract.checks) {
-    results.push(await runCheck(check, baseUrl));
+    const r = await runCheck(check, baseUrl);
+    // A check that waits on someone (a zone setting, a Board ask) says who, in its failure.
+    if (!r.pass && check.failure_note) r.detail = `${r.detail ?? "failed"}. ${check.failure_note}`;
+    results.push(r);
   }
   return results;
 }
@@ -182,14 +258,17 @@ async function main() {
   }
 
   const results = await runContract(contract, baseUrl);
-  const passed = results.filter((r) => r.pass && !r.skipped).length;
+  const passed = results.filter((r) => r.pass && !r.skipped && !r.notApplicable).length;
   const skipped = results.filter((r) => r.skipped).length;
-  const ran = results.length - skipped;
+  const notApplicable = results.filter((r) => r.notApplicable).length;
+  const ran = results.length - skipped - notApplicable;
 
   for (const r of results) {
-    console.log(`${r.skipped ? "SKIP" : r.pass ? "PASS" : "FAIL"}  ${r.label}${r.detail ? ` - ${r.detail}` : ""}`);
+    console.log(`${r.notApplicable ? "N/A " : r.skipped ? "SKIP" : r.pass ? "PASS" : "FAIL"}  ${r.label}${r.detail ? ` - ${r.detail}` : ""}`);
   }
-  console.log(`\n${passed}/${ran} checks passed against ${baseUrl}${skipped ? `; ${skipped} skipped: needs deployed runtime` : ""}`);
+  console.log(
+    `\n${passed}/${ran} checks passed against ${baseUrl}${skipped ? `; ${skipped} skipped: needs deployed runtime` : ""}${notApplicable ? `; ${notApplicable} ${NOT_APPLICABLE}` : ""}`,
+  );
 
   if (passed !== ran) {
     process.exit(1);

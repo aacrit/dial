@@ -7,7 +7,10 @@
 //   voice.ts, have no pin of their own), the runtime's .wasm and the voices
 //   the work's cast uses (each checked against its pin); a file already
 //   kept is never downloaded again. What is already kept is judged by
-//   presence here; the render worker checks every pin again on each load;
+//   presence here. On each load the render worker checks the runtime and
+//   the voices against their pins again; the model is judged by presence
+//   too (it was checked when it was kept), in a cache named for its pin
+//   (voice-cache.ts voiceCacheName), so a changed pin downloads it afresh;
 // - the work's text, the voice manifest and the runtime's script in the
 //   saved cache (offline/routes.ts SAVED_CACHE), which the offline helper
 //   reads when there is no connection;
@@ -191,7 +194,11 @@ export interface ShellState {
 
 async function askHelper(type: "ensure-shell" | "shell-status", timeoutMs: number): Promise<ShellState> {
   const helper = "serviceWorker" in navigator ? navigator.serviceWorker.controller : null;
-  if (!helper) return { ok: false, key: null };
+  return ask(helper, type, timeoutMs);
+}
+
+function ask(helper: ServiceWorker | null | undefined, type: "ensure-shell" | "shell-status", timeoutMs: number): Promise<ShellState> {
+  if (!helper) return Promise.resolve({ ok: false, key: null });
   return new Promise<ShellState>((resolve) => {
     const ch = new MessageChannel();
     const timer = setTimeout(() => resolve({ ok: false, key: null }), timeoutMs);
@@ -203,9 +210,27 @@ async function askHelper(type: "ensure-shell" | "shell-status", timeoutMs: numbe
   });
 }
 
-/** Asks the offline helper to keep every file of its app shell; true once it has. */
+/**
+ * Asks the offline helper to keep every file of its app shell; true once it
+ * has. A newer helper waiting to take over (a release while this tab is
+ * open) is asked too, so the shell it serves once it activates is whole for
+ * the work being saved now; its answer does not decide the save, since it
+ * also completes its shell when it activates (offline/shell-cache.ts).
+ */
 export async function ensureShell(timeoutMs = 30_000): Promise<boolean> {
-  return (await askHelper("ensure-shell", timeoutMs)).ok;
+  const [own] = await Promise.all([askHelper("ensure-shell", timeoutMs), ask(await waitingHelper(), "ensure-shell", timeoutMs)]);
+  return own.ok;
+}
+
+/** A newer helper installed and waiting to take over, if there is one. */
+async function waitingHelper(): Promise<ServiceWorker | null> {
+  try {
+    const container = "serviceWorker" in navigator ? navigator.serviceWorker : undefined;
+    if (typeof container?.getRegistration !== "function") return null;
+    return (await container.getRegistration())?.waiting ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether every file of the serving helper's shell is kept (the helper checks each one), and the helper's key. */
