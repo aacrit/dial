@@ -1,0 +1,468 @@
+{
+ "_comment": "Pins for Dial's prepared recordings (T5): hashes, sizes and URLs only, never audio. Written by scripts/render-recordings.mjs --lock; checked by scripts/fetch-recordings.mjs, which stages them into web/public/recordings/ before every build.",
+ "repo": "aacrit/dial",
+ "tag": "recordings-2-2026-09-27",
+ "cast": "2",
+ "works": {
+  "cave": {
+   "index": {
+    "file": "index.json",
+    "asset": "cave.index.json",
+    "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.index.json",
+    "sha256": "b822ee301e4eaba0d917a7a3f1aa6e2b74263593394cb2ee61589322c0eab3f4",
+    "bytes": 17480
+   },
+   "parts": [
+    {
+     "file": "part0.webm",
+     "asset": "cave.part0.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part0.webm",
+     "sha256": "830f6ab6e4d585afd14d35bc846b1d4318dc115d73fd98fa19b1d64e4de83d8d",
+     "bytes": 384548
+    },
+    {
+     "file": "part1.webm",
+     "asset": "cave.part1.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part1.webm",
+     "sha256": "8de529de0b6e84273a216fa149231e813ffd2b07bd0aa90ef0fa35feff73a5c2",
+     "bytes": 349788
+    },
+    {
+     "file": "part2.webm",
+     "asset": "cave.part2.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part2.webm",
+     "sha256": "79ea9b9e1a8b3a431b3ea8561483fe2f67ca1012a9c4195ca2193d28f121ce46",
+     "bytes": 387133
+    },
+    {
+     "file": "part3.webm",
+     "asset": "cave.part3.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part3.webm",
+     "sha256": "bb935be6b62a82902fb893234a2216ba8cca552dd6114b55cfa9b537ab63af0f",
+     "bytes": 359680
+    },
+    {
+     "file": "part4.webm",
+     "asset": "cave.part4.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part4.webm",
+     "sha256": "b91ca70c663620227bfcee273009085dd2ac8aec49277f6d134fea5981287094",
+     "bytes": 358665
+    },
+    {
+     "file": "part5.webm",
+     "asset": "cave.part5.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part5.webm",
+     "sha256": "006fb2f468f37f306c8ed84312752e9a3521e3546f7a1171e34e2be7ef89a68c",
+     "bytes": 369593
+    },
+    {
+     "file": "part6.webm",
+     "asset": "cave.part6.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part6.webm",
+     "sha256": "3da7fe04d77e2c50ef3ff340944e382ba122941df4f0f4c32eb2fcdfb5f5b9ca",
+     "bytes": 368837
+    },
+    {
+     "file": "part7.webm",
+     "asset": "cave.part7.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part7.webm",
+     "sha256": "917de0f8bf38307c15fe94deddc095b91b0c346dc4183975c4d5cf35d1a78464",
+     "bytes": 375849
+    },
+    {
+     "file": "part8.webm",
+     "asset": "cave.part8.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part8.webm",
+     "sha256": "9d83b28a162a003c9a263c6dcc67e375f4744f3b3adca65daeb6117f7d3adb49",
+     "bytes": 460730
+    },
+    {
+     "file": "part9.webm",
+     "asset": "cave.part9.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part9.webm",
+     "sha256": "da006fc8f4fe0d8c98b4f0ca838f5f765df2bdae86478e34d3cda557ede9ef1a",
+     "bytes": 366149
+    },
+    {
+     "file": "part10.webm",
+     "asset": "cave.part10.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part10.webm",
+     "sha256": "6e7c1c0b4fd97c30e350a07821d8f8f77dc26b00adebc5aac0755b12ee92a216",
+     "bytes": 402996
+    },
+    {
+     "file": "part11.webm",
+     "asset": "cave.part11.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part11.webm",
+     "sha256": "c5a5cfcd02cad0c0ca26dd95d38e285e53b173724105e94f4fdea83ed3cd02f5",
+     "bytes": 367068
+    },
+    {
+     "file": "part12.webm",
+     "asset": "cave.part12.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part12.webm",
+     "sha256": "0bd736fda464d3a2719a79c9b310f7da170a90b5888c5a55a66e62e26af081c9",
+     "bytes": 436050
+    },
+    {
+     "file": "part13.webm",
+     "asset": "cave.part13.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part13.webm",
+     "sha256": "bf464d62f48321f0ee1eb6c2b04a761cd23a17d55c91ab1ff9ca773fd781fc74",
+     "bytes": 371449
+    },
+    {
+     "file": "part14.webm",
+     "asset": "cave.part14.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part14.webm",
+     "sha256": "2d7cfad8d9b25ed29d0ffef470dc06f7c09cddbd50a7173e96d723305ec6414b",
+     "bytes": 454584
+    },
+    {
+     "file": "part15.webm",
+     "asset": "cave.part15.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part15.webm",
+     "sha256": "c70e614f58427cef0afc63c0f4191f95b9a919cc8e20c21d286108ab8cf36648",
+     "bytes": 389401
+    },
+    {
+     "file": "part16.webm",
+     "asset": "cave.part16.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part16.webm",
+     "sha256": "61531aa0e8c39272368ed8087b90c96aa23c6013ac364edfa13ae4139a4f503d",
+     "bytes": 367373
+    },
+    {
+     "file": "part17.webm",
+     "asset": "cave.part17.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/cave.part17.webm",
+     "sha256": "57a4eebe60e49e44cd476d49b66ed900cad6579fac232fb03371964485f494d6",
+     "bytes": 232385
+    }
+   ]
+  },
+  "crito": {
+   "index": {
+    "file": "index.json",
+    "asset": "crito.index.json",
+    "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.index.json",
+    "sha256": "f2a9c668f47266e65b2e0fe4e735cebdb6320f9de3a99ce365b57ae609290c5b",
+    "bytes": 35230
+   },
+   "parts": [
+    {
+     "file": "part0.webm",
+     "asset": "crito.part0.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part0.webm",
+     "sha256": "6b9723666a4505e7d02b3514dcd162db6b112a564dad5b797606c3fd90d56fea",
+     "bytes": 359414
+    },
+    {
+     "file": "part1.webm",
+     "asset": "crito.part1.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part1.webm",
+     "sha256": "6454255f173930e913daec23c936442c658e030528a7c217e173c54b8b14383e",
+     "bytes": 351963
+    },
+    {
+     "file": "part2.webm",
+     "asset": "crito.part2.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part2.webm",
+     "sha256": "c58b153ce75f0796f2ca66e950e78c4c32766a786ef4ddee081c7c4ff824e0e2",
+     "bytes": 343621
+    },
+    {
+     "file": "part3.webm",
+     "asset": "crito.part3.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part3.webm",
+     "sha256": "4d629005687a84f4e58fa0ad65d1a5995e94a4e014959e6831bce8f0d3c38138",
+     "bytes": 394574
+    },
+    {
+     "file": "part4.webm",
+     "asset": "crito.part4.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part4.webm",
+     "sha256": "ef45c093b755a8eac8e7514379940aa82f5427351d30425fba3d5076eb008449",
+     "bytes": 382201
+    },
+    {
+     "file": "part5.webm",
+     "asset": "crito.part5.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part5.webm",
+     "sha256": "d12c2ea482dd4c8ea6bf82601085dfa9f3f9a3afd41af6384561d7742891a5e0",
+     "bytes": 368959
+    },
+    {
+     "file": "part6.webm",
+     "asset": "crito.part6.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part6.webm",
+     "sha256": "d7aa5462ae15764c3ac0ae8b27068ecbda7c367dfc76323851e8b64c4635cc9b",
+     "bytes": 374063
+    },
+    {
+     "file": "part7.webm",
+     "asset": "crito.part7.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part7.webm",
+     "sha256": "f70b6b6c20c866654e8ae2bcad982dd2810d619b2c1c81c2118c60857dedadbe",
+     "bytes": 373845
+    },
+    {
+     "file": "part8.webm",
+     "asset": "crito.part8.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part8.webm",
+     "sha256": "e9c9efb3f28aa6489c41436c4774d3a69cbadc6c149de1ae0dfc08c9acaf17d6",
+     "bytes": 378414
+    },
+    {
+     "file": "part9.webm",
+     "asset": "crito.part9.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part9.webm",
+     "sha256": "d617580b45ed5b17e8ea88ffc7c8d55e5db859e456f5ded4612ace4e2f350412",
+     "bytes": 397315
+    },
+    {
+     "file": "part10.webm",
+     "asset": "crito.part10.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part10.webm",
+     "sha256": "30578987c9814aa4bdea710b77784fcc77007854b359a4dd3c7f56bc2becd315",
+     "bytes": 392730
+    },
+    {
+     "file": "part11.webm",
+     "asset": "crito.part11.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part11.webm",
+     "sha256": "6b72608582d01ebf3086041c617ccd9efd36b873dc79f72456375c4b2b6e4b0a",
+     "bytes": 359162
+    },
+    {
+     "file": "part12.webm",
+     "asset": "crito.part12.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part12.webm",
+     "sha256": "69878ef7922ff128a21073cfc386a8e7274c52e9fee51102d23dc66d0c738a2b",
+     "bytes": 452359
+    },
+    {
+     "file": "part13.webm",
+     "asset": "crito.part13.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part13.webm",
+     "sha256": "6389dffd86e4fbb9d1adff0b4fa06437a1b8602ff30f0aec361d578378ca87c3",
+     "bytes": 380002
+    },
+    {
+     "file": "part14.webm",
+     "asset": "crito.part14.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part14.webm",
+     "sha256": "d4f5a095f3db11503d2a292ab4e38029b9a78e223ff6b847a4c524b40b9c5b9f",
+     "bytes": 350716
+    },
+    {
+     "file": "part15.webm",
+     "asset": "crito.part15.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part15.webm",
+     "sha256": "cf2bbdd9d80be4cf9ca08d716d7eb173433369795fb670b453b7310ca5f65517",
+     "bytes": 360091
+    },
+    {
+     "file": "part16.webm",
+     "asset": "crito.part16.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part16.webm",
+     "sha256": "cc8731d53fc96311b1c45adf9f89ad1c4b57e3d0647552f2bd240e4ffb3dfaa7",
+     "bytes": 347739
+    },
+    {
+     "file": "part17.webm",
+     "asset": "crito.part17.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part17.webm",
+     "sha256": "a473896169077be09a2c795cd4330169192a851ec4a1c892b1e5c2619b3a69d3",
+     "bytes": 381516
+    },
+    {
+     "file": "part18.webm",
+     "asset": "crito.part18.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part18.webm",
+     "sha256": "2d4338dd40ee88689253c66d9edd0da4c0e8f8b321a39c52bbdd4bbbd3c7d8d5",
+     "bytes": 400924
+    },
+    {
+     "file": "part19.webm",
+     "asset": "crito.part19.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part19.webm",
+     "sha256": "fbdcd62c7fbc5ea692f16d601ae7789df73c027c3b7563b7417dd9d34547f6da",
+     "bytes": 379815
+    },
+    {
+     "file": "part20.webm",
+     "asset": "crito.part20.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part20.webm",
+     "sha256": "72fdce2d77a5e05746d2e6b1beba9fcfecf4de36a591c27baf08a2215894e865",
+     "bytes": 382888
+    },
+    {
+     "file": "part21.webm",
+     "asset": "crito.part21.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part21.webm",
+     "sha256": "ffdf30ddad41fa64e30e8bc124b912d2510c9521f15fdb09546c53c9da150a5d",
+     "bytes": 387223
+    },
+    {
+     "file": "part22.webm",
+     "asset": "crito.part22.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part22.webm",
+     "sha256": "c4a4b0c32b24f7fd002f979694d2bd6456d83c08f456189efe678db3dabe9f6f",
+     "bytes": 374733
+    },
+    {
+     "file": "part23.webm",
+     "asset": "crito.part23.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part23.webm",
+     "sha256": "a2a9c6834cedd4dd8588e19d30b53f9c0513d948900de1a812c9d37dd2aac76e",
+     "bytes": 408932
+    },
+    {
+     "file": "part24.webm",
+     "asset": "crito.part24.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part24.webm",
+     "sha256": "c51e4a7d26c546caae3c8403ad471c8ebb8696ddfd17a4f3a89801e33db8bcba",
+     "bytes": 416583
+    },
+    {
+     "file": "part25.webm",
+     "asset": "crito.part25.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part25.webm",
+     "sha256": "c6713acf9c154a66f2e83c1d6781187bdbc3207b5dc5db3ac9e9ad7ba23d5b44",
+     "bytes": 379769
+    },
+    {
+     "file": "part26.webm",
+     "asset": "crito.part26.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part26.webm",
+     "sha256": "3641bfa4ed6f5f6cb8453c420cf0451870dd36961f8ef2bbfe04318a7752166c",
+     "bytes": 378187
+    },
+    {
+     "file": "part27.webm",
+     "asset": "crito.part27.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part27.webm",
+     "sha256": "d7f51732f425f2d8e1e2dbdaaf5f82667a3ca16ebe6f6ab72a4b1454da681c17",
+     "bytes": 361426
+    },
+    {
+     "file": "part28.webm",
+     "asset": "crito.part28.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/crito.part28.webm",
+     "sha256": "784c04e100c8fc7995f218c211d61cb627a212656217fa199c6234df9af73380",
+     "bytes": 183415
+    }
+   ]
+  },
+  "meditations": {
+   "index": {
+    "file": "index.json",
+    "asset": "meditations.index.json",
+    "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.index.json",
+    "sha256": "9d5d3b1bd6de8b821023d185d0217a7ddef37fce689bb222d090a04005b3980c",
+    "bytes": 14289
+   },
+   "parts": [
+    {
+     "file": "part0.webm",
+     "asset": "meditations.part0.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part0.webm",
+     "sha256": "d716a4fa2248082ee939f7dd37246f7232b47ec1d295f1e69b8763859a46e2ae",
+     "bytes": 379700
+    },
+    {
+     "file": "part1.webm",
+     "asset": "meditations.part1.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part1.webm",
+     "sha256": "bb453f405ddca24c853f3c178e0caebb641430e587c05c3468e0b8fcb4431388",
+     "bytes": 403150
+    },
+    {
+     "file": "part2.webm",
+     "asset": "meditations.part2.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part2.webm",
+     "sha256": "259e8aca2fe28a7a1b797a37533005b29fd70eff348fef14eb79be14ba800499",
+     "bytes": 464890
+    },
+    {
+     "file": "part3.webm",
+     "asset": "meditations.part3.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part3.webm",
+     "sha256": "242eedf33910e9aed7b178b15cfa6f9096a270179aad8755c277cd703328283f",
+     "bytes": 378679
+    },
+    {
+     "file": "part4.webm",
+     "asset": "meditations.part4.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part4.webm",
+     "sha256": "203809e6f58912545b1ffec5d2d791b3bf75bdafbfb4387f2178e3c49a2f213c",
+     "bytes": 411568
+    },
+    {
+     "file": "part5.webm",
+     "asset": "meditations.part5.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part5.webm",
+     "sha256": "a8d190578f0ab7c6ef20ed1b9a67a5a6097cb80836c98111b1c9717d2b6cf0e7",
+     "bytes": 449176
+    },
+    {
+     "file": "part6.webm",
+     "asset": "meditations.part6.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part6.webm",
+     "sha256": "3aea51a7cef206948ca380497998d593baf687a36e741c98dc6cc03d0ffe0be4",
+     "bytes": 426573
+    },
+    {
+     "file": "part7.webm",
+     "asset": "meditations.part7.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part7.webm",
+     "sha256": "0b941a70b9d0f44fc520b281ba8f8f64d851ed62170e7a0b901c9cf58a1aadc6",
+     "bytes": 366842
+    },
+    {
+     "file": "part8.webm",
+     "asset": "meditations.part8.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part8.webm",
+     "sha256": "fd1ab7dd9b71b7c368e79e3b56393fb5b5aa764099421e8da43b1e74efd6413a",
+     "bytes": 429671
+    },
+    {
+     "file": "part9.webm",
+     "asset": "meditations.part9.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part9.webm",
+     "sha256": "b8ba65486581382905897f941ce645c5befe7d3e0be9d89c767e80f4f20a3c40",
+     "bytes": 390827
+    },
+    {
+     "file": "part10.webm",
+     "asset": "meditations.part10.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part10.webm",
+     "sha256": "7cde33841a02b26920aaf6a01eccb174147ca5509545bdeb3265911a6f355be9",
+     "bytes": 374849
+    },
+    {
+     "file": "part11.webm",
+     "asset": "meditations.part11.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part11.webm",
+     "sha256": "81c10343313ff91cd6184c5d9045a70c80fab3dd2f7daa39f6b6aa1c4c63421a",
+     "bytes": 402862
+    },
+    {
+     "file": "part12.webm",
+     "asset": "meditations.part12.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part12.webm",
+     "sha256": "5d86299759d3c6097048ecfc93a5dae2011acc663f4a32ab21e1070ade004cb6",
+     "bytes": 412335
+    },
+    {
+     "file": "part13.webm",
+     "asset": "meditations.part13.webm",
+     "url": "https://github.com/aacrit/dial/releases/download/recordings-2-2026-09-27/meditations.part13.webm",
+     "sha256": "97347c56dc590f3f33d86892e627288543cee4b2f8a14f3f2c2ef9af657c8998",
+     "bytes": 261583
+    }
+   ]
+  }
+ }
+}

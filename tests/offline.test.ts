@@ -143,7 +143,8 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(list).toBeDefined();
     for (const p of list!.split(",")) {
       expect(p.startsWith("/") && !p.startsWith("//"), p).toBe(true);
-      expect(p, p).not.toMatch(/^\/(voice|ort|works)\/|\.wasm$|^\/sw\.js$|^\/e$|^\/feedback$/);
+      // Dial's prepared recordings are kept only when a listener saves a work (T5), never with the shell.
+      expect(p, p).not.toMatch(/^\/(voice|ort|works|recordings)\/|\.wasm$|^\/sw\.js$|^\/e$|^\/feedback$/);
     }
     expect(list!.split(",")).toContain("/");
     // privacy.html says the shell is about 3 MB.

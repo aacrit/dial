@@ -10,12 +10,13 @@ export function shellKey(pathname) {
 }
 
 /**
- * Build output that is never part of the shell: the voice, the texts, the
+ * Build output that is never part of the shell: the voice, the texts, Dial's
+ * prepared recordings (kept only when a listener saves a work), the
  * helper itself, files Workers Static Assets never serves, and any .wasm
  * (the runtime's 21.6 MB .wasm is kept by the voice loader, keyed to its
  * pin, and handed to the runtime, which then never fetches a bundled copy).
  */
-const NOT_SHELL = [/^voice\//, /^ort\//, /^works\//, /^_headers$/, /^_redirects$/, /^offline-shell\.json$/, /^build-tag\.txt$/, /^sw\.js$/, /\.map$/, /\.wasm$/];
+const NOT_SHELL = [/^voice\//, /^ort\//, /^works\//, /^recordings\//, /^_headers$/, /^_redirects$/, /^offline-shell\.json$/, /^build-tag\.txt$/, /^sw\.js$/, /\.map$/, /\.wasm$/];
 
 /**
  * The shell's paths from the build's file list (paths relative to dist/,
