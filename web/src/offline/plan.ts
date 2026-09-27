@@ -123,25 +123,31 @@ export interface RecordingPlan {
 
 /**
  * The files a saved recording keeps, with their true sizes and pins: its
- * parts (from the index), the index (its compiled pin) and the voice
- * manifest (as fetched now: a saved copy of an older one is not kept).
+ * parts in the encoding this browser uses (T5b: Opus by default, m4a where
+ * that is what plays here), the index (its compiled pin, shared by both
+ * encodings) and the voice manifest (as fetched now: a saved copy of an
+ * older one is not kept).
  */
 export function recordingFiles(
   slug: string,
-  parts: readonly { file: string; bytes: number; sha256: string }[],
+  parts: readonly { file: string; bytes: number; sha256: string; m4a: { file: string; bytes: number; sha256: string } }[],
   index: { bytes: number; sha256: string },
   voiceManifest: { bytes: number; sha256: string },
+  format: "opus" | "m4a" = "opus",
 ): PinnedFile[] {
   return [
-    ...parts.map((p) => ({ path: `/recordings/${slug}/${p.file}`, bytes: p.bytes, sha256: p.sha256 })),
+    ...parts.map((p) => {
+      const pin = format === "m4a" ? p.m4a : p;
+      return { path: `/recordings/${slug}/${pin.file}`, bytes: pin.bytes, sha256: pin.sha256 };
+    }),
     { path: `/recordings/${slug}/index.json`, bytes: index.bytes, sha256: index.sha256 },
     { path: "/voice/manifest.json", bytes: voiceManifest.bytes, sha256: voiceManifest.sha256 },
   ];
 }
 
-/** The saved cache's keys (paths) for one work's prepared recording: its parts and index, never the shared lists. */
+/** The saved cache's keys (paths) for one work's prepared recording: its parts (either encoding) and index, never the shared lists. */
 export function recordingKeysOf(paths: readonly string[], slug: string): string[] {
-  return paths.filter((p) => p.startsWith(`/recordings/${slug}/`) && /^\/recordings\/[a-z0-9-]+\/(index\.json|part\d+\.webm)$/.test(p));
+  return paths.filter((p) => p.startsWith(`/recordings/${slug}/`) && /^\/recordings\/[a-z0-9-]+\/(index\.json|part\d+\.(webm|m4a))$/.test(p));
 }
 
 export type AnyPlan = SavePlan | RecordingPlan;
@@ -188,7 +194,7 @@ export function mb1(bytes: number): string {
 export function sizeLine(p: AnyPlan): string {
   if (isRecording(p)) {
     const total = planTotal(p);
-    const recording = p.files.some((f) => !f.kept && f.path.endsWith(".webm"));
+    const recording = p.files.some((f) => !f.kept && (f.path.endsWith(".webm") || f.path.endsWith(".m4a")));
     return recording ? `${size(total)}: the recording Dial made in advance, and its text. No voice download.` : `${size(total)}: the rest of what the recording needs offline. No voice download.`;
   }
   const text = `${kilobytes(p.textBytes)} of text`;

@@ -44,22 +44,31 @@ async function main() {
   const problems = lockProblems(lock, catalogueSlugs(), castEngineVersion());
   if (problems.length) throw new Error(`publish-recordings: recordings.lock.json:\n  ${problems.join("\n  ")}`);
 
-  // 1. Every pinned file, checked before anything is uploaded.
+  // 1. Every pinned file, checked before anything is uploaded: the Opus set
+  // (parts and the shared index) and the m4a set (T5b), each separately, so
+  // a dry run reports both sets' totals without uploading anything.
   const files = [];
   const manifests = {};
+  const totals = { opus: 0, m4a: 0 };
   for (const slug of recordedSlugs(lock)) {
     const w = lock.works[slug];
     manifests[slug] = JSON.parse(readFileSync(path.join(from, slug, "manifest.json"), "utf8"));
-    for (const pin of [...w.parts, w.index]) {
+    const check = (pin, set) => {
       const local = path.join(from, slug, pin.file);
       const buf = readFileSync(local);
       if (buf.length !== pin.bytes || sha256(buf) !== pin.sha256) throw new Error(`publish-recordings: ${local} does not match its pin; render and lock again`);
+      totals[set] += buf.length;
       files.push({ slug, pin, local });
-    }
+    };
+    for (const pin of [...w.parts, w.index]) check(pin, "opus");
+    for (const pin of w.m4a.parts) check(pin, "m4a");
   }
   console.log(`publish-recordings: ${files.length} files match the lock for ${lock.tag}`);
+  console.log(`publish-recordings: opus set ${(totals.opus / 1e6).toFixed(2)} MB, m4a set ${(totals.m4a / 1e6).toFixed(2)} MB (${(totals.m4a / totals.opus).toFixed(2)}x)`);
 
-  const entries = privateIndexEntries(lock, manifests);
+  // The index schema's own RECORDING_FORMAT, read from an actual staged index.json (recordings-lock.mjs privateIndexEntries).
+  const recordingFormat = JSON.parse(readFileSync(path.join(from, recordedSlugs(lock)[0], "index.json"), "utf8")).format;
+  const entries = privateIndexEntries(lock, manifests, recordingFormat);
   const outDir = path.join(repoRoot, "reports", "recordings");
   mkdirSync(outDir, { recursive: true });
   writeFileSync(path.join(outDir, "dial-private-index-entries.json"), JSON.stringify({ masters: entries }, null, 2) + "\n");
@@ -71,7 +80,7 @@ async function main() {
     const works = recordedSlugs(lock)
       .map((s) => `- ${s}: ${manifests[s].lines} lines, ${Math.round(manifests[s].audio_seconds / 60)} min, made ${manifests[s].made} on ${manifests[s].provider}`)
       .join("\n");
-    const notes = `Dial's prepared recordings, cast engine ${lock.cast}. Kokoro-82M q8, the same pipeline as the in-tab render; Opus 48 kbps mono in WebM, in parts cut at line starts, with each work's timing index. Pinned by SHA-256 in recordings.lock.json. The words are the translators', verbatim.\n\n${works}\n`;
+    const notes = `Dial's prepared recordings, cast engine ${lock.cast}. Kokoro-82M q8, the same pipeline as the in-tab render; Opus 48 kbps mono in WebM, in parts cut at line starts, with each work's timing index, plus the same masters transcoded to AAC-LC in .m4a (about 64 kbps) for a browser that cannot decode Opus in WebM (T5b). Pinned by SHA-256 in recordings.lock.json. The words are the translators', verbatim.\n\n${works}\n`;
     const notesFile = path.join(os.tmpdir(), `${lock.tag}-notes.md`);
     writeFileSync(notesFile, notes);
     const made = gh(["release", "create", lock.tag, "--repo", lock.repo, "--title", lock.tag, "--notes-file", notesFile, "--prerelease", "--latest=false"]);

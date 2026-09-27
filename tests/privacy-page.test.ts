@@ -33,10 +33,11 @@ describe("web/privacy.html, claim by claim", () => {
     }
   });
 
-  it("what Dial keeps in the browser: one setting in local storage, the tab's request log in session storage, and nothing else", () => {
+  it("what Dial keeps in the browser: two settings in local storage, the tab's request log in session storage, and nothing else", () => {
     expect(text).toContain("The counts switch: one setting in local storage, whether to send daily counts, written only when you change it.");
-    expect(text).toContain("Besides the voice, saved works and page files described above, Dial keeps two small things, both on your device and never sent.");
-    expect(text).not.toMatch(/Three things/);
+    expect(text).toContain("Besides the voice, saved works and page files described above, Dial keeps three small things, all on your device and never sent.");
+    // T5b: which encoding of the prepared recording plays here, remembered only once discovered by a failed try (recording/source.ts rememberPlaybackFormat).
+    expect(text).toContain("Which encoding of Dial's prepared recording plays in this browser: one setting in local storage, written only once trying the usual one fails, so it is not tried again.");
     expect(text).toContain("This tab's request log: the path, size and time of each request Dial's pages and their voice helpers made in this tab, of each request the offline helper made for this tab, and, marked as shared, of what the offline helper fetched for itself for every Dial tab (and, for a count, its name, and whether a send was not delivered), kept in session storage so the Seal widget on the radio can show it; never any text or audio, and erased when the tab closes.");
     // Per tab: the helper notes the page each request is for, sends each page only its own entries, and marks the rest shared.
     const sw = read("web/src/sw.ts");
@@ -57,12 +58,15 @@ describe("web/privacy.html, claim by claim", () => {
     expect(read("web/src/narrate.worker.ts")).toMatch(/watchWorkerRequests\(/);
     expect(read("web/src/request-recorder.ts")).toMatch(/recordEntries\(data\.entries\.filter\(isRawEntry\), data\.shared === true \? "shared" : "helper"\)/);
     const files = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
-    // localStorage is read and written in telemetry.ts only, under the one key.
+    // localStorage is read and written in telemetry.ts (the counts switch) and recording/source.ts (T5b's remembered format) only, each under its own one key.
     const local = files.filter((f) => /\blocalStorage\b/.test(read(`web/src/${f}`)));
-    expect(local).toEqual(["telemetry.ts"]);
+    expect(local.slice().sort()).toEqual(["recording/source.ts", "telemetry.ts"]);
     const telemetry = read("web/src/telemetry.ts");
     expect(telemetry).toContain('export const COUNTS_KEY = "dial.counts";');
     expect([...telemetry.matchAll(/\.setItem\(([^,]+),/g)].map((m) => m[1])).toEqual(["COUNTS_KEY"]);
+    const recordingSource = read("web/src/recording/source.ts");
+    expect(recordingSource).toContain('export const RECORDING_FORMAT_KEY = "dial.recording-format";');
+    expect([...recordingSource.matchAll(/\.setItem\(([^,]+),/g)].map((m) => m[1])).toEqual(["RECORDING_FORMAT_KEY"]);
     // Written only when the listener changes it: setCounts is the one writer, called from the Seal widget's switch only.
     const setters = files.filter((f) => f !== "telemetry.ts" && /\bsetCounts\(/.test(read(`web/src/${f}`)));
     expect(setters).toEqual(["seal-widget.ts"]);
@@ -166,9 +170,11 @@ describe("web/privacy.html, claim by claim", () => {
     const allow = JSON.parse(read("privacy-allowlist.json"));
     expect(allow.downloads).toContain("/recordings/");
     expect(allow.sends).toEqual(["/e", "/feedback"]);
-    // Playing never stores: the source keeps decoded parts in memory only.
+    // Playing never stores: the Recording class (fetching, checking and decoding parts) keeps them in memory only.
+    // T5b's remembered playback format, elsewhere in this file, is neither audio nor text nor a pin: see the local-storage test above.
     const source = read("web/src/recording/source.ts");
-    expect(source).not.toMatch(/caches\.|cache\.put|localStorage|indexedDB/);
+    const recordingClass = source.slice(source.indexOf("export class Recording"), source.indexOf("\n}\n", source.indexOf("export class Recording")) + 3);
+    expect(recordingClass).not.toMatch(/caches\.|cache\.put|localStorage|indexedDB/);
     expect(source).toMatch(/fetch\(`\/recordings\/\$\{slug\}\/\$\{file\}`\)/);
     // Only Save for offline puts recording files in cache storage, and the offline helper only refreshes what is already there.
     const store = read("web/src/offline/store.ts");

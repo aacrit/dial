@@ -15,6 +15,7 @@ import { HEARD_SHARE, addHeard, countsAsListen, heardStep, type HeardSpans } fro
 import { CAST_ENGINE_VERSION, tryCast } from "../web/src/engine/cast";
 import { segment } from "../web/src/engine/segment";
 import {
+  AAC_FRAME_SAMPLES,
   RECORDING_FORMAT,
   RECORDING_RATE,
   cueHash,
@@ -26,11 +27,28 @@ import {
   lineSlice,
   partBreaks,
   partOfLine,
+  partSpanSamples,
   recordingBytes,
   seekTo,
+  withinDriftBound,
   type RecordingIndex,
 } from "../web/src/recording/timing";
-import { BUILT_RECORDINGS, MAX_DECODED_PARTS, PART_RETRY_MS, Recording, RecordingDecodeError, isDecodeError, playableRecordings, recordingPins } from "../web/src/recording/source";
+import {
+  BUILT_RECORDINGS,
+  MAX_DECODED_PARTS,
+  PART_RETRY_MS,
+  RECORDING_FORMAT_KEY,
+  Recording,
+  RecordingDecodeError,
+  choosePlaybackFormat,
+  decodeFailureAction,
+  isDecodeError,
+  nextOnDecodeFailure,
+  playableRecordings,
+  recordingPins,
+  rememberPlaybackFormat,
+  type FormatStore,
+} from "../web/src/recording/source";
 import {
   NO_VOICES,
   isSaved,
@@ -57,7 +75,7 @@ const read = (f: string) => readFileSync(path.join(root, f), "utf8");
 const sha256 = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 const SLUGS = WORKS.map((w) => w.slug);
 
-/** A small index over `n` lines of the given speech and pause samples, in parts of `per` lines. */
+/** A small index over `n` lines of the given speech and pause samples, in parts of `per` lines. Each part carries both encodings (T5b): Opus, and its m4a pin. */
 function fakeIndex(lines: { speech: number; pause: number; hash?: string }[], per: number): RecordingIndex {
   let at = 0;
   const out = lines.map((l, i) => {
@@ -69,7 +87,16 @@ function fakeIndex(lines: { speech: number; pause: number; hash?: string }[], pe
   for (let from = 0, p = 0; from < lines.length; from += per, p++) {
     const to = Math.min(lines.length, from + per);
     const end = to < lines.length ? out[to]!.at : at;
-    parts.push({ file: `part${p}.webm`, start: out[from]!.at / RECORDING_RATE, seconds: (end - out[from]!.at) / RECORDING_RATE, from, to, bytes: 10, sha256: "0".repeat(64) });
+    parts.push({
+      file: `part${p}.webm`,
+      start: out[from]!.at / RECORDING_RATE,
+      seconds: (end - out[from]!.at) / RECORDING_RATE,
+      from,
+      to,
+      bytes: 10,
+      sha256: "0".repeat(64),
+      m4a: { file: `part${p}.m4a`, bytes: 12, sha256: "1".repeat(64) },
+    });
   }
   return {
     format: RECORDING_FORMAT,
@@ -142,7 +169,7 @@ describe("the timing index", () => {
     expect(indexProblem({ ...idx, digest: "other" }, want)).toMatch(/differ/);
     expect(indexProblem(idx, { ...want, lines: 3 })).toMatch(/2 lines, the text has 3/);
     expect(indexProblem(idx, { ...want, castVersion: "999" })).toMatch(/cast engine/);
-    expect(indexProblem({ ...idx, format: 2 }, want)).toMatch(/format/);
+    expect(indexProblem({ ...idx, format: 1 }, want)).toMatch(/format/);
     expect(indexProblem({ ...idx, samples: idx.samples + 1 }, want)).toMatch(/add up/);
     expect(indexProblem({ ...idx, lines: [idx.lines[0]!, { ...idx.lines[1]!, at: 5 }] }, want)).toMatch(/follow/);
     expect(indexProblem({ ...idx, parts: [idx.parts[0]!] }, want)).toMatch(/cover/);
@@ -153,7 +180,13 @@ describe("the timing index", () => {
     for (const bad of ["../index.json", "part0.webm?x", "part.webm", "PART0.webm", "part0.ogg"]) {
       expect(indexProblem({ ...idx, parts: [{ ...idx.parts[0]!, file: bad }, idx.parts[1]!] }, want), bad).toMatch(/a part is named/);
     }
+    // T5b: a part's m4a pin is validated too, before anything is fetched.
+    for (const bad of ["part0.webm", "part.m4a", "PART0.m4a", "part0.mp3"]) {
+      expect(indexProblem({ ...idx, parts: [{ ...idx.parts[0]!, m4a: { ...idx.parts[0]!.m4a, file: bad } }, idx.parts[1]!] }, want), bad).toMatch(/m4a file is named/);
+    }
+    expect(indexProblem({ ...idx, parts: [{ ...idx.parts[0]!, m4a: undefined as never }, idx.parts[1]!] }, want)).toMatch(/m4a file is named/);
     expect(recordingBytes(idx, 5)).toBe(25);
+    expect(recordingBytes(idx, 5, "m4a")).toBe(2 * 12 + 5);
   });
 
   it("the page's expected digest is computed from the same cues and cast the render used", async () => {
@@ -287,6 +320,215 @@ describe("the prepared recording as a source of lines", () => {
   });
 });
 
+describe("iPhone and desktop Safari play m4a (T5b, CoS decision H)", () => {
+  it("chooses Opus where this browser claims to decode it in canPlayType, m4a otherwise", () => {
+    // No Web Audio globals here (vitest.config.ts environment: "node"): this browser cannot claim Opus support, so m4a.
+    expect(choosePlaybackFormat()).toBe("m4a");
+  });
+
+  it("a format remembered from an earlier visit's discovery overrides canPlayType, since that claim would only fail the same way again", () => {
+    const store = { m: new Map<string, string>(), getItem(k: string) { return this.m.get(k) ?? null; }, setItem(k: string, v: string) { this.m.set(k, v); } };
+    expect(choosePlaybackFormat(store)).toBe("m4a"); // nothing remembered yet, and no Web Audio globals to claim Opus
+    rememberPlaybackFormat("m4a", store);
+    expect(store.getItem(RECORDING_FORMAT_KEY)).toBe("m4a");
+    expect(choosePlaybackFormat(store)).toBe("m4a");
+    // A junk or missing value is never trusted: falls back to the ordinary canPlayType-based guess.
+    store.setItem(RECORDING_FORMAT_KEY, "ogg");
+    expect(choosePlaybackFormat(store)).toBe("m4a");
+  });
+
+  it("remembering a format never throws when storage refuses it (private mode, a full quota, disabled)", () => {
+    const throwing: FormatStore = {
+      getItem() {
+        throw new Error("SecurityError");
+      },
+      setItem() {
+        throw new Error("QuotaExceededError");
+      },
+    };
+    expect(() => rememberPlaybackFormat("m4a", throwing)).not.toThrow();
+    expect(choosePlaybackFormat(throwing)).toBe("m4a"); // the read failed too, so it falls back to the ordinary guess
+  });
+
+  it("the fallback order is Opus, then m4a, then made-here: only a failure before anything has decoded retries once, as m4a", () => {
+    expect(nextOnDecodeFailure("opus", false, false)).toBe("retry-m4a");
+    // The one retry spent: a second failure, still nothing decoded, hands over.
+    expect(nextOnDecodeFailure("opus", false, true)).toBe("made-here");
+    // Something of this recording already played: a later failure skips straight to made-here, never retries a listen already under way.
+    expect(nextOnDecodeFailure("opus", true, false)).toBe("made-here");
+    // Already on m4a (whether from the retry or because canPlayType said no to Opus): any failure hands over.
+    expect(nextOnDecodeFailure("m4a", false, false)).toBe("made-here");
+    expect(nextOnDecodeFailure("m4a", false, true)).toBe("made-here");
+  });
+
+  it("a Recording opened in Opus retries part 0 as m4a on a decode failure, then fetches every later part in m4a too", async () => {
+    const idx = fakeIndex(
+      Array.from({ length: 4 }, () => ({ speech: 2400, pause: 240 })),
+      2,
+    );
+    // Each file's pin matches its own name's content, opus and m4a alike.
+    const content = (file: string) => Buffer.from(`content ${file}`);
+    idx.parts.forEach((p) => {
+      const opusBuf = content(p.file);
+      p.bytes = opusBuf.length;
+      p.sha256 = sha256(opusBuf);
+      const m4aBuf = content(p.m4a.file);
+      p.m4a.bytes = m4aBuf.length;
+      p.m4a.sha256 = sha256(m4aBuf);
+    });
+    const fetched: string[] = [];
+    let opusPart0DecodeCalls = 0;
+    const rec = new Recording(
+      "cave",
+      idx,
+      { bytes: 1, sha256: "i" },
+      async (bytes) => {
+        if (new TextDecoder().decode(bytes) === "content part0.webm") {
+          opusPart0DecodeCalls++;
+          throw new DOMException("Unable to decode audio data", "EncodingError");
+        }
+        return new Float32Array(2 * (2400 + 240)).fill(0.1);
+      },
+      async (file) => {
+        fetched.push(file);
+        const b = content(file);
+        return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+      },
+      0,
+    );
+    expect(rec.format).toBe("opus");
+    // What the page's own decode-failure handler does (web/src/main.ts onDecodeFail, decodeFailureAction): retry once as m4a, then give up.
+    const attempt = async (i: number): Promise<Int16Array> => {
+      try {
+        return await rec.samples(i);
+      } catch (err) {
+        if (decodeFailureAction(rec, err) === "retry-m4a") {
+          rec.retryAsM4a();
+          return attempt(i);
+        }
+        throw err;
+      }
+    };
+    const s = await attempt(0);
+    // The retry succeeded: the recording is now m4a, and it fetched the m4a pin's file name, not the Opus one again
+    // (part1.m4a follows: samples() always prefetches the next part, now in the format the retry switched to).
+    expect(rec.format).toBe("m4a");
+    expect(s.length).toBe(2400);
+    expect(fetched.slice(0, 2)).toEqual(["part0.webm", "part0.m4a"]);
+    expect(fetched).not.toContain("part1.webm");
+    expect(opusPart0DecodeCalls).toBe(1);
+    // Once retried, a second failure on the same (now m4a) recording hands over rather than retrying again.
+    expect(rec.nextOnFailure()).toBe("made-here");
+    // A later line is fetched in the format the recording switched to.
+    await attempt(2);
+    expect(fetched).toContain("part1.m4a");
+  });
+
+  it("a decode failure once something has already played, or on m4a already, has nothing left to retry", async () => {
+    const idx = fakeIndex(
+      Array.from({ length: 4 }, () => ({ speech: 2400, pause: 240 })),
+      2,
+    );
+    // A zero-filled buffer of the pin's own length matches its own sha256, so the fetch's pin check passes and the failure comes from decode.
+    idx.parts[0]!.m4a.sha256 = sha256(Buffer.alloc(idx.parts[0]!.m4a.bytes));
+    const openedAsM4a = new Recording(
+      "cave",
+      idx,
+      { bytes: 1, sha256: "i" },
+      async () => {
+        throw new DOMException("x", "EncodingError");
+      },
+      async () => new ArrayBuffer(idx.parts[0]!.m4a.bytes),
+      0,
+      "m4a",
+    );
+    expect(openedAsM4a.format).toBe("m4a");
+    await expect(openedAsM4a.samples(0)).rejects.toBeInstanceOf(RecordingDecodeError);
+    expect(openedAsM4a.nextOnFailure()).toBe("made-here");
+  });
+
+  it("the drift bound is one AAC frame (1024 samples at 24 kHz): a part's m4a decode may differ from its Opus decode by no more, from priming or the last frame's padding", () => {
+    expect(AAC_FRAME_SAMPLES).toBe(1024);
+    expect(withinDriftBound(0)).toBe(true);
+    expect(withinDriftBound(488)).toBe(true);
+    expect(withinDriftBound(-1024)).toBe(true);
+    expect(withinDriftBound(1024)).toBe(true);
+    expect(withinDriftBound(1025)).toBe(false);
+    expect(withinDriftBound(-2000)).toBe(false);
+  });
+
+  it("drops a decode's leading excess when this browser ignored the m4a's edit list (a WebKit defense: the review found the total-length check alone does not catch a leading-only offset)", async () => {
+    const idx = fakeIndex(
+      Array.from({ length: 4 }, () => ({ speech: 2400, pause: 240 })),
+      2,
+    );
+    const span = partSpanSamples(idx, 0);
+    idx.parts[0]!.m4a.bytes = 0;
+    idx.parts[0]!.m4a.sha256 = sha256(Buffer.alloc(0));
+    const rec = new Recording(
+      "cave",
+      idx,
+      { bytes: 1, sha256: "i" },
+      async () => {
+        // A decoder that ignored the edit list: the real audio, preceded by one undropped AAC frame of the encoder's priming delay.
+        const out = new Float32Array(span + AAC_FRAME_SAMPLES);
+        out.fill(-1, 0, AAC_FRAME_SAMPLES);
+        out.fill(0.5, AAC_FRAME_SAMPLES);
+        return out;
+      },
+      async () => new ArrayBuffer(0),
+      0,
+      "m4a",
+    );
+    const s = await rec.samples(0);
+    expect(s.length).toBe(2400);
+    // Every sample of line 0 is the real content (0.5): the leading garbage never reaches the scheduler.
+    expect([...s].every((v) => v === Math.trunc(0.5 * 0x7fff))).toBe(true);
+  });
+
+  it("does not drop anything when the excess is only the last frame's padding (the edit list was honoured, as Chromium's own decodeAudioData measured at 0 samples of drift)", async () => {
+    const idx = fakeIndex(
+      Array.from({ length: 4 }, () => ({ speech: 2400, pause: 240 })),
+      2,
+    );
+    const span = partSpanSamples(idx, 0);
+    idx.parts[0]!.m4a.bytes = 0;
+    idx.parts[0]!.m4a.sha256 = sha256(Buffer.alloc(0));
+    const rec = new Recording(
+      "cave",
+      idx,
+      { bytes: 1, sha256: "i" },
+      async () => {
+        const out = new Float32Array(span + 200); // under one AAC frame: tail padding only, no leading delay
+        out[0] = -1; // survives untouched only if nothing was dropped
+        out.fill(0.5, 1);
+        return out;
+      },
+      async () => new ArrayBuffer(0),
+      0,
+      "m4a",
+    );
+    const s = await rec.samples(0);
+    expect(s[0]).toBe(Math.trunc(-1 * 0x8000));
+  });
+
+  it("nothing says WebM to the listener: the status line for an unplayable recording, and what a request log row calls a part, name neither format", () => {
+    expect(RECORDING_UNPLAYABLE).toBe("This browser can't play Dial's recording, so it's being made on this device.");
+    expect(RECORDING_UNPLAYABLE).not.toMatch(/webm|opus|m4a|aac/i);
+    expect(whatItWas({ path: "/recordings/cave/part0.m4a", own: true, dir: "fetched", event: undefined } as never)).toBe("Dial's recording, part 1");
+  });
+
+  it("the format never leaks: opening a work prefers whichever encoding is actually saved, and Save for offline always writes the page's current format", () => {
+    const main = read("web/src/main.ts");
+    // Opening: a saved work's own cached encoding wins over the page's live guess, so a stale save still plays with no connection.
+    expect(main).toContain("const openFormat = (await savedRecordingFormat(w.slug).catch(() => null)) ?? format;");
+    expect(main).toContain("const opened = await openRecording(w.slug, entry, text.cues, text.cast.voices, openFormat);");
+    // Saving: always the live page format, never a Recording instance's own (which may have been opened from a stale saved copy).
+    expect(main).toContain("const recording: RecordingSave | undefined = rec ? { slug, index: rec.index, indexBytes: rec.indexFile.bytes, indexSha256: rec.indexFile.sha256, format } : undefined;");
+    expect(main).not.toContain("format: rec.format");
+  });
+});
+
 describe("a prepared recording plays through the one scheduler, and seeks across the whole work", () => {
   const fake = () => {
     let now = 0;
@@ -367,15 +609,16 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     expect(main).toMatch(/if \(rec\) \{[\s\S]*?for \(let i = 0; i < rec\.lineCount; i\+\+\) \{\s*const l = rec\.line\(i\);\s*sched\.add\(i, l\.speech, l\.pause, false\);[\s\S]*?own\.renderDone = true;[\s\S]*?sched\.renderFinished\(\);/);
     // Resume at line N: the seek comes before anything is fed, so no part before that line is fetched.
     expect(main).toMatch(/if \(opts\.fromLine\) sched\.seek\(sched\.at\[opts\.fromLine\]!\);\s*sched\.renderFinished\(\);/);
-    expect(main).toMatch(/if \(rec\) \{\s*return rec\.samples\(i\)\.catch\(/);
+    expect(main).toMatch(/if \(rec\) \{\s*\/\/[^\n]*\n\s*const onDecodeFail[\s\S]*?return rec\.samples\(i\)\.catch\(onDecodeFail\);/);
     expect(main).toContain("let sampleRate = rec ? RECORDING_RATE : 24_000;");
     // One analyser for both paths: the wave, meters and eye read the recording like a render.
     expect(main.match(/audio\.createAnalyser\(\)/g)).toHaveLength(1);
   });
 
-  it("a decode failure carries the listen on, made here from the line on air, saying why; any other failure offers Resume at line N", () => {
+  it("linePcm's onDecodeFail is a thin shell around decodeFailureAction: retry-m4a switches every prepared recording and remembers it only once m4a has decoded, made-here hands over, stopped offers Resume at line N", () => {
     const main = read("web/src/main.ts");
-    expect(main).toMatch(/if \(isDecodeError\(err\)\) makeHereInstead\(\);\s*\/\/[^\n]*\n\s*else stopped\(recordingStopLine\([^\n]*\), Math\.max\(0, own\.line\)\);/);
+    expect(main).toMatch(/const action = decodeFailureAction\(rec, err\);\s*if \(action === "retry-m4a"\) \{\s*switchToM4a\(\);\s*return rec\.samples\(i\)\.then\(\(pcm\) => \{\s*rememberPlaybackFormat\("m4a"\);\s*return pcm;\s*\}, onDecodeFail\);\s*\}\s*if \(action === "made-here"\) makeHereInstead\(\);\s*\/\/[^\n]*\n\s*else stopped\(recordingStopLine\([^\n]*\), Math\.max\(0, own\.line\)\);/);
+    expect(main).toMatch(/const switchToM4a = \(\) => \{\s*format = "m4a";\s*for \(const other of prepared\.values\(\)\) if \(other\.format !== "m4a"\) other\.retryAsM4a\(\);\s*\};/);
     const instead = /const makeHereInstead = \(\) => \{([\s\S]*?)\n {4}\};/.exec(main)![1]!;
     expect(instead).toContain("recordingsPlayable = false;");
     expect(instead).toMatch(/start\(work, "made", \{ fromLine: at, lengths, heard: own\.heard, spans: own\.spans, counted: own\.counted, reason: RECORDING_UNPLAYABLE \}\);/);
@@ -387,6 +630,18 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     expect(main).toContain("downloadUrl = own.file && !seeded.length ? URL.createObjectURL(own.file) : null;");
     // Resume at line N carries the same listen on.
     expect(main).toMatch(/resumeLine\.onclick = \(\) => start\(work, "prepared", \{ fromLine: resumeAt, heard, spans, counted \}\);/);
+  });
+
+  it("decodeFailureAction (unit, not regex): one retry, no made-here after it succeeds, made-here after an m4a failure, stopped for anything else", () => {
+    const fakeRec = (nextOnFailure: () => "retry-m4a" | "made-here"): Pick<Recording, "nextOnFailure"> => ({ nextOnFailure });
+    // A decode error, nothing decoded yet, still Opus: retry.
+    expect(decodeFailureAction(fakeRec(() => "retry-m4a"), new DOMException("x", "EncodingError"))).toBe("retry-m4a");
+    // The retry already spent, or already on m4a, or something has already played: made-here.
+    expect(decodeFailureAction(fakeRec(() => "made-here"), new DOMException("x", "EncodingError"))).toBe("made-here");
+    expect(decodeFailureAction(fakeRec(() => "made-here"), new RecordingDecodeError("x"))).toBe("made-here");
+    // Anything that is not a decode failure (a part that never arrived) always stops, whatever the recording would have said.
+    expect(decodeFailureAction(fakeRec(() => "retry-m4a"), new TypeError("Failed to fetch"))).toBe("stopped");
+    expect(decodeFailureAction(fakeRec(() => "retry-m4a"), new Error("recording: a part did not match its pin"))).toBe("stopped");
   });
 });
 
@@ -633,7 +888,7 @@ describe("kept means the kept bytes hash to this build's pin", () => {
     const idx = fakeIndex([{ speech: 10, pause: 1 }], 1);
     idx.parts[0] = { ...idx.parts[0]!, bytes: part.length, sha256: sha256(Buffer.from(part)) };
     const indexBody = bytes(JSON.stringify({ ...idx, tag }));
-    return { part, idx, indexBody, save: { slug: "cave", index: idx, indexBytes: indexBody.length, indexSha256: sha256(Buffer.from(indexBody)) } };
+    return { part, idx, indexBody, save: { slug: "cave", index: idx, indexBytes: indexBody.length, indexSha256: sha256(Buffer.from(indexBody)), format: "opus" as const } };
   };
   const man = { manifest: {} as never, bytes: 2, text: "{}" };
 
@@ -675,18 +930,35 @@ describe("kept means the kept bytes hash to this build's pin", () => {
     await cache.put("/recordings/cave/part0.webm", new Response(r.part.slice(0)));
     expect(await store.keptAsPinned(cache as unknown as Cache, f)).toBe(true);
   });
+
+  it("savedRecordingFormat prefers whichever encoding's parts are actually in the saved cache (a hint for opening a work offline, not a pin check: Recording still verifies every hash)", async () => {
+    const store = await import("../web/src/offline/store");
+    setUp(new Map(), []);
+    expect(await store.savedRecordingFormat("cave")).toBeNull();
+
+    const m4aPart = bytes("m4a audio");
+    const idx = fakeIndex([{ speech: 10, pause: 1 }], 1);
+    idx.parts[0] = { ...idx.parts[0]!, m4a: { file: "part0.m4a", bytes: m4aPart.length, sha256: sha256(Buffer.from(m4aPart)) } };
+    const indexBody = bytes(JSON.stringify(idx));
+    const save = { slug: "cave", index: idx, indexBytes: indexBody.length, indexSha256: sha256(Buffer.from(indexBody)), format: "m4a" as const };
+    setUp(new Map([["/recordings/cave/part0.m4a", m4aPart], ["/recordings/cave/index.json", indexBody]]), []);
+    await store.saveRecording(man, save, "text", new AbortController().signal, () => undefined);
+    expect(await store.savedRecordingFormat("cave")).toBe("m4a");
+  });
 });
 
 describe("recordings.lock.json and its pins", () => {
-  /** A render folder with fake masters for the given slugs. */
+  /** A render folder with fake masters for the given slugs, opus and its m4a encoding (T5b) alike. */
   function fakeRender(slugs: string[]) {
     const dir = mkdtempSync(path.join(os.tmpdir(), "dial-rec-"));
     for (const slug of slugs) {
       mkdirSync(path.join(dir, slug));
       const part = Buffer.from(`${slug} audio`);
       writeFileSync(path.join(dir, slug, "part0.webm"), part);
+      const m4aPart = Buffer.from(`${slug} audio m4a`);
+      writeFileSync(path.join(dir, slug, "part0.m4a"), m4aPart);
       const index = { ...fakeIndex([{ speech: 10, pause: 1 }], 1), slug };
-      index.parts[0] = { ...index.parts[0]!, bytes: part.length, sha256: sha256(part) };
+      index.parts[0] = { ...index.parts[0]!, bytes: part.length, sha256: sha256(part), m4a: { file: "part0.m4a", bytes: m4aPart.length, sha256: sha256(m4aPart) } };
       const indexText = JSON.stringify(index);
       writeFileSync(path.join(dir, slug, "index.json"), indexText);
       writeFileSync(
@@ -699,6 +971,20 @@ describe("recordings.lock.json and its pins", () => {
           cast: { voices: ["am_michael"] },
           index: { file: "index.json", bytes: Buffer.byteLength(indexText), sha256: sha256(indexText) },
           parts: [{ file: "part0.webm", bytes: part.length, sha256: sha256(part), seconds: 1 }],
+        }),
+      );
+      writeFileSync(
+        path.join(dir, slug, "manifest.m4a.json"),
+        JSON.stringify({
+          slug,
+          made: "2026-09-27",
+          codec: "aac-lc/m4a",
+          bitrate: 60000,
+          encoderDelaySamples: 1024,
+          worstDriftSamples: 12,
+          driftBoundSamples: 1024,
+          parts: [{ file: "part0.m4a", bytes: m4aPart.length, sha256: sha256(m4aPart), seconds: 1 }],
+          total_bytes: m4aPart.length,
         }),
       );
     }
@@ -773,8 +1059,8 @@ describe("recordings.lock.json and its pins", () => {
     // A local render that differs from the pin.
     writeFileSync(path.join(dir, "cave", "part0.webm"), "cave audiX");
     const tampered = { ...lock, tag: "recordings-2-2026-09-29" };
-    for (const w of Object.values(tampered.works) as { parts?: { url: string; file: string }[]; index?: { url: string; file: string } }[]) {
-      for (const f of [...(w.parts ?? []), ...(w.index ? [w.index] : [])]) f.url = assetUrl("aacrit/dial", tampered.tag, "cave", f.file);
+    for (const w of Object.values(tampered.works) as { parts?: { url: string; file: string }[]; index?: { url: string; file: string }; m4a?: { parts: { url: string; file: string }[] } }[]) {
+      for (const f of [...(w.parts ?? []), ...(w.index ? [w.index] : []), ...(w.m4a?.parts ?? [])]) f.url = assetUrl("aacrit/dial", tampered.tag, "cave", f.file);
     }
     writeFileSync(lockFile, JSON.stringify(tampered));
     await expect(stage({ from: dir, lockFile, out, cache: path.join(dir, "cache"), fetchImpl: offline as never, slugs: SLUGS, castVersion: CAST_ENGINE_VERSION })).rejects.toThrow(/does not match its pin/);
@@ -789,17 +1075,22 @@ describe("recordings.lock.json and its pins", () => {
     expect(indexMatchesLock(idx, { parts: [] }).join()).toMatch(/lists 1 parts, the lock 0/);
   });
 
-  it("dial-private's index entries carry every field its gate checks", () => {
+  it("dial-private's index entries carry every field its gate checks, with the actual RECORDING_FORMAT (never a stale literal)", () => {
     const dir = fakeRender(["cave"]);
     const lock = lockFrom(dir, SLUGS, { castVersion: CAST_ENGINE_VERSION, date: "2026-09-27" });
-    const entries = privateIndexEntries(lock, { cave: JSON.parse(readFileSync(path.join(dir, "cave", "manifest.json"), "utf8")) });
-    expect(entries).toHaveLength(2);
+    const entries = privateIndexEntries(lock, { cave: JSON.parse(readFileSync(path.join(dir, "cave", "manifest.json"), "utf8")) }, RECORDING_FORMAT);
+    // 1 Opus part + the shared index + 1 m4a part (T5b).
+    expect(entries).toHaveLength(3);
+    expect(entries.filter((e) => e.file.endsWith(".m4a"))).toHaveLength(1);
     for (const e of entries) {
       for (const k of ["work", "file", "sha256", "bytes", "engine", "voice", "asset_url", "rendered_at"]) expect(e[k as keyof typeof e], k).toBeTruthy();
       expect(e.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(e.engine).toContain(`recording format ${RECORDING_FORMAT}`);
       expect(e.asset_url).toMatch(/^https:\/\/github\.com\/aacrit\/dial\/releases\/download\//);
       expect(Number.isInteger(e.bytes) && e.bytes > 0).toBe(true);
     }
+    // publish-recordings.mjs reads this from an actual staged index.json, never a hardcoded number.
+    expect(read("scripts/publish-recordings.mjs")).toMatch(/const recordingFormat = JSON\.parse\(readFileSync\(path\.join\(from, recordedSlugs\(lock\)\[0\], "index\.json"\), "utf8"\)\)\.format;/);
   });
 });
 
@@ -821,6 +1112,8 @@ describe("the committed lock, the staged recordings and the contract", () => {
     for (const slug of recorded) {
       expect(status200.has(`/recordings/${slug}/index.json`), slug).toBe(true);
       expect(status200.has(`/recordings/${slug}/part0.webm`), slug).toBe(true);
+      // T5b: the same first part in m4a, for iPhone and desktop Safari.
+      expect(status200.has(`/recordings/${slug}/part0.m4a`), slug).toBe(true);
     }
   });
 

@@ -122,8 +122,8 @@ export function route(url: URL, method: string, origin: string, mode?: string): 
   const p = url.pathname;
   if (isNeverCached(p)) return "ignore";
   if (/^\/works\/[a-z0-9-]+\.txt$/.test(p) || p === "/voice/manifest.json" || /^\/ort\/[^/]+\.mjs$/.test(p)) return "saved";
-  // A prepared recording: the list, each work's index and parts. Kept only when the listener saves the work.
-  if (p === "/recordings/manifest.json" || /^\/recordings\/[a-z0-9-]+\/(index\.json|part\d+\.webm)$/.test(p)) return "saved";
+  // A prepared recording: the list, each work's index and parts, in either encoding (T5b). Kept only when the listener saves the work.
+  if (p === "/recordings/manifest.json" || /^\/recordings\/[a-z0-9-]+\/(index\.json|part\d+\.(webm|m4a))$/.test(p)) return "saved";
   // The model's parts, the voices and the runtime's .wasm are kept by the page itself (voice.ts, offline/store.ts).
   if (p.startsWith("/voice/") || p.startsWith("/ort/") || p.startsWith("/works/") || p.startsWith("/recordings/")) return "ignore";
   // A work's Broadcast, /play/<slug>, is a page like the home page (T3).
