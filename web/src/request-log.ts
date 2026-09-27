@@ -13,6 +13,8 @@ export const SEND_PATHS = ["/e", "/feedback"] as const;
 
 export type Direction = "fetched" | "sent" | "blocked";
 
+export type HelperBy = "helper" | "shared";
+
 /**
  * One request, as the log keeps it: when, where, which way and how big.
  * Never text or audio: a path, a size and, for a count, its event name.
@@ -33,8 +35,12 @@ export interface RequestRecord {
    * if it made one, is a row of its own).
    */
   served?: "cache" | "helper";
-  /** A request Dial's offline helper made itself (its shell, or a page's request passed on). */
-  by?: "helper";
+  /**
+   * A request Dial's offline helper made: "helper" for this tab (a page's
+   * request passed on), "shared" for itself (the page files it keeps for
+   * every Dial tab), which every tab's log lists, marked so.
+   */
+  by?: HelperBy;
   /** A count's event name ("page_view"), for a sent /e row. */
   event?: string;
   /** A send that never reached the server (the network failed): not delivered. */
@@ -73,7 +79,7 @@ export function classify(url: string, origin: string): { path: string; own: bool
 }
 
 /** A Resource Timing entry as a record. A send is recorded by its sender instead (see `sentRecord` and `confirmSend`). */
-export function fromEntry(e: RawEntry, origin: string, by?: "helper"): RequestRecord | null {
+export function fromEntry(e: RawEntry, origin: string, by?: HelperBy): RequestRecord | null {
   const c = classify(e.url, origin);
   if (!c) return null;
   const rec: RequestRecord = { t: Math.round(e.t), path: c.path, own: c.own, dir: c.dir, bytes: null };
@@ -134,7 +140,7 @@ export function toRecord(x: unknown): RequestRecord | null {
   if (r.bytes !== null && (typeof r.bytes !== "number" || !Number.isFinite(r.bytes) || r.bytes < 0)) return null;
   const rec: RequestRecord = { t: r.t, path: r.path, own: r.own, dir: r.dir as Direction, bytes: r.bytes as number | null };
   if (r.served === "cache" || r.served === "helper") rec.served = r.served;
-  if (r.by === "helper") rec.by = "helper";
+  if (r.by === "helper" || r.by === "shared") rec.by = r.by;
   if (r.failed === true && rec.dir === "sent") rec.failed = true;
   if (typeof r.event === "string" && EVENT_NAME.test(r.event)) rec.event = r.event;
   return rec;
@@ -153,6 +159,33 @@ export function markFailed(log: StoredLog, t: number, path: string): StoredLog {
   const records = log.records.slice();
   records[i] = { ...records[i]!, failed: true };
   return { records, dropped: log.dropped };
+}
+
+const helperKey = (r: RequestRecord) => `${Math.round(r.t)}|${r.path}|${r.by}|${r.dir}`;
+
+/**
+ * The offline helper's rows not already in the log, by (time, path, by,
+ * direction): the helper posts to every open page and answers each page
+ * that asks, so the same entry can reach a tab more than once. Other rows
+ * pass through.
+ */
+export function newHelperRows(log: StoredLog, add: readonly RequestRecord[]): RequestRecord[] {
+  const held = new Set(log.records.filter((r) => r.by).map(helperKey));
+  const out: RequestRecord[] = [];
+  for (const r of add) {
+    if (r.by) {
+      const k = helperKey(r);
+      if (held.has(k)) continue;
+      held.add(k);
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+/** The newest helper row's time in the log, or 0: a page asks the helper only for entries after it. */
+export function newestHelperRow(log: StoredLog): number {
+  return log.records.reduce((m, r) => (r.by ? Math.max(m, Math.round(r.t)) : m), 0);
 }
 
 /** At most this many records are kept; the oldest go first, and the Seal says how many. */
@@ -205,6 +238,9 @@ export interface LogSummary {
   cached: number;
   /** Fetched files answered by Dial's offline helper. */
   helper: number;
+  /** Files the offline helper fetched for itself, shared by every Dial tab: not in fetched. */
+  shared: number;
+  sharedBytes: number;
   blocked: number;
   /** Requests (fetched or sent) that went to another origin. Under the CSP this stays 0. */
   foreign: number;
@@ -215,7 +251,7 @@ export interface LogSummary {
 }
 
 export function summarize(records: readonly RequestRecord[]): LogSummary {
-  const s: LogSummary = { counts: 0, feedback: 0, sentBytes: 0, sentUnknown: 0, failed: 0, fetched: 0, fetchedBytes: 0, cached: 0, helper: 0, blocked: 0, foreign: 0, since: null, lastSent: null };
+  const s: LogSummary = { counts: 0, feedback: 0, sentBytes: 0, sentUnknown: 0, failed: 0, fetched: 0, fetchedBytes: 0, cached: 0, helper: 0, shared: 0, sharedBytes: 0, blocked: 0, foreign: 0, since: null, lastSent: null };
   for (const r of records) {
     s.since = s.since === null ? r.t : Math.min(s.since, r.t);
     if (r.dir === "blocked") {
@@ -233,6 +269,9 @@ export function summarize(records: readonly RequestRecord[]): LogSummary {
       if (r.bytes === null) s.sentUnknown++;
       else s.sentBytes += r.bytes;
       s.lastSent = s.lastSent === null ? r.t : Math.max(s.lastSent, r.t);
+    } else if (r.by === "shared") {
+      s.shared++;
+      s.sharedBytes += r.served ? 0 : (r.bytes ?? 0);
     } else {
       s.fetched++;
       if (r.served === "cache") s.cached++;
@@ -311,8 +350,10 @@ export function logRowsHtml(records: readonly RequestRecord[]): string {
           : r.served === "helper"
             ? "from Dial's offline helper"
             : r.by === "helper"
-              ? "requested by Dial's offline helper"
-              : r.failed
+              ? "requested by Dial's offline helper for this tab"
+              : r.by === "shared"
+                ? "made by the offline helper, which every Dial tab shares"
+                : r.failed
                 ? "not delivered"
                 : "";
       const cached = note ? ` <span class="cached">${esc(note)}</span>` : "";
@@ -344,7 +385,8 @@ export function totalsHtml(s: LogSummary): string {
   const served = answered.length ? `; ${answered.join(" and ")}` : "";
   const fetched = `${plural(s.fetched, "file", "files")}, ${num(sizeLabel(s.fetchedBytes))} over the network${served}`;
   const blocked = s.blocked ? ` &middot; Blocked: ${plural(s.blocked, "request", "requests")}` : "";
-  return `Sent: <b>${sent}</b> &middot; Fetched: <b>${fetched}</b>${blocked}`;
+  const shared = s.shared ? ` &middot; Offline helper, shared by every tab: <b>${plural(s.shared, "file", "files")}, ${num(sizeLabel(s.sharedBytes))}</b>` : "";
+  return `Sent: <b>${sent}</b> &middot; Fetched: <b>${fetched}</b>${shared}${blocked}`;
 }
 
 /** The counts switch as the Seal reads it. */
@@ -383,6 +425,7 @@ export function sealWords(s: LogSummary, sealed: boolean, counts: CountsState, h
     say = `${since}this tab has sent nothing.${failed} It has fetched ${fetched}, and it stays on this device.`;
   }
   say = say.charAt(0).toUpperCase() + say.slice(1);
+  if (s.shared) say += ` Dial's offline helper, which every Dial tab shares, also fetched ${plural(s.shared, "file", "files")} of this site's own for itself.`;
   const before = s.counts ? " Counts sent before you turned them off are still listed below, because the log shows everything." : "";
   if (counts === "off") say = `Counts are off, so this tab sends none.${before} ${say}`;
   return { headline: "Sealed", say };

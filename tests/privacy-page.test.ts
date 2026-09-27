@@ -37,11 +37,25 @@ describe("web/privacy.html, claim by claim", () => {
     expect(text).toContain("The counts switch: one setting in local storage, whether to send daily counts, written only when you change it.");
     expect(text).toContain("Besides the voice, saved works and page files described above, Dial keeps two small things, both on your device and never sent.");
     expect(text).not.toMatch(/Three things/);
-    expect(text).toContain("This tab's request log: the path, size and time of each request Dial's pages, their voice helpers and the offline helper made in this tab (and, for a count, its name, and whether a send was not delivered), kept in session storage so the Seal can show it; never any text or audio, and erased when the tab closes.");
+    expect(text).toContain("This tab's request log: the path, size and time of each request Dial's pages and their voice helpers made in this tab, of each request the offline helper made for this tab, and, marked as shared, of what the offline helper fetched for itself for every Dial tab (and, for a count, its name, and whether a send was not delivered), kept in session storage so the Seal can show it; never any text or audio, and erased when the tab closes.");
+    // Per tab: the helper notes the page each request is for, sends each page only its own entries, and marks the rest shared.
+    const sw = read("web/src/sw.ts");
+    expect(sw).toContain('const client = event.clientId || event.resultingClientId || "";');
+    expect(sw).toMatch(/for \(const \[id, list\] of own\) void clients\.get\(id\)\.then\(\(c\) => c\?\.postMessage\(\{ type: REQUESTS_MESSAGE, entries: list, shared: false \}\)\);/);
+    expect(sw).toMatch(/c\.postMessage\(\{ type: REQUESTS_MESSAGE, entries: shared, shared: true \}\)/);
+    // Every fetch the helper makes for a page is noted for that page first.
+    for (const fn of ["fromShell", "page", "saved"]) {
+      const body = sw.slice(sw.indexOf(`async function ${fn}(`), sw.indexOf("\n}\n", sw.indexOf(`async function ${fn}(`)));
+      expect(body, fn).toMatch(/forPage\(request, client\);\s*(return await |return |const res = await )?fetch\(request\)/);
+    }
+    const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(seal).toContain("every request its offline helper (the service worker) made for this tab");
+    expect(seal).toContain('each tab\'s log lists it once, marked "made by the offline helper, which every Dial tab shares", and counts it apart from this tab\'s own requests.');
+    expect(read("web/src/request-log.ts")).toContain('"made by the offline helper, which every Dial tab shares"');
     // The voice helpers and the offline helper post their own record to the page, which records it.
     expect(read("web/src/sw.ts")).toMatch(/watchWorkerRequests\(tell\)/);
     expect(read("web/src/narrate.worker.ts")).toMatch(/watchWorkerRequests\(/);
-    expect(read("web/src/request-recorder.ts")).toMatch(/recordEntries\(data\.entries\.filter\(isRawEntry\), "helper"\)/);
+    expect(read("web/src/request-recorder.ts")).toMatch(/recordEntries\(data\.entries\.filter\(isRawEntry\), data\.shared === true \? "shared" : "helper"\)/);
     const files = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
     // localStorage is read and written in telemetry.ts only, under the one key.
     const local = files.filter((f) => /\blocalStorage\b/.test(read(`web/src/${f}`)));

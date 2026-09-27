@@ -79,7 +79,8 @@ export function verdictHtml(speed: number): string {
 
 /** Before the test: whether it uses the voice already here, or what it downloads first (the radio's size rules). */
 export function benchNeedLine(total: unknown, need: Need | null, missingVoices = 1): string {
-  if (need === "none") return "The test uses the voice already on this device.";
+  // A presence-only look (voice-files.ts voicePresence): the files are there, not yet checked against their pins.
+  if (need === "none") return "The voice looks to be on this device already.";
   if (!need || !isStatableTotal(total)) return "The test downloads the voice first if it is not on this device.";
   if (need === "voices") return `The test adds its ${missingVoices === 1 ? "voice" : "voices"} to this device first (${aboutMegabytes(total)}).`;
   return `The test downloads the voice once (${aboutMegabytes(total)}) and keeps it on this device.`;

@@ -16,7 +16,7 @@
 // Where the browser blocks session storage, the log lives in this page's
 // memory only.
 
-import { appendLog, blockedRecord, confirmSend, fromEntry, markFailed, parseLog, sentRecord, serializeLog, type RawEntry, type RequestRecord, type StoredLog } from "./request-log";
+import { appendLog, blockedRecord, confirmSend, fromEntry, markFailed, newHelperRows, newestHelperRow, parseLog, sentRecord, serializeLog, type HelperBy, type RawEntry, type RequestRecord, type StoredLog } from "./request-log";
 import { REQUESTS_ASK, REQUESTS_MESSAGE, toRawEntries } from "./worker-requests";
 
 export const LOG_KEY = "dial.requests";
@@ -61,7 +61,10 @@ function writeLog(next: StoredLog): void {
 
 function addRecords(add: RequestRecord[]): void {
   if (add.length === 0) return;
-  writeLog(appendLog(readLog(), add));
+  const log = readLog();
+  // The helper's rows can arrive more than once (posted live, and again when a page asks): each is kept once.
+  const fresh = newHelperRows(log, add);
+  if (fresh.length) writeLog(appendLog(log, fresh));
 }
 
 /** Which send a sender recorded, so it can say later that it was not delivered. */
@@ -88,7 +91,7 @@ export function noteSendFailed(token: SendToken): void {
 }
 
 /** Records entries from the browser's record, on this page or posted by a worker; `by` marks the offline helper's own. */
-export function recordEntries(entries: readonly RawEntry[], by?: "helper"): void {
+export function recordEntries(entries: readonly RawEntry[], by?: HelperBy): void {
   const origin = location.origin;
   const out: RequestRecord[] = [];
   for (const e of entries) {
@@ -125,11 +128,11 @@ export function recordRequests(onChange?: (log: StoredLog) => void): void {
   const helper = typeof navigator !== "undefined" ? navigator.serviceWorker : undefined;
   if (helper) {
     helper.addEventListener("message", (e: MessageEvent) => {
-      const data = e.data as { type?: string; entries?: unknown } | null;
-      if (data?.type === REQUESTS_MESSAGE && Array.isArray(data.entries)) recordEntries(data.entries.filter(isRawEntry), "helper");
+      const data = e.data as { type?: string; entries?: unknown; shared?: unknown } | null;
+      if (data?.type === REQUESTS_MESSAGE && Array.isArray(data.entries)) recordEntries(data.entries.filter(isRawEntry), data.shared === true ? "shared" : "helper");
     });
     helper.startMessages();
-    void helper.ready.then((reg) => reg.active?.postMessage({ type: REQUESTS_ASK }));
+    void helper.ready.then((reg) => reg.active?.postMessage({ type: REQUESTS_ASK, after: newestHelperRow(readLog()) }));
   }
   document.addEventListener("securitypolicyviolation", (e) => {
     const rec = blockedRecord(e.blockedURI, performance.timeOrigin + e.timeStamp, location.origin);

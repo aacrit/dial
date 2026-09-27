@@ -19,6 +19,8 @@ import {
   confirmSend,
   footHtml,
   markFailed,
+  newHelperRows,
+  newestHelperRow,
   parseLog,
   sealWords,
   sentRecord,
@@ -31,6 +33,7 @@ import {
   type RequestRecord,
 } from "../web/src/request-log";
 import { COUNTS_KEY, STORAGE_REFUSED, canKeepSetting, countsOn, sendEvent, setCounts, type SendDeps, type SettingStore } from "../web/src/telemetry";
+import { answerFor, claim, groupByClient, prune, remember, HELPER_MEMORY, type HelperEntry, type PendingFetch } from "../web/src/offline/attribution";
 import { PLANNING_MARGIN, benchNeedLine, benchStopLine, cpuDetailsHtml, plannedSpeed, reportsHtml, speedLabel, speedOf, verdictHtml } from "../web/src/bench";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -393,7 +396,7 @@ describe("speed of this device: processor only, results never sent", () => {
   });
 
   it("before the click, the button line states what the test will download, by the radio's size rules", () => {
-    expect(benchNeedLine(0, "none", 0)).toBe("The test uses the voice already on this device.");
+    expect(benchNeedLine(0, "none", 0)).toBe("The voice looks to be on this device already.");
     expect(benchNeedLine(114_527_513, "all", 1)).toBe("The test downloads the voice once (about 115 MB) and keeps it on this device.");
     expect(benchNeedLine(522_240, "voices", 1)).toBe("The test adds its voice to this device first (about 1 MB).");
     expect(benchNeedLine(NaN, "all")).toBe("The test downloads the voice first if it is not on this device.");
@@ -483,5 +486,103 @@ describe("the page", () => {
     expect(html).not.toMatch(/navigator\.gpu|requestAdapter/);
     expect(read("web/src/seal.ts")).not.toMatch(/navigator\.gpu|requestAdapter/);
     expect(html).not.toMatch(/verify|Check a recording/i);
+  });
+});
+
+// ---- The offline helper's rows: once per tab, and only the tab's own ----------
+
+describe("the offline helper's requests: each tab gets its own, once", () => {
+  const e = (url: string, t: number) => ({ url, t, transferSize: 100, encodedBodySize: 90 });
+
+  it("an entry is claimed by the page the helper fetched it for; one nobody claimed is shared", () => {
+    const pending: PendingFetch[] = [
+      { url: `${ORIGIN}/works/cave.txt`, at: 1000, clientId: "tab-a" },
+      { url: `${ORIGIN}/works/cave.txt`, at: 1500, clientId: "tab-b" },
+      { url: `${ORIGIN}/`, at: 1200, clientId: "new-page" },
+    ];
+    expect(claim(pending, e(`${ORIGIN}/works/cave.txt`, 1003))).toBe("tab-a");
+    expect(claim(pending, e(`${ORIGIN}/works/cave.txt`, 1501))).toBe("tab-b");
+    // The shell the helper keeps for itself was noted for no page.
+    expect(claim(pending, e(`${ORIGIN}/assets/main.js`, 1100))).toBeNull();
+    // Too early for the note, or too late: not claimed.
+    expect(claim(pending, e(`${ORIGIN}/`, 1000))).toBeNull();
+    expect(claim(pending, e(`${ORIGIN}/`, 1200 + 20_000))).toBeNull();
+    expect(claim(pending, e(`${ORIGIN}/`, 1210))).toBe("new-page");
+    const old: PendingFetch[] = [{ url: "u", at: 0, clientId: "x" }, { url: "v", at: 9_000, clientId: "y" }];
+    prune(old, 15_000);
+    expect(old.map((p) => p.clientId)).toEqual(["y"]);
+  });
+
+  it("each page is sent only its own entries; the shared go to every page, marked; a page that asks gets only what is newer", () => {
+    const list: HelperEntry[] = [
+      { entry: e("/a", 10), clientId: "tab-a" },
+      { entry: e("/b", 11), clientId: "tab-b" },
+      { entry: e("/shell.js", 12), clientId: null },
+      { entry: e("/a2", 13), clientId: "tab-a" },
+    ];
+    const g = groupByClient(list);
+    expect(g.own.get("tab-a")!.map((x) => x.url)).toEqual(["/a", "/a2"]);
+    expect(g.own.get("tab-b")!.map((x) => x.url)).toEqual(["/b"]);
+    expect(g.shared.map((x) => x.url)).toEqual(["/shell.js"]);
+    const answer = answerFor(list, "tab-a", 10);
+    expect(answer.own.map((x) => x.url)).toEqual(["/a2"]);
+    expect(answer.shared.map((x) => x.url)).toEqual(["/shell.js"]);
+    expect(answerFor(list, "tab-c", 0).own).toEqual([]);
+    const memory: HelperEntry[] = [];
+    remember(memory, Array.from({ length: HELPER_MEMORY + 5 }, (_, i) => ({ entry: e(`/${i}`, i), clientId: null })));
+    expect(memory).toHaveLength(HELPER_MEMORY);
+    expect(memory[0]!.entry.url).toBe("/5");
+  });
+
+  it("the log keeps a helper row once, by time, path, by and direction; other rows pass", () => {
+    const row: RequestRecord = { t: 1000.4, path: "/assets/a.js", own: true, dir: "fetched", bytes: 9, by: "shared" };
+    const log = { records: [{ ...row, t: 1000 }], dropped: 0 };
+    expect(newHelperRows(log, [row])).toEqual([]);
+    expect(newHelperRows(log, [{ ...row, by: "helper" }])).toHaveLength(1);
+    expect(newHelperRows(log, [row, row].map((r) => ({ ...r, t: 2000 })))).toHaveLength(1);
+    const page: RequestRecord = { t: 1000, path: "/assets/a.js", own: true, dir: "fetched", bytes: 9 };
+    expect(newHelperRows(log, [page])).toEqual([page]);
+    expect(newestHelperRow(log)).toBe(1000);
+    expect(newestHelperRow({ records: [page], dropped: 0 })).toBe(0);
+  });
+
+  it("the same helper batch through two pages of one tab gives one copy", async () => {
+    const data: Record<string, string> = {};
+    const session = { getItem: (k: string) => data[k] ?? null, setItem: (k: string, v: string) => void (data[k] = v) };
+    vi.stubGlobal("window", { sessionStorage: session });
+    vi.stubGlobal("location", { origin: ORIGIN });
+    const batch = [e(`${ORIGIN}/assets/main.js`, 5_000), e(`${ORIGIN}/`, 5_001)];
+    try {
+      for (const _page of [1, 2]) {
+        // A fresh module per page load: its own memory of what it saw, the tab's storage shared.
+        vi.resetModules();
+        const rec = await import("../web/src/request-recorder");
+        rec.recordEntries(batch, "shared");
+        rec.recordEntries(batch, "shared");
+      }
+      const rows = parseLog(data["dial.requests"]!).records;
+      expect(rows).toHaveLength(2);
+      expect(rows.every((r) => r.by === "shared")).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it("shared downloads are counted apart from this tab's own, and labelled", () => {
+    const own: RequestRecord = { t: 1, path: "/", own: true, dir: "fetched", bytes: 3000 };
+    const mine: RequestRecord = { t: 2, path: "/works/cave.txt", own: true, dir: "fetched", bytes: 16000, by: "helper" };
+    const shared: RequestRecord = { t: 3, path: "/assets/main.js", own: true, dir: "fetched", bytes: 34000, by: "shared" };
+    const s = summarize([own, mine, shared]);
+    expect(s).toMatchObject({ fetched: 2, fetchedBytes: 19000, shared: 1, sharedBytes: 34000 });
+    expect(totalsHtml(s).replace(/<[^>]+>/g, "")).toContain("Offline helper, shared by every tab: 1 file, 34.0 kB");
+    expect(sealWords(s, true, "on", "h").say.replace(/<[^>]+>/g, "")).toContain(
+      "Dial's offline helper, which every Dial tab shares, also fetched 1 file of this site's own for itself.",
+    );
+    const rows = logRowsHtml([mine, shared]).replaceAll("&#39;", "'");
+    expect(rows).toContain("requested by Dial's offline helper for this tab");
+    expect(rows).toContain("made by the offline helper, which every Dial tab shares");
+    expect(toRecord({ ...shared })?.by).toBe("shared");
+    expect(toRecord({ ...shared, by: "someone" })?.by).toBeUndefined();
   });
 });

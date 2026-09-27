@@ -8,7 +8,8 @@
 // Seal's log.
 
 import { CAST_ENGINE_VERSION } from "./engine/cast-version";
-import { REQUESTS_ASK, REQUESTS_MESSAGE, toRawEntries, watchWorkerRequests } from "./worker-requests";
+import { REQUESTS_ASK, REQUESTS_MESSAGE, watchWorkerRequests } from "./worker-requests";
+import { answerFor, claim, groupByClient, prune, remember, type HelperEntry, type PendingFetch } from "./offline/attribution";
 import type { RawEntry } from "./request-log";
 import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
 
@@ -24,6 +25,9 @@ interface ExtendableEvent extends Event {
 }
 interface FetchEvent extends ExtendableEvent {
   request: Request;
+  /** The page that made the request; empty for a navigation, which names the new page in resultingClientId. */
+  clientId: string;
+  resultingClientId?: string;
   respondWith(r: Promise<Response>): void;
 }
 interface ExtendableMessageEvent extends ExtendableEvent {
@@ -108,14 +112,17 @@ sw.addEventListener("message", (event) => {
   else if (data?.type === "shell-status") event.waitUntil(shellComplete().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
 });
 
-async function fromShell(request: Request): Promise<Response> {
+async function fromShell(request: Request, client: string): Promise<Response> {
   const cache = await caches.open(SHELL);
   const hit = await cache.match(request, { ignoreSearch: true });
-  return hit ?? fetch(request);
+  if (hit) return hit;
+  forPage(request, client);
+  return fetch(request);
 }
 
-async function page(request: Request): Promise<Response> {
+async function page(request: Request, client: string): Promise<Response> {
   try {
+    forPage(request, client);
     return await fetch(request);
   } catch {
     const cache = await caches.open(SHELL);
@@ -132,10 +139,11 @@ function marked(res: Response): Response {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
-async function saved(request: Request): Promise<Response> {
+async function saved(request: Request, client: string): Promise<Response> {
   const key = new URL(request.url).pathname;
   const cache = await caches.open(SAVED_CACHE);
   try {
+    forPage(request, client);
     const res = await fetch(request);
     // Refresh a saved copy (a new release's manifest), keeping its headers
     // (a work's recorded voices); never save what the listener did not.
@@ -158,31 +166,61 @@ sw.addEventListener("fetch", (event) => {
   const request = event.request;
   const r = route(new URL(request.url), request.method, sw.location.origin, request.mode);
   if (r === "ignore") return;
-  event.respondWith(r === "page" ? page(request) : r === "saved" ? saved(request) : fromShell(request));
+  // The page this request is for, so the Seal's log lists it in that tab only.
+  const client = event.clientId || event.resultingClientId || "";
+  event.respondWith(r === "page" ? page(request, client) : r === "saved" ? saved(request, client) : fromShell(request, client));
 });
 
-// ---- The Seal's log: this helper's own requests -------------------------------
-// The helper's Resource Timing record (the shell it keeps, the requests it
-// makes on the page's behalf) is its own; no page can read it. So it posts
-// each entry, as the voice workers do (worker-requests.ts: address, time and
-// sizes only), to the Dial pages open now, and answers a page that asks for
-// what it has recorded so far. Pages record them like any worker's.
+// ---- The Seal's log: this helper's requests, told to the tab they were for ----
+// The helper's Resource Timing record is its own; no page can read it. Each
+// request it makes for a page is noted with that page's client id just
+// before the fetch (forPage), and its entry goes to that page only. What it
+// fetches for itself (the shell it keeps for every tab) goes to every Dial
+// page, marked as the helper's shared download (offline/attribution.ts).
+// Only address, time and sizes are posted (worker-requests.ts).
 
+interface Client {
+  id: string;
+  postMessage(m: unknown): void;
+}
 interface Clients {
-  matchAll(options: { type: "window"; includeUncontrolled: boolean }): Promise<readonly { postMessage(m: unknown): void }[]>;
+  get(id: string): Promise<Client | undefined>;
+  matchAll(options: { type: "window"; includeUncontrolled: boolean }): Promise<readonly Client[]>;
+}
+const clients = sw.clients as unknown as Clients;
+
+const pending: PendingFetch[] = [];
+const memory: HelperEntry[] = [];
+
+function forPage(request: Request, client: string): void {
+  const now = performance.timeOrigin + performance.now();
+  prune(pending, now);
+  if (client) pending.push({ url: request.url, at: now, clientId: client });
 }
 
-const tell = (entries: RawEntry[]) =>
-  void (sw.clients as unknown as Clients).matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-    for (const client of list) client.postMessage({ type: REQUESTS_MESSAGE, entries });
-  });
+const tell = (entries: RawEntry[]) => {
+  const claimed = entries.map((entry) => ({ entry, clientId: claim(pending, entry) }));
+  remember(memory, claimed);
+  const { own, shared } = groupByClient(claimed);
+  for (const [id, list] of own) void clients.get(id).then((c) => c?.postMessage({ type: REQUESTS_MESSAGE, entries: list, shared: false }));
+  if (shared.length) {
+    void clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) c.postMessage({ type: REQUESTS_MESSAGE, entries: shared, shared: true });
+    });
+  }
+};
 
 watchWorkerRequests(tell);
 
+// A page that opens asks for what it is owed: its own entries and the
+// shared ones, newer than the newest helper row its tab's log already holds.
 sw.addEventListener("message", (event) => {
-  const data = event.data as { type?: string } | null;
+  const data = event.data as { type?: string; after?: unknown } | null;
   if (data?.type !== REQUESTS_ASK) return;
-  const source = (event as unknown as { source: { postMessage(m: unknown): void } | null }).source;
-  const entries = toRawEntries(performance.getEntriesByType("resource"));
-  if (source && entries.length) source.postMessage({ type: REQUESTS_MESSAGE, entries });
+  const source = (event as unknown as { source: Client | null }).source;
+  if (!source) return;
+  const after = typeof data.after === "number" && Number.isFinite(data.after) ? data.after : 0;
+  const { own, shared } = answerFor(memory, source.id, after);
+  if (own.length) source.postMessage({ type: REQUESTS_MESSAGE, entries: own, shared: false });
+  if (shared.length) source.postMessage({ type: REQUESTS_MESSAGE, entries: shared, shared: true });
 });
