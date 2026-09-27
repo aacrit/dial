@@ -3,6 +3,8 @@
 // without loading the speech runtime. Every file comes from this origin
 // (Law 1) and is checked against its pin before it is used or kept.
 
+import { neededBytes, runtimeCacheKey, runtimeCacheName, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
+
 /** Where the model, its tokenizer and config are served and keyed. */
 export const MODELS = "/voice/models/";
 
@@ -78,4 +80,37 @@ export async function stitchModel(m: StitchManifest, count: (bytes: number) => v
   const whole = await blob.arrayBuffer();
   if ((await sha256Hex(whole)) !== m.sha256) throw new Error("voice: the model did not match its pin");
   return new Response(blob, { headers: { "content-type": "application/octet-stream", "content-length": String(blob.size) } });
+}
+
+/** The manifest fields the presence check reads (voice.ts VoiceManifest has them all). */
+export interface PresenceManifest extends VoicePins, SizedManifest {
+  voices: Record<string, string>;
+}
+
+/**
+ * What a first use of `wanted` would download, from what is present on this
+ * device: a quick look for the Seal's speed-test line, before anything
+ * runs. It hashes nothing and opens no cache that does not already exist.
+ * The loader (voice.ts loadVoice) still checks every file against its pin
+ * when the test runs, and its own warming line states the exact size.
+ */
+export async function voicePresence(wanted: readonly string[]): Promise<{ bytes: number; need: Need; missingVoices: number }> {
+  const res = await fetch("/voice/manifest.json");
+  if (!res.ok) throw new Error(`voice manifest: ${res.status}`);
+  const m = (await res.json()) as PresenceManifest;
+  const names = new Set(await caches.keys());
+  const open = (name: string) => (names.has(name) ? caches.open(name) : Promise.resolve(null));
+  const [cache, runtimeCache, voices] = await Promise.all([open(voiceCacheName(m)), open(runtimeCacheName(m)), open(KOKORO_VOICES_CACHE)]);
+  const has = async (c: Cache | null, key: string) => !!c && !!(await c.match(key));
+  const cast = [...new Set(wanted)];
+  const heldVoices = new Set<string>();
+  for (const id of cast) if (await has(voices, hfVoiceKey(m.repo, id))) heldVoices.add(id);
+  const modelFiles = new Set<string>();
+  for (const p of Object.keys(m.sizes)) if (p.startsWith(`${MODELS}${m.repo}/`) && (await has(cache, p))) modelFiles.add(p);
+  return neededBytes(m, cast, {
+    model: await has(cache, `${MODELS}${m.repo}/${m.model}`),
+    modelFiles,
+    runtime: await has(runtimeCache, runtimeCacheKey(m)),
+    voices: heldVoices,
+  });
 }

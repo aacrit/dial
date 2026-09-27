@@ -3,9 +3,14 @@
 // functions in offline/routes.ts. It answers this origin's own GET requests
 // only, and makes only two kinds of request itself: the request the page
 // made (to this origin, already under the page's CSP), and the shell's own
-// paths, all on this origin (tests/offline.test.ts). It never sends anything.
+// paths, all on this origin (tests/offline.test.ts). It never sends anything
+// off the device; it tells Dial's open pages which requests it made, for the
+// Seal's log.
 
 import { CAST_ENGINE_VERSION } from "./engine/cast-version";
+import { REQUESTS_ASK, REQUESTS_MESSAGE, watchWorkerRequests } from "./worker-requests";
+import { answerFor, claim, groupByClient, prune, remember, settle, type HelperEntry, type PendingFetch } from "./offline/attribution";
+import type { RawEntry } from "./request-log";
 import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
 
 declare const __BUILD_TAG__: string;
@@ -20,6 +25,9 @@ interface ExtendableEvent extends Event {
 }
 interface FetchEvent extends ExtendableEvent {
   request: Request;
+  /** The page that made the request; empty for a navigation, which names the new page in resultingClientId. */
+  clientId: string;
+  resultingClientId?: string;
   respondWith(r: Promise<Response>): void;
 }
 interface ExtendableMessageEvent extends ExtendableEvent {
@@ -104,15 +112,18 @@ sw.addEventListener("message", (event) => {
   else if (data?.type === "shell-status") event.waitUntil(shellComplete().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
 });
 
-async function fromShell(request: Request): Promise<Response> {
+async function fromShell(request: Request, client: string): Promise<Response> {
   const cache = await caches.open(SHELL);
   const hit = await cache.match(request, { ignoreSearch: true });
-  return hit ?? fetch(request);
+  if (hit) return hit;
+  forPage(request, client);
+  return fetch(request).finally(() => settled(request, client));
 }
 
-async function page(request: Request): Promise<Response> {
+async function page(request: Request, client: string): Promise<Response> {
   try {
-    return await fetch(request);
+    forPage(request, client);
+    return await fetch(request).finally(() => settled(request, client));
   } catch {
     const cache = await caches.open(SHELL);
     const hit = await cache.match(shellKey(new URL(request.url).pathname));
@@ -128,11 +139,12 @@ function marked(res: Response): Response {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
-async function saved(request: Request): Promise<Response> {
+async function saved(request: Request, client: string): Promise<Response> {
   const key = new URL(request.url).pathname;
   const cache = await caches.open(SAVED_CACHE);
   try {
-    const res = await fetch(request);
+    forPage(request, client);
+    const res = await fetch(request).finally(() => settled(request, client));
     // Refresh a saved copy (a new release's manifest), keeping its headers
     // (a work's recorded voices); never save what the listener did not.
     const had = res.ok ? await cache.match(key) : undefined;
@@ -152,7 +164,81 @@ async function saved(request: Request): Promise<Response> {
 
 sw.addEventListener("fetch", (event) => {
   const request = event.request;
+  // A render worker is a client of its own: note which page started it, so its requests reach that page's log.
+  if (request.destination === "worker" && event.resultingClientId && event.clientId) startedBy(event.resultingClientId, event.clientId);
   const r = route(new URL(request.url), request.method, sw.location.origin, request.mode);
   if (r === "ignore") return;
-  event.respondWith(r === "page" ? page(request) : r === "saved" ? saved(request) : fromShell(request));
+  // The page this request is for, so the Seal's log lists it in that tab only.
+  const client = event.clientId || event.resultingClientId || "";
+  event.respondWith(r === "page" ? page(request, client) : r === "saved" ? saved(request, client) : fromShell(request, client));
+});
+
+// ---- The Seal's log: this helper's requests, told to the tab they were for ----
+// The helper's Resource Timing record is its own; no page can read it. Each
+// request it makes for a client is noted with that client's id just before
+// the fetch (forPage), and its entry goes to that client's page only: a
+// render worker's requests go to the page that started it (owners). What it
+// fetches for itself (the shell it keeps for every tab) goes to every Dial
+// page, marked as the helper's shared download (offline/attribution.ts).
+// Only address, time and sizes are posted (worker-requests.ts).
+
+interface Client {
+  id: string;
+  postMessage(m: unknown): void;
+}
+interface Clients {
+  get(id: string): Promise<Client | undefined>;
+  matchAll(options: { type: "window"; includeUncontrolled: boolean }): Promise<readonly Client[]>;
+}
+const clients = sw.clients as unknown as Clients;
+
+const pending: PendingFetch[] = [];
+const memory: HelperEntry[] = [];
+/** Worker client id to the page that started it. */
+const owners = new Map<string, string>();
+
+const now = () => performance.timeOrigin + performance.now();
+
+function startedBy(worker: string, page: string): void {
+  owners.set(worker, page);
+  // Workers come and go; the oldest are forgotten first.
+  if (owners.size > 200) owners.delete(owners.keys().next().value!);
+}
+
+function forPage(request: Request, client: string): void {
+  prune(pending, now());
+  if (client) pending.push({ url: request.url, at: now(), clientId: client });
+}
+
+/** The response arrived: the note is kept a grace period longer, while the page reads the body. */
+function settled(request: Request, client: string): void {
+  if (client) settle(pending, request.url, client, now());
+}
+
+const tell = (entries: RawEntry[]) => {
+  const claimed = entries.map((entry) => ({ entry, clientId: claim(pending, entry) }));
+  remember(memory, claimed);
+  const { own, shared } = groupByClient(claimed, owners);
+  for (const [id, list] of own) void clients.get(id).then((c) => c?.postMessage({ type: REQUESTS_MESSAGE, entries: list, shared: false }));
+  if (shared.length) {
+    void clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) c.postMessage({ type: REQUESTS_MESSAGE, entries: shared, shared: true });
+    });
+  }
+};
+
+watchWorkerRequests(tell);
+
+// A page that opens asks for what it is owed: its own and its workers'
+// entries, and the shared ones, each newer than the newest row of that kind
+// its tab's log already holds.
+sw.addEventListener("message", (event) => {
+  const data = event.data as { type?: string; afterOwn?: unknown; afterShared?: unknown } | null;
+  if (data?.type !== REQUESTS_ASK) return;
+  const source = (event as unknown as { source: Client | null }).source;
+  if (!source) return;
+  const time = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const { own, shared } = answerFor(memory, source.id, time(data.afterOwn), time(data.afterShared), owners);
+  if (own.length) source.postMessage({ type: REQUESTS_MESSAGE, entries: own, shared: false });
+  if (shared.length) source.postMessage({ type: REQUESTS_MESSAGE, entries: shared, shared: true });
 });

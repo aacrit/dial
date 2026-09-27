@@ -12,6 +12,7 @@ import { CSP } from "../scripts/lib/csp.mjs";
 import { RETENTION_DAYS } from "../worker/src/config";
 import { IDLE_SCENARIOS, runIdleScenario } from "./helpers/retention-sim";
 import { parse as parseYaml } from "yaml";
+import { RECORD_KEYS, serializeLog } from "../web/src/request-log";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f: string) => readFileSync(path.join(root, f), "utf8");
@@ -19,16 +20,105 @@ const text = read("web/privacy.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, "
 const workerFiles = () => readdirSync(path.join(root, "worker/src")).filter((f) => f.endsWith(".ts"));
 
 describe("web/privacy.html, claim by claim", () => {
-  it("no anonymous id, cookie or local storage: no client or Worker code sets one", () => {
-    expect(text).toContain("There is no anonymous id, no cookie, no local storage, and no third-party analytics script");
+  it("no anonymous id, cookie or analytics script: no client or Worker code sets one", () => {
+    expect(text).toContain("There is no anonymous id, no cookie, and no third-party analytics script");
+    expect(text).not.toMatch(/no local storage/);
     for (const dir of ["web/src", "worker/src"]) {
-      for (const f of readdirSync(path.join(root, dir)).filter((x) => x.endsWith(".ts"))) {
-        expect(read(`${dir}/${f}`), f).not.toMatch(/\b(localStorage|sessionStorage|indexedDB)\.|document\.cookie|set-cookie/i);
+      for (const f of readdirSync(path.join(root, dir), { recursive: true, encoding: "utf8" }).filter((x) => x.endsWith(".ts"))) {
+        expect(read(`${dir}/${f}`), f).not.toMatch(/\bindexedDB\b|document\.cookie|set-cookie/i);
       }
     }
     for (const page of readdirSync(path.join(root, "web")).filter((p) => p.endsWith(".html"))) {
       expect(read(`web/${page}`), page).not.toMatch(/googletagmanager|google-analytics|cloudflareinsights|plausible|posthog/i);
     }
+  });
+
+  it("what Dial keeps in the browser: one setting in local storage, the tab's request log in session storage, and nothing else", () => {
+    expect(text).toContain("The counts switch: one setting in local storage, whether to send daily counts, written only when you change it.");
+    expect(text).toContain("Besides the voice, saved works and page files described above, Dial keeps two small things, both on your device and never sent.");
+    expect(text).not.toMatch(/Three things/);
+    expect(text).toContain("This tab's request log: the path, size and time of each request Dial's pages and their voice helpers made in this tab, of each request the offline helper made for this tab, and, marked as shared, of what the offline helper fetched for itself for every Dial tab (and, for a count, its name, and whether a send was not delivered), kept in session storage so the Seal can show it; never any text or audio, and erased when the tab closes.");
+    // Per tab: the helper notes the page each request is for, sends each page only its own entries, and marks the rest shared.
+    const sw = read("web/src/sw.ts");
+    expect(sw).toContain('const client = event.clientId || event.resultingClientId || "";');
+    expect(sw).toMatch(/for \(const \[id, list\] of own\) void clients\.get\(id\)\.then\(\(c\) => c\?\.postMessage\(\{ type: REQUESTS_MESSAGE, entries: list, shared: false \}\)\);/);
+    expect(sw).toMatch(/c\.postMessage\(\{ type: REQUESTS_MESSAGE, entries: shared, shared: true \}\)/);
+    // Every fetch the helper makes for a page is noted for that page first.
+    for (const fn of ["fromShell", "page", "saved"]) {
+      const body = sw.slice(sw.indexOf(`async function ${fn}(`), sw.indexOf("\n}\n", sw.indexOf(`async function ${fn}(`)));
+      expect(body, fn).toMatch(/forPage\(request, client\);\s*(return await |return |const res = await )?fetch\(request\)/);
+    }
+    const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(seal).toContain("every request its offline helper (the service worker) made for this tab");
+    expect(seal).toContain('each tab\'s log lists it once, marked "made by the offline helper, which every Dial tab shares", and counts it apart from this tab\'s own requests.');
+    expect(read("web/src/request-log.ts")).toContain('"made by the offline helper, which every Dial tab shares"');
+    // The voice helpers and the offline helper post their own record to the page, which records it.
+    expect(read("web/src/sw.ts")).toMatch(/watchWorkerRequests\(tell\)/);
+    expect(read("web/src/narrate.worker.ts")).toMatch(/watchWorkerRequests\(/);
+    expect(read("web/src/request-recorder.ts")).toMatch(/recordEntries\(data\.entries\.filter\(isRawEntry\), data\.shared === true \? "shared" : "helper"\)/);
+    const files = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
+    // localStorage is read and written in telemetry.ts only, under the one key.
+    const local = files.filter((f) => /\blocalStorage\b/.test(read(`web/src/${f}`)));
+    expect(local).toEqual(["telemetry.ts"]);
+    const telemetry = read("web/src/telemetry.ts");
+    expect(telemetry).toContain('export const COUNTS_KEY = "dial.counts";');
+    expect([...telemetry.matchAll(/\.setItem\(([^,]+),/g)].map((m) => m[1])).toEqual(["COUNTS_KEY"]);
+    // Written only when the listener changes it: setCounts is the one writer, called from the Seal's switch only.
+    const setters = files.filter((f) => f !== "telemetry.ts" && /\bsetCounts\(/.test(read(`web/src/${f}`)));
+    expect(setters).toEqual(["seal.ts"]);
+    expect(read("web/src/seal.ts")).toMatch(/sw\.addEventListener\("click", \(\) => \{\s*const on = !countsOn\(\);\s*const kept = setCounts\(on\);/);
+    // sessionStorage: request-recorder.ts only, under LOG_KEY, and only the record's own keys.
+    const session = files.filter((f) => /\bsessionStorage\b/.test(read(`web/src/${f}`)));
+    expect(session).toEqual(["request-recorder.ts"]);
+    const recorder = read("web/src/request-recorder.ts");
+    expect([...recorder.matchAll(/\.setItem\(([^,]+),\s*([^)]+\))/g)].map((m) => [m[1], m[2]])).toEqual([["LOG_KEY", "serializeLog(next)"]]);
+    expect(RECORD_KEYS).toEqual(["t", "path", "own", "dir", "bytes", "served", "by", "event", "failed"]);
+    const rec = { t: 1, path: "/e", own: true, dir: "sent" as const, bytes: 27, event: "page_view", text: "a line of the book", audio: [1, 2] };
+    expect(Object.keys(JSON.parse(serializeLog({ records: [rec], dropped: 0 })).records[0])).toEqual(["t", "path", "own", "dir", "bytes", "event"]);
+    // The request log is never sent: nothing that reads it posts anything.
+    for (const f of files.filter((x) => /readLog\(|LOG_KEY/.test(read(`web/src/${x}`)))) {
+      expect(read(`web/src/${f}`), f).not.toMatch(/\bfetch\(|sendEvent\(\s*[a-z]/);
+    }
+  });
+
+  it("the counts switch: off means no count at all, feedback still goes; each count is named for what it counts", () => {
+    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no work fully made on this device. A feedback message you choose to send still goes, because you sent it.");
+    expect(text).not.toMatch(/finished listen/);
+    const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    expect(seal).toContain("Totals per day of page views, works tuned in, and works fully made on this device, and nothing more.");
+    // Paired with the code: the three counts the page sends, and chapter_rendered only once every line is made.
+    const sent = new Set<string>();
+    for (const f of (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((x) => x.endsWith(".ts"))) {
+      for (const m of read(`web/src/${f}`).matchAll(/sendEvent\("([a-z_]+)"\)/g)) sent.add(m[1]!);
+    }
+    expect([...sent].sort()).toEqual(["chapter_rendered", "page_view", "work_opened"]);
+    const main0 = read("web/src/main.ts");
+    const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("ended();\n      } else {"));
+    expect(done).toContain("reportCoreSuccess();");
+    expect([...main0.matchAll(/reportCoreSuccess\(\);/g)]).toHaveLength(1);
+    // Paired with tests/seal.test.ts, which runs sendEvent with the switch off; the feedback form does not consult it.
+    const main = read("web/src/main.ts");
+    const feedback = main.slice(main.indexOf("function setupFeedback"));
+    expect(feedback).toContain('fetch("/feedback"');
+    expect(feedback).not.toMatch(/countsOn/);
+  });
+
+  it("the Seal sends no count; a setting the browser will not keep changes nothing, and the Seal disables the switch and says so", () => {
+    expect(text).toContain("The Seal itself sends no count, not even a page view.");
+    expect(read("web/src/seal.ts")).not.toMatch(/sendEvent|reportCoreSuccess/);
+    expect(text).toContain("If your browser will not let Dial keep the setting, the Seal disables the switch and says so; counts stay as they were.");
+    // A refused write changes nothing (counts stay on), and the Seal disables the switch with the reason.
+    expect(read("web/src/telemetry.ts")).toMatch(/store\.setItem\(COUNTS_KEY, on \? "on" : "off"\);\s*return true;\s*\} catch \{\s*return false;/);
+    expect(read("web/src/telemetry.ts")).not.toMatch(/pageOnly/);
+    expect(read("web/src/seal.ts")).toMatch(/const refuse = \(\) => \{\s*sw\.disabled = true;\s*note\.textContent = STORAGE_REFUSED;/);
+  });
+
+  it("the speed test keeps no results and sends nothing; it keeps the voice as the radio does", () => {
+    expect(text).toContain("The speed test on the Seal keeps no results and sends nothing: its results stay on the screen, and are gone when you leave the page. If the voice is not on this device yet, the test downloads it and keeps it, as the radio does.");
+    const worker = read("web/src/narrate.worker.ts");
+    const bench = worker.slice(worker.indexOf("async function bench("), worker.indexOf("ctx.onmessage"));
+    expect(bench).toMatch(/await loadVoice\(/);
+    for (const [f, src] of [["bench.ts", read("web/src/bench.ts")], ["narrate.worker.ts bench()", bench]]) expect(src, f).not.toMatch(/sendEvent|fetch\(|Storage\b|caches\.open|indexedDB/);
   });
 
   it("the narration is made on the device: the render worker only receives text and posts audio back, and the voice sits in cache storage", () => {
@@ -67,7 +157,10 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the offline helper never stores the daily counts or feedback", async () => {
-    expect(text).toContain("It never stores the daily counts or feedback, and it sends nothing of its own.");
+    expect(text).toContain("It never stores the daily counts or feedback, and it sends nothing of its own. It tells Dial's open pages which requests it made, on this device only, so the Seal can list them.");
+    // Its only messages go to this origin's own window clients.
+    const sw = read("web/src/sw.ts");
+    expect(sw).toMatch(/matchAll\(\{ type: "window", includeUncontrolled: true \}\)/);
     const { route } = await import("../web/src/offline/routes");
     const origin = "https://dial.voidvision.org";
     for (const p of ["/e", "/feedback"]) for (const m of ["GET", "POST"]) expect(route(new URL(p, origin), m, origin)).toBe("ignore");

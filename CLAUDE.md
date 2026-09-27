@@ -31,8 +31,10 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
 - **Data:** D1 only, schema in `migrations/0001_events.sql`. No R2, no KV
   writes, unless a charter amendment adds a surface that needs them.
 - **Telemetry is aggregate counts only.** `/e` bumps a same-day, same-name
-  counter in `event_counts`; there is no per-visit row, no anonymous id, and
-  no cookie or local storage. No third-party analytics script (including
+  counter in `event_counts`; there is no per-visit row, no anonymous id and
+  no cookie. Every count goes through `web/src/telemetry.ts` sendEvent,
+  which sends nothing once the listener turns counts off on the Seal; that
+  switch is the only thing in local storage. No third-party analytics script (including
   Cloudflare Web Analytics) is added by default; adding one needs a charter
   amendment and a V3 check.
 - **Success event.** `contract.yaml`'s success_event is the product's core

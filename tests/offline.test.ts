@@ -148,7 +148,7 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(list!.split(",")).toContain("/");
     // privacy.html says the shell is about 3 MB.
     const bytes = list!.split(",").reduce((sum, p) => {
-      const f = path.join(root, "dist", p === "/" ? "index.html" : p === "/privacy" ? "privacy.html" : p.slice(1));
+      const f = path.join(root, "dist", p === "/" ? "index.html" : /^\/(privacy|seal)$/.test(p) ? `${p.slice(1)}.html` : p.slice(1));
       return sum + readFileSync(f).byteLength;
     }, 0);
     expect(Math.round(bytes / 1_000_000)).toBe(3);

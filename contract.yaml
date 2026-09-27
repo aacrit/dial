@@ -28,6 +28,17 @@ checks:
     path: /privacy
     expect: 200
 
+  # T6: the Seal, the privacy proof (request log, counts switch, speed).
+  - name: seal page status 200
+    type: status
+    path: /seal
+    expect: 200
+
+  - name: seal page shows the request log
+    type: contains
+    path: /seal
+    text: "Every request this tab made"
+
   - name: healthz responds
     type: status
     path: /healthz
