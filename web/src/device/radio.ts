@@ -8,8 +8,9 @@
 //   the real dt clamped at 0.1 s, skipped while document.hidden, and one
 //   static final frame under reduced motion. Changed: it draws SVG
 //   attributes from token colours (no canvas rgba literals) and sleeps when
-//   every spring is at rest, instead of running forever. The wave itself,
-//   its envelope and its live analyser come with T3.
+//   every spring is at rest, instead of running forever. The living wave,
+//   its envelope and its live analyser are in wave.ts (a canvas loop of
+//   their own), which reads alignment() from this handle each frame.
 // - The tuning eye's alignment is tweaked from TanpuraViz.tsx (see
 //   needle.ts), and so is its props-as-refs pattern: callers change state
 //   through the returned handle, and the loop reads it without restarting.
@@ -32,6 +33,8 @@ export interface RadioOptions {
   onTune(index: number, cause: TuneCause): void;
   /** Volume, 0 to 1. */
   onVolume(value: number): void;
+  /** The station the needle rests on at mount (a /play/<work> address opens tuned to its work). */
+  start?: number;
 }
 
 export interface Radio {
@@ -41,6 +44,10 @@ export interface Radio {
   setPower(value: number): void;
   /** The valve's glow, 0 to 1: the share of the voice that has arrived. */
   setValve(value: number): void;
+  /** 1 when the voice is ready (or nothing is warming): the eye closes on station only then. */
+  setReady(value: number): void;
+  /** How close the needle is to a station right now, 0 to 1 (the living wave reads it each frame). */
+  alignment(): number;
 }
 
 /** Captures the pointer for a drag; false when the browser refuses (the pointer is already gone). */
@@ -85,6 +92,8 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
   const eye = new Spring(P.vu, eyeWedge(1));
   const power = new Spring(P.warm, 0);
   const valve = new Spring(P.warm, 0);
+  // The eye closes on a station once the voice is ready: while it warms, the eye stays part open.
+  let ready = 1;
 
   // ---- scale and keys ------------------------------------------------------
   const drawScale = () => {
@@ -125,7 +134,8 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
       return;
     }
     needle.step(dt, motion.reduce);
-    eye.to(eyeWedge(alignment(angles, needle.x))).step(dt, motion.reduce);
+    // Reduced motion draws the eye closed (design/spec.md 1.4): it neither opens off station nor while the voice warms.
+    eye.to(eyeWedge(motion.reduce ? 1 : alignment(angles, needle.x) * ready)).step(dt, motion.reduce);
     power.step(dt, motion.reduce);
     valve.step(dt, motion.reduce);
     for (const k of knobs) k.spring.step(dt, motion.reduce);
@@ -275,7 +285,7 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
 
   drawScale();
   addEventListener("resize", drawScale);
-  tune(0, "load", P.drop);
+  tune(Math.max(0, Math.min(works.length - 1, options.start ?? 0)), "load", P.drop);
   needle.snap();
   eye.to(eyeWedge(1)).snap();
   paint(0);
@@ -291,5 +301,10 @@ export function mountRadio(root: HTMLElement, works: readonly Work[], options: R
       valve.to(Math.max(0, Math.min(1, v)));
       wake();
     },
+    setReady: (v) => {
+      ready = Math.max(0, Math.min(1, v));
+      wake();
+    },
+    alignment: () => alignment(angles, needle.x),
   };
 }

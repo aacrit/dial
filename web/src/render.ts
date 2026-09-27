@@ -7,12 +7,9 @@ import { grouped, isPublicDomainWorldwide, type Work } from "./catalogue";
 import { DIAL, MAX_ANGLE, polar } from "./device/needle";
 import { VOICE_NAMES, inOneAccent, speakerName, voiceCount, type Cast, type CastSheet } from "./engine/cast";
 
-const ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+import { esc } from "./escape";
 
-/** Escapes text for an HTML text node or a quoted attribute value. */
-export function esc(value: unknown): string {
-  return String(value).replace(/[&<>"']/g, (ch) => ENTITIES[ch]!);
-}
+export { esc };
 
 const num = (value: unknown) => `<span data-numeral>${esc(value)}</span>`;
 
@@ -96,6 +93,11 @@ export function bookplateHtml(work: Work, cast?: Cast): string {
   return rows.map(([dt, dd]) => `<dt>${esc(dt)}</dt><dd>${dd}</dd>`).join("");
 }
 
+/** The Bookplate sheet's heading line: "514 · No. 002 · Crito" (the Bookplate may carry the catalogue number). */
+export function bookplateHeading(work: Pick<Work, "station" | "title">): string {
+  return `514 · No. ${work.station} · ${work.title}`;
+}
+
 /** The dial scale: the arc, minor and major ticks every `step` degrees, and one long tick per station, labelled with the work's name. */
 export function scaleSvg(works: readonly Work[], step: number, tuned: number): string {
   const f = (n: number) => n.toFixed(2);
@@ -152,4 +154,57 @@ export function readAlongHtml(lines: readonly ReadLine[], live: number): string 
     return `<p class="ra ${cls}">${l ? who + esc(l.text) : ""}</p>`;
   };
   return line(live - 1, "prev") + line(live, "live") + line(live + 1, "next");
+}
+
+// ---- The Broadcast: the full script, the progress strip, the shortcuts -----
+
+/**
+ * The full script: every cue's text exactly as printed (Law 2). Between two
+ * lines goes exactly what the source has between them: nothing, a space
+ * where it has whitespace, or a new paragraph where it has a blank line.
+ * Each line is a control that plays from it once it is made; the live line
+ * carries the amber treatment. One line holds the tab stop (the live one,
+ * else the first): the arrow keys move it (a roving tabindex, main.ts).
+ */
+export function scriptHtml(source: string, cues: readonly { start: number; end: number; text: string }[], live: number, made: number): string {
+  const stop = live >= 0 && live < cues.length ? live : 0;
+  let out = "<p>";
+  cues.forEach((c, i) => {
+    const cls = `sl${i === live ? " live" : ""}${i >= made ? " unmade" : ""}`;
+    const state = i >= made ? ` aria-disabled="true"` : "";
+    const current = i === live ? ` aria-current="true"` : "";
+    out += `<span class="${cls}" role="button" tabindex="${i === stop ? 0 : -1}" data-i="${i}"${state}${current}>${esc(c.text)}</span>`;
+    const next = cues[i + 1];
+    if (!next) return;
+    const gap = source.slice(c.end, next.start);
+    // A paragraph break is a block and a text node too: "\n\n" between the
+    // paragraphs keeps the words apart in textContent (copy, screen readers).
+    if (/\n[^\S\n]*\n/.test(gap)) out += "</p>\n\n<p>";
+    else if (/\s/.test(gap)) out += " ";
+  });
+  return `${out}</p>`;
+}
+
+/** The shortcuts sheet's list: each key as a keycap, then what it does. */
+export function shortcutsHtml(rows: readonly (readonly [readonly string[], string])[]): string {
+  return rows.map(([keys, what]) => `<dt>${keys.map((k) => `<kbd class="keycap">${esc(k)}</kbd>`).join("")}</dt><dd>${esc(what)}</dd>`).join("");
+}
+
+/**
+ * The progress strip: one segment per line along the running time, in the
+ * work's realm colour: heard solid, made but ahead faded, not yet made as a
+ * ghost. Lengths are real for made lines and estimated for the rest.
+ */
+export function ribbonSvg(lengths: readonly number[], total: number, made: number, heard: number): string {
+  const W = 1000;
+  let at = 0;
+  let out = "";
+  lengths.forEach((d, i) => {
+    const x = total > 0 ? (at / total) * W : 0;
+    const w = total > 0 ? Math.max(0.8, (d / total) * W - 0.6) : 0;
+    const cls = i >= made ? "seg unmade" : i > heard ? "seg ahead" : "seg";
+    out += `<rect class="${cls}" x="${x.toFixed(1)}" y="9" width="${w.toFixed(1)}" height="12" rx="1"/>`;
+    at += d;
+  });
+  return out;
 }

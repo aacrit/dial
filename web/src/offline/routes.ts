@@ -108,7 +108,8 @@ export function route(url: URL, method: string, origin: string, mode?: string): 
   if (/^\/works\/[a-z0-9-]+\.txt$/.test(p) || p === "/voice/manifest.json" || /^\/ort\/[^/]+\.mjs$/.test(p)) return "saved";
   // The model's parts, the voices and the runtime's .wasm are kept by the page itself (voice.ts, offline/store.ts).
   if (p.startsWith("/voice/") || p.startsWith("/ort/") || p.startsWith("/works/")) return "ignore";
-  if (mode === "navigate" || p === "/" || p.endsWith(".html") || p === "/privacy") return "page";
+  // A work's Broadcast, /play/<slug>, is a page like the home page (T3).
+  if (mode === "navigate" || p === "/" || p.endsWith(".html") || p === "/privacy" || p.startsWith("/play/")) return "page";
   return "shell";
 }
 

@@ -148,7 +148,8 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(list!.split(",")).toContain("/");
     // privacy.html says the shell is about 3 MB.
     const bytes = list!.split(",").reduce((sum, p) => {
-      const f = path.join(root, "dist", p === "/" ? "index.html" : /^\/(privacy|seal)$/.test(p) ? `${p.slice(1)}.html` : p.slice(1));
+      // Pages are kept by their address: "/" is index.html; "/privacy", "/seal" and "/play/crito" are their .html files.
+      const f = path.join(root, "dist", p === "/" ? "index.html" : /^\/(privacy|seal)$/.test(p) || p.startsWith("/play/") ? `${p.slice(1)}.html` : p.slice(1));
       return sum + readFileSync(f).byteLength;
     }, 0);
     expect(Math.round(bytes / 1_000_000)).toBe(3);
@@ -385,7 +386,7 @@ describe("installing Dial", () => {
     expect(ios).toContain("Works you save in the Home Screen app stay with it. Works saved in Safari need saving again there.");
   });
 
-  it("no card claims lock-screen controls (playback is Web Audio); Media Session is metadata and play/pause only", () => {
+  it("no card claims lock-screen controls (playback is Web Audio); Media Session is metadata, play/pause and seeking (T3)", () => {
     expect(read("web/index.html")).not.toMatch(/lock-screen/i);
     const main = read("web/src/main.ts");
     expect(main).toContain('if (session === own && own.live && audio.state === "suspended") pause.click();');

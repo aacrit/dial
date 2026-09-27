@@ -114,6 +114,43 @@ checks:
     path: /works/meditations.txt
     text: "This in Carnuntum."
 
+  # T3: each work's Broadcast is a real page at /play/<slug>, so a reload
+  # or a shared link opens it (dist/play/<slug>.html, web/vite.config.ts).
+  - name: the Cave's Broadcast is served
+    type: status
+    path: /play/cave
+    expect: 200
+
+  - name: the Cave's Broadcast names the work
+    type: contains
+    path: /play/cave
+    text: "<title>The Allegory of the Cave · Dial</title>"
+
+  - name: Crito's Broadcast is served
+    type: status
+    path: /play/crito
+    expect: 200
+
+  - name: Crito's Broadcast names the work
+    type: contains
+    path: /play/crito
+    text: "<title>Crito · Dial</title>"
+
+  - name: Crito's Broadcast carries a build marker
+    type: meta
+    path: /play/crito
+    meta_name: build
+
+  - name: the Meditations' Broadcast is served
+    type: status
+    path: /play/meditations
+    expect: 200
+
+  - name: the Meditations' Broadcast names the work
+    type: contains
+    path: /play/meditations
+    text: "<title>Meditations, Book II · Dial</title>"
+
   - name: the voice manifest is served
     type: status
     path: /voice/manifest.json
