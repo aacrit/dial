@@ -487,6 +487,8 @@ describe("the page and the worker keep to the plan (source checks)", () => {
     expect(main).toMatch(/const worker = rec \? null : new Worker\(/);
     expect(read("web/src/speed/pacer.ts")).toMatch(/done\(\): void \{[\s\S]*?this\.h\.gauge\.hide\(\);/);
     expect(read("web/src/speed/gauge.ts")).toMatch(/if \(motion\.reduce \|\| slot\.hidden\) \{\s*spring\.snap\(\);/);
+    // While the gauge shows (making here), the make-it-here link gives its room to the panel (CI's 375x812 overflow, T7).
+    expect(read("web/src/style.css")).toMatch(/\.device:has\(#speed-gauge:not\(\[hidden\]\)\) #make-here \{\s*display: none;\s*\}/);
     // A meter, like the Voice meter.
     const gauge = read("web/src/speed/gauge.ts");
     for (const a of ['setAttribute("role", "meter")', 'setAttribute("aria-valuemin", "0")', 'setAttribute("aria-valuemax", String(GAUGE_MAX))', 'setAttribute("aria-valuenow", gaugeValueNow(rtf))', 'setAttribute("aria-valuetext", gaugeName(rtf, backend))']) expect(gauge).toContain(a);

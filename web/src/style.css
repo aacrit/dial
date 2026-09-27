@@ -1113,6 +1113,12 @@ progress::-moz-progress-bar {
   fill: var(--color-glass-ink-muted);
 }
 
+/* While this device makes the work (the gauge shows), "Or make it on this device" has nothing to offer: it gives
+   its room to the panel (main.ts hides it too; this keeps it gone in every state that shows the gauge). */
+.device:has(#speed-gauge:not([hidden])) #make-here {
+  display: none;
+}
+
 /* The speed gauge on the radio's glass (T7): the dial, the measured speed, the engine. */
 .gauge-inst {
   gap: 1px;
