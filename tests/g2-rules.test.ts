@@ -224,14 +224,19 @@ describe("true copy: the first voice download", () => {
   }, 120_000);
 
   it("the manifest's totalBytes equals the sum of the staged files (manifest excluded)", () => {
-    const manifest = JSON.parse(readFileSync(manifestPath(), "utf8")) as { totalBytes: number; parts: string[] };
+    const manifest = JSON.parse(readFileSync(manifestPath(), "utf8")) as { totalBytes: number; parts: string[]; gpu: { parts: string[]; bytes: number } };
     let sum = 0;
-    const kinds = { part: 0, voice: 0, mjs: 0, wasm: 0 };
+    let gpuBytes = 0;
+    const kinds = { part: 0, gpuPart: 0, voice: 0, mjs: 0, wasm: 0 };
     for (const dir of [STAGED_DIRS.voice, STAGED_DIRS.ort]) {
       for (const file of walk(dir)) {
         if (path.resolve(file) === path.resolve(manifestPath())) continue;
         sum += statSync(file).size;
-        if (/\.part\d+$/.test(file)) kinds.part++;
+        // The graphics chip's fp32 model (T7) is staged in its own parts, never in the voice's first download.
+        if (/[\\/]model\.part\d+$/.test(file)) {
+          kinds.gpuPart++;
+          gpuBytes += statSync(file).size;
+        } else if (/\.part\d+$/.test(file)) kinds.part++;
         if (file.endsWith(".bin")) kinds.voice++;
         if (file.endsWith(".mjs")) kinds.mjs++;
         if (file.endsWith(".wasm")) kinds.wasm++;
@@ -239,6 +244,8 @@ describe("true copy: the first voice download", () => {
     }
     // Everything the tab downloads for the voice is in the sum.
     expect(kinds.part).toBe(manifest.parts.length);
+    expect(kinds.gpuPart).toBe(manifest.gpu.parts.length);
+    expect(gpuBytes).toBe(manifest.gpu.bytes);
     // Every staged voice (the two narrators and the catalogue's cast voices) is in the total.
     expect(kinds.voice).toBe(Object.keys(VOICES).length);
     expect(kinds.voice).toBe(4);

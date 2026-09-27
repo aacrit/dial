@@ -16,7 +16,7 @@ import { cast } from "../web/src/engine/cast";
 import { segment } from "../web/src/engine/segment";
 import { bookplateHtml, esc, metaHtml, presetKeysHtml, readAlongHtml, scaleSvg } from "../web/src/render";
 import { ACCOUNT_D1_WRITES_PER_DAY, ALLOWED_EVENTS, CLIENT_EVENTS, DEFAULT_EVENT_DAILY_CEILING, worstCaseDailyWrites } from "../worker/src/config";
-import { madeHere, progressLine, switchQuestion } from "../web/src/status-copy";
+import { CAST_FAILED, PLAYS_AT_ONCE, availLine, madeHere, progressLine, switchQuestion } from "../web/src/status-copy";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -69,7 +69,21 @@ describe("the catalogue: three stations, every printed claim true", () => {
     expect(madeHere(true)).toContain("then is kept on this device");
     expect(madeHere(false)).not.toMatch(/is kept/);
     expect(main).toMatch(/voiceKept = msg\.kept;\s*paintAvail\(\);/);
-    expect(main).toMatch(/avail\.textContent = text && !text\.cast \? CAST_FAILED : hasRecording \? PLAYS_AT_ONCE : madeHere\(voiceKept\);/);
+    expect(main).toMatch(/avail\.textContent = availLine\(\{ castFailed: !!text && !text\.cast, hasRecording, makingHere, voiceKept \}\);/);
+  });
+
+  it("the line under Tune in follows the path in use: a work being made on this device never reads Plays at once (T7)", () => {
+    const base = { castFailed: false, hasRecording: true, voiceKept: true };
+    expect(availLine({ ...base, makingHere: false })).toBe(PLAYS_AT_ONCE);
+    // Made here by choice ("make it here"), though Dial's recording would play at once.
+    expect(availLine({ ...base, makingHere: true })).toBe(madeHere(true));
+    expect(availLine({ ...base, makingHere: true, voiceKept: false })).toBe(madeHere(false));
+    expect(availLine({ ...base, hasRecording: false, makingHere: false })).toBe(madeHere(true));
+    expect(availLine({ ...base, castFailed: true, makingHere: true })).toBe(CAST_FAILED);
+    for (const voiceKept of [true, false]) expect(availLine({ ...base, voiceKept, makingHere: true })).not.toMatch(/at once|in advance/);
+    // The page computes makingHere from the broadcast on air, and repaints the line when it starts and when it ends.
+    expect(main).toMatch(/const makingHere = !!session\?\.live && session\.work === w && session\.kind === "made";/);
+    expect(main).toMatch(/const offAir = \(\) => \{[\s\S]*?paintAvail\(\);[\s\S]*?\n  \};/);
   });
 
   it("computes word counts from the text, never types them (they match the spec's checked counts)", () => {
@@ -89,7 +103,7 @@ describe("the catalogue: three stations, every printed claim true", () => {
     const voices = WORKS.map((w) => metaHtml(w, 10, cast(segment(text(w.slug)))));
     expect(voices.map((m) => /<span>(\w+ voices?)<\/span>/.exec(m)?.[1])).toEqual(["One voice", "Two voices", "One voice"]);
     expect(bookplateHtml(WORKS[0]!, cast(segment(text("cave"))))).toContain("One voice, Michael, reads every part.");
-    expect(read("web/src/narrate.worker.ts")).toMatch(/tts\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
+    expect(read("web/src/speed/render-loop.ts")).toMatch(/engine\.generate\(cues\[i\]!\.spoken, \{ voice: voice as never \}\)/);
   });
 });
 

@@ -12,7 +12,8 @@
 
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, pinnedModelCache, preparePinnedFiles, sha256Hex, stitchModel, unpinnedVoiceKeys, type FilePins } from "./voice-files";
+import { KOKORO_VOICES_CACHE, MODELS, gpuModelKey, heldGpuModel, hfVoiceKey, pinnedModelCache, preparePinnedFiles, sha256Hex, stitchModel, unpinnedVoiceKeys, type FilePins } from "./voice-files";
+import type { Backend } from "./speed/backend";
 import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
 export interface VoiceManifest extends VoicePins, SizedManifest, FilePins {
@@ -21,6 +22,23 @@ export interface VoiceManifest extends VoicePins, SizedManifest, FilePins {
   voices: Record<string, string>;
   /** Every staged byte; no single visit downloads all of it. */
   totalBytes: number;
+  /** The same model at full precision, for the graphics chip only (T7): downloaded only when the listener chooses to test it. */
+  gpu?: { model: string; sha256: string; parts: string[]; bytes: number };
+}
+
+/** Whether the graphics chip's model is on this device (speed/gpu-model.ts downloads it, at the listener's choice). */
+export async function gpuModelHeld(m: VoiceManifest): Promise<boolean> {
+  if (!m.gpu) return false;
+  const cache = await caches.open(voiceCacheName(m));
+  if (await heldGpuModel(cache, { repo: m.repo, gpu: m.gpu })) return true;
+  // A copy kept under an older pin (a bumped model) is never used again: free its space.
+  await cache.delete(gpuModelKey({ repo: m.repo, gpu: m.gpu }));
+  return false;
+}
+
+/** Lets the graphics chip's model go from this device (it lost to the processor, or spoke wrongly, so it would only take space). */
+export async function dropGpuModel(m: VoiceManifest): Promise<void> {
+  if (m.gpu) await (await caches.open(voiceCacheName(m))).delete(gpuModelKey({ repo: m.repo, gpu: m.gpu }));
 }
 
 /** total: the bytes this visit needs; need: nothing, only voices, or the model and runtime too. */
@@ -28,7 +46,8 @@ export type VoiceProgress = (loaded: number, total: number, need: Need, missingV
 
 /** kept: every file was stored on this device; false when a write failed (for example, no space). */
 export interface LoadedVoice {
-  tts: KokoroTTS;
+  /** The processor's session; null when the caller will run on the graphics chip and asked for none. */
+  tts: KokoroTTS | null;
   manifest: VoiceManifest;
   kept: boolean;
 }
@@ -60,7 +79,7 @@ async function dropIfUnpinned(cache: Cache, key: string, pin: string): Promise<A
 }
 
 /** Loads the model, the runtime and exactly the voices in `wanted` (the work's cast), each checked against its pin. */
-export async function loadVoice(wanted: readonly string[], onProgress: VoiceProgress): Promise<LoadedVoice> {
+export async function loadVoice(wanted: readonly string[], onProgress: VoiceProgress, openCpu = true): Promise<LoadedVoice> {
   const manifestRes = await fetch("/voice/manifest.json");
   if (!manifestRes.ok) throw new Error(`voice manifest: ${manifestRes.status}`);
   const manifest = (await manifestRes.json()) as VoiceManifest;
@@ -116,7 +135,9 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
   // Every /voice/models/ key is answered from pinned bytes and never falls
   // through to an unchecked fetch (voice-files.ts pinnedModelCache): the
   // tokenizer and config are checked on every read and on fetch, and put()
-  // keeps only bytes that match their pin (T11).
+  // keeps only bytes that match their pin (T11). The graphics chip's model
+  // is answered only from its kept, pin-checked copy, never fetched here:
+  // speed/gpu-model.ts downloads it, at the listener's choice (T7).
   const keepModelFile = (key: string, response: Response) => hold(cache, key, response);
   env.customCache = pinnedModelCache(cache, manifest, count, keepModelFile, () => stitchModel(manifest, count));
   // Before the runtime is built: a tokenizer or config that fails its pin,
@@ -139,6 +160,11 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
     }
     wasm.wasmBinary = binary;
   }
+  // The graphics chip, where one is tested (T7): ask for the faster of two
+  // where the browser lets a page choose (macOS does; Windows follows its own
+  // per-app graphics setting and ignores this).
+  const gpuFlags = env.backends.onnx.webgpu as { powerPreference?: string } | undefined;
+  if (gpuFlags) gpuFlags.powerPreference = "high-performance";
 
   for (const id of cast) {
     const pin = manifest.voices[id]!;
@@ -158,9 +184,20 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
     if (!(await voices.match(voiceKey(id)))) throw new Error("QuotaExceededError: there is no room to keep the voice on this device");
   }
 
-  const tts = await KokoroTTS.from_pretrained(manifest.repo, { dtype: "q8", device: "wasm" });
+  // The processor's session only when it is wanted: a device that runs on its graphics chip never holds both (T7).
+  const tts = openCpu ? await openVoice(manifest, "wasm") : null;
   // The runtime's .mjs is imported by the runtime itself while the model
   // loads; once the voice is ready, every byte in the total is in place.
   onProgress(total, total, need, missingVoices);
   return { tts, manifest, kept };
+}
+
+/**
+ * The same pinned model on one of this device's engines (speed/backend.ts):
+ * the processor, or the graphics chip through the same runtime. Called after
+ * loadVoice, so every file comes from this tab's checked cache; the graphics
+ * chip downloads nothing more.
+ */
+export function openVoice(manifest: Pick<VoiceManifest, "repo">, backend: Backend): Promise<KokoroTTS> {
+  return KokoroTTS.from_pretrained(manifest.repo, { dtype: backend === "webgpu" ? "fp32" : "q8", device: backend });
 }

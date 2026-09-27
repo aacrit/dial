@@ -199,6 +199,18 @@ export function stripText(position: number, total: number, exact: boolean, line:
   return renderDone ? of : `${of} Made up to ${clock(made)}.`;
 }
 
+/**
+ * The line under Tune in, for the path actually in use: a work being made on
+ * this device says so (its countdown and gauge are on the glass), even when
+ * Dial's recording of it would play at once; otherwise the recording's line
+ * where it plays, else the made-here line.
+ */
+export function availLine(o: { castFailed: boolean; hasRecording: boolean; makingHere: boolean; voiceKept: boolean }): string {
+  if (o.castFailed) return CAST_FAILED;
+  if (o.makingHere) return madeHere(o.voiceKept);
+  return o.hasRecording ? PLAYS_AT_ONCE : madeHere(o.voiceKept);
+}
+
 /** The script sheet's note: whose words, and what a chosen line does. */
 export function scriptNote(translator: string, playable: boolean): string {
   const whose = `${translator.split(" ").at(-1)}'s words, exactly as printed.`;

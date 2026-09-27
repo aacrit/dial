@@ -431,24 +431,26 @@ describe("speed of this device: processor only, results never sent", () => {
     }
   });
 
-  it("no send in the test's path: bench.ts and the render worker's bench() post nothing and count nothing", () => {
+  it("no send in the test's path: the render worker's speed test posts only timings and counts nothing", () => {
     const worker = read("web/src/narrate.worker.ts");
-    const benchFn = worker.slice(worker.indexOf("async function bench("), worker.indexOf("ctx.onmessage"));
-    for (const [name, src] of [["bench.ts", read("web/src/bench.ts")], ["bench()", benchFn]] as const) {
+    const loop = read("web/src/speed/render-loop.ts");
+    const testFn = loop.slice(loop.indexOf("async function timeSentence("), loop.indexOf("export class RenderLoop"));
+    for (const [name, src] of [["bench.ts", read("web/src/bench.ts")], ["speed test", testFn], ["narrate.worker.ts", worker]] as const) {
       expect(src, name).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|sendBeacon|\/e\b|noteSend/);
     }
-    // The worker only loads the voice and times one sentence; the voice's own requests are Law 1 downloads.
-    expect(benchFn).toMatch(/await loadVoice\(\[voice\]/);
-    // The worker never loads the page's rendering code or the voice table: the Seal names the voice, and the sentence has its own module.
+    // It times the one fixed sentence on each engine it compares, with the voice already loaded.
+    expect(testFn).toMatch(/await guard\(say\(tts, BENCH_SENTENCE, voice\), BENCH_SENTENCE\)/);
+    // The worker never loads the page's rendering code or the voice table (types only), and the sentence has its own module.
     expect(worker).not.toMatch(/^import \{[^}]*\} from "\.\/(engine\/cast|bench|render)";$/m);
-    expect(worker).toContain('import { BENCH_SENTENCE } from "./bench-sentence";');
+    expect(loop).not.toMatch(/^import \{[^}]*\} from "\.\.\/(engine\/cast|bench|render)";$/m);
+    expect(loop).toContain('import { BENCH_SENTENCE } from "../bench-sentence";');
   });
 
-  it("moved out with the Seal page: nothing on the radio starts the test until T7's gauge, which has a slot on the glass", () => {
+  it("T7's gauge fills the slot on the glass, from the render worker's speed and every line made; the Seal widget starts nothing", () => {
     const html = read("web/index.html");
-    expect(html).toContain('<div class="inst" id="speed-gauge" hidden></div>');
-    expect(html).toMatch(/<!-- The speed gauge and its "Test this device" key go in this slot \(T7/);
-    for (const f of ["main.ts", "seal-widget.ts", "panels-ui.ts"]) expect(read(`web/src/${f}`), f).not.toMatch(/type: "bench"|benchNeedLine|speedHtml/);
+    expect(html).toContain('<div class="inst gauge-inst" id="speed-gauge" hidden></div>');
+    expect(read("web/src/main.ts")).toContain('const gauge = mountGauge(gaugeSlot);');
+    for (const f of ["seal-widget.ts", "panels-ui.ts"]) expect(read(`web/src/${f}`), f).not.toMatch(/mountGauge|Pacer|benchNeedLine|speedHtml/);
   });
 });
 

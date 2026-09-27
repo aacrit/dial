@@ -24,18 +24,16 @@ import { SCRUB_REST, estimateLine, lineStep, nearestLineStart, runningTime, scru
 import { bookplateHeading, bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml, readLines, ribbonSvg, scriptHtml, shortcutsHtml } from "./render";
 import { pageTitle, parseRoute, playPath } from "./route";
 import {
-  CAST_FAILED,
   METER_MAKING,
   METER_WARMING,
-  PLAYS_AT_ONCE,
   RECORDING_UNPLAYABLE,
+  availLine,
   makeItHere,
   STATIONS_SERVER,
   clock,
   firstLineLine,
   lineNotMadeYet,
   loadingNote,
-  madeHere,
   notMadeYet,
   onAirLine,
   pausedLine,
@@ -63,6 +61,12 @@ import { noteSend, noteSendFailed, recordEntries, recordRequests } from "./reque
 import { sendEvent } from "./telemetry";
 import { centreWithin, inViewWithin, mountPanels } from "./panels-ui";
 import { mountSealWidget } from "./seal-widget";
+import { mountGauge } from "./speed/gauge";
+import { gpuButton } from "./speed/copy";
+import type { FromGpuDownload } from "./speed/gpu-download.worker";
+import { gpuOfferAllowed, type DeviceHints } from "./speed/gpu-model";
+import { Pacer, type AskOptions } from "./speed/pacer";
+import { keepSpeed, readSpeed } from "./speed/store";
 
 /**
  * Call this exactly where the product's core action completes (the export
@@ -118,6 +122,8 @@ interface Session {
   analyser: AnalyserNode;
   /** The render worker; none for a prepared recording. */
   worker: Worker | null;
+  /** Made on this device: the no-stall plan, the countdown and the speed gauge (speed/pacer.ts); none for a prepared recording. */
+  pacer: Pacer | null;
   /** The frame loop's pending frame; 0 while it sleeps (paused, nothing moves). */
   frame: number;
   /** Restarts the frame loop if it sleeps: on resume, and after a seek. */
@@ -194,6 +200,36 @@ function setupRadio(): void {
   const canvas = device.querySelector<HTMLCanvasElement>("canvas.dw-wave");
   if (!ribbonBox || !ribbon || !timeEl || !timeTotal || !scrubNote || !linePrev || !lineNext || !back10 || !fwd10) return;
   if (!scriptBox || !scriptNoteEl || !scriptPanel || !bpNote || !shortcutList || !canvas) return;
+  // The speed gauge on the glass, and the choice past a two-minute wait (T7).
+  const gaugeSlot = $("speed-gauge");
+  const speedAsk = document.getElementById("speed-ask");
+  const speedQ = $("speed-q");
+  const speedRec = $<HTMLButtonElement>("speed-rec");
+  const speedAnyway = $<HTMLButtonElement>("speed-anyway");
+  const speedGpu = $<HTMLButtonElement>("speed-gpu");
+  if (!gaugeSlot || !(speedAsk instanceof HTMLDialogElement) || !speedQ || !speedRec || !speedAnyway || !speedGpu) return;
+  const gauge = mountGauge(gaugeSlot);
+  // Closing it ("Wait here", Esc, the scrim) keeps the countdown; focus goes back to Pause.
+  const speedSheet = mountSheet(speedAsk, () => (pause.hidden ? null : pause));
+  const hideSpeedAsk = () => speedSheet.close();
+  /** The ask's words and keys (speed/pacer.ts AskOptions); Dial's recording is the default where there is one. */
+  const showSpeedAsk = (question: string, o: AskOptions) => {
+    speedQ.textContent = question;
+    const keys: [HTMLButtonElement, boolean][] = [
+      [speedRec, o.recording],
+      [speedGpu, o.gpuBytes > 0],
+      [speedAnyway, o.anyway],
+    ];
+    for (const [key, shown] of keys) key.hidden = !shown;
+    if (o.gpuBytes > 0) speedGpu.textContent = gpuButton(o.gpuBytes);
+    const first = keys.find(([, shown]) => shown)?.[0];
+    for (const [key] of keys) key.className = key === first ? "btn" : "btn quiet";
+    speedSheet.open(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    first?.focus();
+  };
+  speedRec.addEventListener("click", () => session?.pacer?.playRecording());
+  speedAnyway.addEventListener("click", () => session?.pacer?.startAnyway());
+  speedGpu.addEventListener("click", () => session?.pacer?.testGpu());
   const ribbonSegs = ribbon.querySelector("g.segs")!;
   const ribbonNeedle = ribbon.querySelector("line.needle")!;
   const ribbonHead = ribbon.querySelector("line.renderhead")!;
@@ -265,11 +301,13 @@ function setupRadio(): void {
     const w = WORKS[radio.tuned()]!;
     const text = texts.get(w.slug);
     const hasRecording = !!text?.cast && prepared.has(w.slug);
+    const makingHere = !!session?.live && session.work === w && session.kind === "made";
     // Offline, a work whose text is not on this device cannot play, and says so.
     if (!text && offline?.isOffline()) avail.textContent = WORK_NOT_ON_DEVICE;
-    else avail.textContent = text && !text.cast ? CAST_FAILED : hasRecording ? PLAYS_AT_ONCE : madeHere(voiceKept);
+    // The line describes the path in use: a work being made here never reads "Plays at once".
+    else avail.textContent = availLine({ castFailed: !!text && !text.cast, hasRecording, makingHere, voiceKept });
     // Making it here stays a small secondary link, and only where the recording plays at once.
-    const hideMake = !hasRecording || (!!session?.live && session.work === w && session.kind === "made");
+    const hideMake = !hasRecording || makingHere;
     if (hideMake) rescueFocus(makeHere);
     makeHere.hidden = hideMake;
     makeHere.textContent = makeItHere(voiceKept);
@@ -311,12 +349,19 @@ function setupRadio(): void {
       progress.textContent = "";
       return;
     }
+    // While a work made here waits to start (the countdown, a hold), the line counts down instead.
+    const waiting = s.pacer?.progressLine();
+    if (waiting) {
+      progress.textContent = waiting;
+      return;
+    }
     progress.textContent = progressLine({
       title: s.work.title,
       heard: s.line + 1,
       made: s.made,
       total: s.cues.length,
-      paused: s.audio.state === "suspended",
+      // A hold is not the listener's pause: the line stays on air (the status says what is being made).
+      paused: s.audio.state === "suspended" && !s.pacer?.waiting,
       renderDone: s.renderDone,
       prepared: s.kind === "prepared",
     });
@@ -414,7 +459,10 @@ function setupRadio(): void {
       void s.audio.close();
       s.wav = null;
       s.file = null;
+      s.pacer?.dispose();
     }
+    hideSpeedAsk();
+    paintAvail();
     air.analyser = null;
     air.playing = false;
     air.silent = false;
@@ -442,6 +490,8 @@ function setupRadio(): void {
   pause.addEventListener("click", () => {
     const s = session;
     if (!s?.live) return;
+    // While a work made here waits to start, Pause only decides whether it starts by itself (speed/pacer.ts).
+    if (s.pacer?.pausePressed()) return;
     const settle = () => {
       setLamp(); // repaints Tune in too: "Paused" once nothing is live
       setPlaybackState(s.audio.state === "running" ? "playing" : "paused");
@@ -674,6 +724,7 @@ function setupRadio(): void {
       gain,
       analyser,
       worker,
+      pacer: null,
       frame: 0,
       wake: () => undefined,
       feeder: 0,
@@ -694,6 +745,65 @@ function setupRadio(): void {
     session = own;
     measureStrip(own);
     const lines = readLines(cues);
+    // Made here: playback waits until it will never catch the making (speed/pacer.ts, T7).
+    if (worker) {
+      const mine = () => session === own && own.live;
+      own.pacer = new Pacer({
+        cues,
+        sched,
+        audio,
+        gauge,
+        hasRecording: () => prepared.has(work.slug),
+        playRecording: () => {
+          if (!mine() || !prepared.has(work.slug)) return;
+          own.tally();
+          const at = Math.max(0, own.line);
+          start(work, "prepared", { fromLine: at || undefined, heard: own.heard, spans: own.spans, counted: own.counted });
+        },
+        announce: (line) => mine() && announce(line),
+        setValve: (share, label) => mine() && setValve(share, label),
+        showAsk: (question, options) => mine() && showSpeedAsk(question, options),
+        hideAsk: hideSpeedAsk,
+        repaint: () => mine() && paintProgress(),
+        allow: (upTo) => own.worker?.postMessage({ type: "allow", upTo } satisfies ToWorker),
+        // The page downloads the graphics chip's model while the worker keeps making lines, then the worker tests it.
+        askGpu: () => {
+          const dl = new Worker(new URL("./speed/gpu-download.worker.ts", import.meta.url), { type: "module" });
+          const end = () => {
+            dl.onmessage = null;
+            dl.terminate();
+          };
+          dl.onmessage = (event: MessageEvent<FromGpuDownload>) => {
+            const m = event.data;
+            // Its requests go to the Seal's log like the render worker's.
+            if (m.type === "requests") return recordEntries(m.entries);
+            if (m.type === "progress") return mine() && own.pacer?.gpuLoading(m.loaded, m.total);
+            end();
+            if (!mine()) return;
+            // Kept: the pacer sends it to the render worker at a safe moment (sendGpu).
+            if (m.type === "done") own.pacer?.gpuReady();
+            // Not fetched, not matching its pin, or no room to keep it: the processor carries on.
+            else own.pacer?.gpuFailed(/NoRoom|Quota/i.test(m.message));
+          };
+          dl.onerror = () => {
+            end();
+            if (mine()) own.pacer?.gpuFailed();
+          };
+          dl.postMessage("start");
+          // The pacer calls this on teardown: the download stops with the broadcast.
+          return end;
+        },
+        sendGpu: () => own.worker?.postMessage({ type: "gpu" } satisfies ToWorker),
+        // Kept on this device only, so the speed test runs once (speed/store.ts); never sent.
+        keep: keepSpeed,
+        setPauseLabel: (paused) => {
+          pause.textContent = paused ? "Resume" : "Pause";
+        },
+        now: () => performance.now() / 1000,
+        // After "Making the next line…", the status says it is on air again.
+        resumed: () => mine() && announce(onAirLine(work.title, own.kept)),
+      });
+    }
     let warmingStated = false;
 
     /**
@@ -775,6 +885,7 @@ function setupRadio(): void {
     own.feeder = window.setInterval(() => {
       if (audio.state === "running") void sched.feed();
       own.tally();
+      own.pacer?.tick();
     }, 250);
 
     const follow = () => {
@@ -885,11 +996,34 @@ function setupRadio(): void {
       measureStrip(own);
     }
 
-    worker!.onmessage = (event: MessageEvent<FromWorker>) => {
+    /** A fresh worker carrying on after the graphics chip stopped: its warming and ready are not the broadcast's. */
+    let restarting = false;
+    const onWorker = (event: MessageEvent<FromWorker>) => {
       // The worker's own requests go to the Seal's log, whatever the broadcast is doing.
       if (event.data.type === "requests") return recordEntries(event.data.entries);
       if (session !== own || !own.live) return;
       const msg = event.data;
+      // (Before the first "ready", a stuck speed test at the start, the fresh worker's warming and ready are the broadcast's own.)
+      if (restarting && own.ready && (msg.type === "loading" || msg.type === "ready")) {
+        if (msg.type === "ready") restarting = false;
+        return;
+      }
+      if (msg.type === "lost") {
+        // The browser stopped the graphics chip: that worker's runtime cannot be trusted any more, so a fresh
+        // worker carries on on the processor from the line it was making (T7).
+        const old = own.worker!;
+        old.onmessage = null;
+        old.onerror = null;
+        old.terminate();
+        restarting = true;
+        const next = new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
+        own.worker = next;
+        next.onmessage = onWorker;
+        next.onerror = onWorkerError;
+        own.pacer?.restarted();
+        next.postMessage({ type: "render", cues, voices: cast.voices, from: msg.index, kept: msg.kept } satisfies ToWorker);
+        return;
+      }
       if (msg.type === "loading") {
         if (!warmingStated) {
           warmingStated = true;
@@ -915,6 +1049,12 @@ function setupRadio(): void {
         radio.setReady(1);
         announce(firstLineLine(work.title, own.kept));
         paintProgress();
+        own.pacer?.ready();
+      } else if (msg.type === "testing") {
+        own.pacer?.testing();
+      } else if (msg.type === "speed") {
+        // The graphics chip's model is offered only on a device that can hold it, never on a phone (speed/gpu-model.ts).
+        own.pacer?.speed(msg.choice, msg.entry, gpuOfferAllowed(navigator as DeviceHints, matchMedia("(pointer: coarse) and (max-width: 900px)").matches) ? msg.gpuOffer : 0);
       } else if (msg.type === "cue") {
         const cue = cues[msg.index]!;
         own.wav ??= new WavChunks(msg.sampleRate);
@@ -926,6 +1066,7 @@ function setupRadio(): void {
         own.wav.add(msg.audio, cue.pauseAfterMs);
         const speech = msg.audio.length / msg.sampleRate;
         sched.add(msg.index, speech, cue.pauseAfterMs / 1000);
+        own.pacer?.cue(speech, msg.ms / 1000);
         own.seconds += speech + cue.pauseAfterMs / 1000;
         own.made = msg.index + 1;
         meter.value = own.made;
@@ -935,9 +1076,9 @@ function setupRadio(): void {
         paintTransport();
         paintRibbon();
       } else if (msg.type === "done") {
-        worker!.onmessage = null;
-        worker!.onerror = null;
-        worker!.terminate();
+        own.worker!.onmessage = null;
+        own.worker!.onerror = null;
+        own.worker!.terminate();
         own.renderDone = true;
         // One object URL at a time: the previous file's is released first.
         if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -962,16 +1103,19 @@ function setupRadio(): void {
         measureStrip(own);
         // Every line is made: the broadcast ends once the last one has been heard.
         sched.renderFinished();
+        own.pacer?.done();
       } else {
         stopped(stopLine(msg.message));
       }
     };
     // A worker that fails to start or throws outside its own handler.
-    worker!.onerror = (event) => {
+    const onWorkerError = (event: ErrorEvent) => {
       event.preventDefault();
       stopped(stopLine(event.message || ""));
     };
-    worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length } satisfies ToWorker);
+    worker!.onmessage = onWorker;
+    worker!.onerror = onWorkerError;
+    worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length, kept: readSpeed() } satisfies ToWorker);
   };
 
   // ---- scrubbing: the strip, J/K/L, [ ], and a line chosen in the script ----

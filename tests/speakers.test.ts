@@ -266,11 +266,13 @@ describe("the cast's voices are staged and pinned", () => {
   });
 
   it("the worker speaks each cue in its cast voice, and only a pinned one", () => {
-    const worker = read("web/src/narrate.worker.ts");
-    expect(worker).toMatch(/tts\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
+    const worker = read("web/src/speed/render-loop.ts");
+    // On whichever engine the speed test chose (T7): the same cue, the same voice.
+    expect(worker).toMatch(/engine\.generate\(cues\[i\]!\.spoken, \{ voice: voice as never \}\)/);
+    expect(worker).not.toMatch(/generate\(cues\[i\]!\.spoken, \{ voice: voice as never, /);
     expect(worker).toMatch(/Object\.hasOwn\(manifest\.voices, voice\)/);
     expect(worker).not.toMatch(/manifest\.narrator/);
-    expect(read("web/src/main.ts")).toContain('worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length } satisfies ToWorker);');
+    expect(read("web/src/main.ts")).toContain('worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length, kept: readSpeed() } satisfies ToWorker);');
   });
 });
 
@@ -451,8 +453,9 @@ describe("T2b review: the size shown is what actually downloads", () => {
   });
 
   it("a first visit downloads the model, tokenizer and config, the runtime, and only that work's voices", () => {
-    const m = manifest();
-    const shared = m.totalBytes - Object.keys(VOICES).reduce((n, id) => n + voiceSize(m, id), 0);
+    const m = manifest() as ReturnType<typeof manifest> & { gpu: { bytes: number } };
+    // The graphics chip's model (T7) is never part of a first visit: it downloads only at the listener's choice.
+    const shared = m.totalBytes - m.gpu.bytes - Object.keys(VOICES).reduce((n, id) => n + voiceSize(m, id), 0);
     for (const w of WORKS) {
       const voices = [...new Set(cast(segment(text(w.slug)), w.cast).voices)];
       const got = neededBytes(m, voices, nothing);
@@ -463,7 +466,7 @@ describe("T2b review: the size shown is what actually downloads", () => {
   });
 
   it("the worker loads, and the loader fetches and keeps, only the voices the work's cast uses", () => {
-    expect(read("web/src/narrate.worker.ts")).toContain("await loadVoice([...new Set(voices)],");
+    expect(read("web/src/speed/render-loop.ts")).toContain("await d.loadVoice([...new Set(voices)],");
     const voice = read("web/src/voice.ts");
     expect(voice).toMatch(/for \(const id of cast\) \{\s*const pin = manifest\.voices\[id\]!;\s*if \(heldVoices\.has\(id\)\) continue;/);
     expect(voice).not.toMatch(/Object\.entries\(manifest\.voices\)/);

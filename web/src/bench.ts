@@ -1,10 +1,10 @@
 // "Speed of this device", as pure functions: the one sentence the test
-// times, the speed it measures and its words. The test left with the Seal
-// page (T8, design/spec.md 00): it becomes the radio's gauge in T7, which
-// has a slot on the glass (index.html #speed-gauge) and wires the 80%
-// planning margin (founder, 2026-09-26) into the radio. Nothing here or in
-// narrate.worker.ts's bench() sends anything, not even a count
-// (tests/seal.test.ts checks both).
+// times, the speed it measures and its words, and the gauge's drawing. The
+// radio's gauge (T7, speed/gauge.ts) and the no-stall plan (speed/plan.ts,
+// the 80% planning margin: founder, 2026-09-26) build on them; the speed
+// test itself is speed/render-loop.ts speedTest. Nothing here or there
+// sends anything, not even a count (tests/seal.test.ts and
+// tests/privacy-page.test.ts check both).
 
 import { aboutMegabytes, isStatableTotal } from "./download-size";
 import { esc } from "./render";

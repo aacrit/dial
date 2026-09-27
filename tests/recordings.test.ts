@@ -626,7 +626,7 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     // The reason leads what is said while the voice warms.
     expect(main).toContain("announce(rec ? preparedTuningLine(work.title) : `${lead}Warming the voice.`);");
     // The worker makes only the lines from there on; the partial file is never offered as the work.
-    expect(read("web/src/narrate.worker.ts")).toMatch(/for \(let i = from; i < cues\.length; i\+\+\)/);
+    expect(read("web/src/speed/render-loop.ts")).toMatch(/for \(let i = from; i < cues\.length; i\+\+\)/);
     expect(main).toContain("downloadUrl = own.file && !seeded.length ? URL.createObjectURL(own.file) : null;");
     // Resume at line N carries the same listen on.
     expect(main).toMatch(/resumeLine\.onclick = \(\) => start\(work, "prepared", \{ fromLine: resumeAt, heard, spans, counted \}\);/);

@@ -75,8 +75,8 @@
                   <svg class="valve" viewBox="0 0 64 64" aria-hidden="true"><circle class="v-glow" cx="32" cy="40" r="20" /><path class="v-env" d="M22 56 V26 a10 10 0 0 1 20 0 V56" /><rect class="v-base" x="18" y="56" width="28" height="5" rx="2" /><path class="v-fil" d="M27 50 V37 l5 -7 l5 7 V50" /></svg>
                   <span class="il" id="valve-label">Voice</span>
                 </div>
-                <!-- The speed gauge and its "Test this device" key go in this slot (T7, design/spec.md 00, the Speed row). Its engine is bench.ts and the render worker's bench. -->
-                <div class="inst" id="speed-gauge" hidden></div>
+                <!-- The speed gauge (T7, design/spec.md 00, the Speed row): speed/gauge.ts fills it while this device makes a work, from the render worker's speed test and every line made. -->
+                <div class="inst gauge-inst" id="speed-gauge" hidden></div>
                 <div class="meters" role="group" aria-label="Loudness">
                   <div class="mrow"><span>Voice</span><span class="mbar" id="m-voice-meter" role="meter" aria-label="Voice loudness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Silent"><b class="band" aria-hidden="true"></b><i id="m-voice"></i><b class="peak" id="m-peak" aria-hidden="true" hidden></b></span></div>
                   <div class="mrow"><span>Music</span><span class="mbar"><i class="rest"></i></span></div>
@@ -113,6 +113,7 @@
                 <button type="button" class="btn quiet" id="switch-no">Keep listening</button>
               </div>
             </div>
+
 
             <div class="dev-ribbon" id="ribbon-box" data-part hidden>
               <svg class="ribbon" id="ribbon" viewBox="0 0 1000 30" preserveAspectRatio="none" role="slider" tabindex="0" aria-label="Position in the work. Drag to move, or use J and L." aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
@@ -263,6 +264,22 @@
           <button type="submit" class="btn">Send</button>
           <p id="feedback-status" role="status" aria-live="polite"></p>
         </form>
+      </div>
+    </dialog>
+
+    <!-- Before a work made on this device starts (T7): past a two-minute wait, the choice; with a graphics chip to test, its offer and size. A sheet, so no panel grows to hold it. -->
+    <dialog class="sheet small" id="speed-ask" aria-labelledby="speed-h">
+      <div class="sheet-in">
+        <div class="sheet-top">
+          <h2 id="speed-h">Before it starts</h2>
+          <button type="button" class="btn quiet" data-close>Wait here</button>
+        </div>
+        <p id="speed-q"></p>
+        <div class="switch-actions">
+          <button type="button" class="btn" id="speed-rec">Play Dial's recording now</button>
+          <button type="button" class="btn quiet" id="speed-gpu" hidden>Test the graphics chip</button>
+          <button type="button" class="btn quiet" id="speed-anyway">Start anyway; it may pause</button>
+        </div>
       </div>
     </dialog>
 
