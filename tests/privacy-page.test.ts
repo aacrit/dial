@@ -149,8 +149,11 @@ describe("web/privacy.html, claim by claim", () => {
     expect(gpuModel).toMatch(/stitchModel\(\{ repo: m\.repo, parts: gpu\.parts, sizes: m\.sizes, sha256: gpu\.sha256 \}/);
     expect(read("web/src/main.ts")).toMatch(/speedGpu\.addEventListener\("click", \(\) => session\?\.pacer\?\.testGpu\(\)\);/);
     expect(read("web/src/speed/pacer.ts")).toMatch(/testGpu\(\): void \{\s*if \(this\.gpuAsked \|\| !\(this\.gpuBytes > 0\)\) return;\s*this\.gpuAsked = true;\s*this\.h\.hideAsk\(\);\s*this\.h\.askGpu\(\);/);
-    // Never fetched by the voice loader, and dropped when it loses.
-    expect(read("web/src/voice.ts")).toMatch(/key === gpuModelKey\(\{ repo: manifest\.repo, gpu: manifest\.gpu \}\)\) return undefined;/);
+    // Kept with the pin it was checked against, answered to the runtime only while that pin is the manifest's, never fetched by the loader; dropped when it loses.
+    expect(gpuModel).toMatch(/\[GPU_PIN_HEADER\]: gpu\.sha256/);
+    const files = read("web/src/voice-files.ts");
+    expect(files).toMatch(/if \(m\.gpu && key === gpuModelKey\(\{ repo: m\.repo, gpu: m\.gpu \}\)\) \{\s*return \(await heldGpuModel\(cache, \{ repo: m\.repo, gpu: m\.gpu \}\)\) \?\? failingResponse\(/);
+    expect(files).toMatch(/return hit && hit\.headers\.get\(GPU_PIN_HEADER\) === m\.gpu\.sha256 \? hit : undefined;/);
     expect(worker).toMatch(/if \(!tested\.gpuTts\) await dropGpuModel\(manifest\);/);
   });
 

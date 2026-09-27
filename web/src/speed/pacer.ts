@@ -328,12 +328,11 @@ export class Pacer {
     if (this.mode === "playing" || this.mode === "off") return;
     this.mode = "playing";
     this.text = null;
-    // The graphics chip's download, if asked for, carries on; its words stay until its test.
     this.h.hideAsk();
     this.h.setValve(1, "Voice ready");
-    this.h.repaint();
-    // The line under the status follows once the clock runs again.
-    if (!this.userPaused) void this.h.audio.resume().then(() => this.h.repaint());
+    // Held by the listener: the line says paused now. Else it follows once the clock runs again (never a flash of "Paused").
+    if (this.userPaused) this.h.repaint();
+    else void this.h.audio.resume().then(() => this.h.repaint());
   }
 
   /** Chapter-ahead: the making stays within the memory cap of the listener. */

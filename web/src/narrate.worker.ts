@@ -170,6 +170,8 @@ ctx.onmessage = async (event) => {
     };
     if (held && gpuRtf === undefined && choice.backend === "wasm") await test(false, from);
     else ctx.postMessage({ type: "speed", choice, entry: entryFor(choice, pins, gpu, gpuRtf), gpuOffer: gpuOffer(gpu, manifest.gpu?.bytes, held, entry) });
+    // Measured from its first line: say a short phrase first, so that line times speech, not the engine's first start.
+    if (!(choice.rtf > 0)) await engine.generate(WARM_UP, { voice: voiceAt(from) });
     ctx.postMessage({ type: "ready", kept });
 
     let tested = held;
@@ -177,6 +179,9 @@ ctx.onmessage = async (event) => {
       // Only a voice the manifest pins, and so the loader has checked, is ever used.
       const voice = voices[i] as KokoroVoiceId | undefined;
       if (!voice || !Object.hasOwn(manifest.voices, voice)) throw new Error(`voice: no pinned voice for line ${i + 1}`);
+      // Between two lines, let the page's messages in (the allowance, the graphics chip's model): making a
+      // line awaits only promises, so without a turn of the event loop they would wait until the work is made.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
       // Far enough ahead of the listener: wait until the page allows more.
       while (i > allowed) await new Promise<void>((resolve) => (wake = resolve));
       // The graphics chip's model arrived at the listener's choice: test it between two lines.

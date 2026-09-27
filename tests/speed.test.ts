@@ -13,6 +13,7 @@ import { GAUGE_MAX, engineLabel, engineWords, gaugeName, gaugeReadout, needleAng
 import { Pacer, type AskOptions, type PacerHooks } from "../web/src/speed/pacer";
 import { AHEAD_CAP_S, CHOICE_OVER_S, MIN_LEAD_S, PLANNING_MARGIN, aheadLimit, branchFor, leadWait, nextRate, paceScale, planRate, refillLines, type PlanLine } from "../web/src/speed/plan";
 import { SPEED_KEY, keepSpeed, readSpeed } from "../web/src/speed/store";
+import { GPU_PIN_HEADER, gpuModelKey, heldGpuModel, pinnedModelCache } from "../web/src/voice-files";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -143,6 +144,29 @@ describe("the engine and its cache on this device (speed/backend.ts, speed/store
     expect(measuredEntry(entryFor(choice, pins, true), "wasm", 1.07)?.rtf).toBe(1.07);
     expect(measuredEntry(entryFor(choice, pins, true), "webgpu", 1.07)).toBeNull();
     expect(measuredEntry(entryFor(choice, pins, true), "wasm", 0)).toBeNull();
+  });
+
+  it("the graphics chip's model is answered to the runtime only from its kept copy under the manifest's pin (T11's rule)", async () => {
+    const m = { repo: "r", model: "onnx/model_quantized.onnx", gpu: { model: "onnx/model.onnx", sha256: "a".repeat(64) } };
+    const store = new Map<string, Response>();
+    const cache = { match: async (k: RequestInfo | URL) => store.get(String(k))?.clone(), delete: async () => true };
+    let stitched = 0;
+    const pc = pinnedModelCache(cache, m, () => undefined, async () => undefined, async () => {
+      stitched++;
+      return new Response("q8");
+    });
+    const key = gpuModelKey(m);
+    expect(key).toBe("/voice/models/r/onnx/model.onnx");
+    // Not on this device: a body that cannot be read, never a fetch, never the q8 stitch.
+    await expect((await pc.match(key))!.arrayBuffer()).rejects.toThrow(/not on this device/);
+    // Kept under another pin (an older model): refused the same way.
+    store.set(key, new Response("old", { headers: { [GPU_PIN_HEADER]: "b".repeat(64) } }));
+    await expect((await pc.match(key))!.arrayBuffer()).rejects.toThrow(/not on this device/);
+    expect(await heldGpuModel(cache, m)).toBeUndefined();
+    // Kept under this pin: answered.
+    store.set(key, new Response("fp32", { headers: { [GPU_PIN_HEADER]: m.gpu.sha256 } }));
+    expect(await (await pc.match(key))!.text()).toBe("fp32");
+    expect(stitched).toBe(0);
   });
 
   it("offers the graphics chip's model only where WebGPU exists, it is not here yet, and this chip was never tested", () => {

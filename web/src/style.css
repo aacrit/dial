@@ -2313,8 +2313,10 @@ body.faceplate-page {
     height: 28px;
   }
 
-  /* While the gauge shows, the Music meter's note gives way (it says only that there is no music). */
-  .instruments:has(.gauge-inst:not([hidden])) #m-music {
+  /* While the gauge shows, the Music meter's note gives way (it says only that there is no music), and so does the
+     tuning eye (its job is tuning; the station is already on air), so the meters keep their width. */
+  .instruments:has(.gauge-inst:not([hidden])) #m-music,
+  .instruments:has(.gauge-inst:not([hidden])) .inst:has(.mini-eye) {
     display: none;
   }
 
