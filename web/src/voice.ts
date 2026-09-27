@@ -12,12 +12,12 @@
 
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "./voice-files";
+import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel, unpinnedVoiceKeys } from "./voice-files";
 import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
 export interface VoiceManifest extends VoicePins, SizedManifest {
   sha256: string;
-  /** Every voice file in the casting palette, by id, with its SHA-256 pin. */
+  /** Every staged voice file (the narrators and the catalogue's cast voices), by id, with its SHA-256 pin. */
   voices: Record<string, string>;
   /** Every staged byte; no single visit downloads all of it. */
   totalBytes: number;
@@ -81,6 +81,10 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
   const runtimeKey = runtimeCacheKey(manifest);
   const cast = [...new Set(wanted)];
   for (const id of cast) if (!Object.hasOwn(manifest.voices, id)) throw new Error(`voice: ${id} is not pinned`);
+  // Only once this manifest is known to pin every wanted voice (so it is not an
+  // older one that would fail anyway): a voice it does not pin is never used
+  // again, so free its space.
+  for (const stale of unpinnedVoiceKeys((await voices.keys()).map((r) => r.url), manifest.repo, manifest.voices)) await voices.delete(stale);
   const heldVoices = new Set<string>();
   for (const id of cast) {
     if (await dropIfUnpinned(voices, voiceKey(id), manifest.voices[id]!)) heldVoices.add(id);

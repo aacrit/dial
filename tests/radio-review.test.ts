@@ -192,7 +192,7 @@ describe("the small things", () => {
   it("the Voice row names the cast only where the text labels its speakers", () => {
     const casts = WORKS.map((w) => cast(segment(text(w.slug)), w.cast));
     expect(casts.map((c) => c.parts.length)).toEqual([0, 2, 0]);
-    expect(bookplateHtml(WORKS[1]!, casts[1])).toContain("Socrates: Fable. Crito: Lewis.");
+    expect(bookplateHtml(WORKS[1]!, casts[1])).toContain("Socrates: Fenrir. Crito: Puck. Voices are cast in one accent, by the voice model's published grade and their measured contrast, never from the speakers' names.");
     for (const i of [0, 2]) expect(bookplateHtml(WORKS[i]!, casts[i])).not.toMatch(/Socrates:|Speaker names/);
   });
 

@@ -14,6 +14,21 @@ export function hfVoiceKey(repo: string, id: string): string {
   return `https://huggingface.co/${repo}/resolve/main/voices/${id}.bin`;
 }
 
+/**
+ * The cached voice keys (kokoro-voices) whose voice this build does not pin:
+ * a voice a past cast used and the current one no longer does. Only keys in
+ * the Hugging Face voice form are considered; anything else is left alone.
+ */
+export function unpinnedVoiceKeys(keys: readonly string[], repo: string, pins: Readonly<Record<string, string>>): string[] {
+  const prefix = hfVoiceKey(repo, "");
+  const stem = prefix.slice(0, -".bin".length);
+  return keys.filter((k) => {
+    if (!k.startsWith(stem) || !k.endsWith(".bin")) return false;
+    const id = k.slice(stem.length, -".bin".length);
+    return !Object.hasOwn(pins, id);
+  });
+}
+
 export async function sha256Hex(buf: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", buf);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");

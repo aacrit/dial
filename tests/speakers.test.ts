@@ -15,7 +15,7 @@ import { warmingLine } from "../web/src/download-size";
 import { CAST_FAILED } from "../web/src/status-copy";
 import { neededBytes, type SizedManifest } from "../web/src/voice-cache";
 import { WORKS } from "../web/src/catalogue";
-import { ALL_VOICES, NARRATORS, PALETTE, PALETTE_VOICES, VOICE_NAMES, cast, castVoices, narratorVoice, speakerName, tryCast, voiceCount } from "../web/src/engine/cast";
+import { CHARACTER_VOICES, NARRATORS, TABLE, VOICE_NAMES, cast, castVoices, narratorVoice, speakerName, tryCast, voiceCount } from "../web/src/engine/cast";
 import { rebuild, segment, speakerLabel } from "../web/src/engine/segment";
 import { bookplateHtml, esc, eyebrowHtml, metaHtml, presetKeysHtml, readAlongHtml, readLines, scaleSvg } from "../web/src/render";
 
@@ -110,74 +110,71 @@ describe("Crito: every turn has its speaker", () => {
 describe("casting without content", () => {
   const sheet = WORKS[1]!.cast;
 
-  it("two fixed narrators (male placeholder George, female Heart) and a character palette without them", () => {
-    expect(NARRATORS).toEqual({ m: "bm_george", f: "af_heart" });
-    expect(PALETTE).toEqual(["bm_fable", "bm_lewis"]);
-    for (const n of Object.values(NARRATORS)) expect(PALETTE as readonly string[]).not.toContain(n);
-    expect(ALL_VOICES).toEqual(["bm_george", "af_heart", "bm_fable", "bm_lewis"]);
-    expect(ALL_VOICES.map((v) => VOICE_NAMES[v])).toEqual(["George", "Heart", "Fable", "Lewis"]);
+  it("two fixed narrators (male Michael, female Heart, founder 2026-09-27) and character voices without them", () => {
+    expect(NARRATORS).toEqual({ m: "am_michael", f: "af_heart" });
+    const ids = CHARACTER_VOICES.map((v) => v.id);
+    for (const n of Object.values(NARRATORS)) expect(ids).not.toContain(n);
+    // bm_george, the old placeholder narrator, is an ordinary character voice now.
+    expect(ids).toContain("bm_george");
+    expect(ids.length).toBe(TABLE.length - 2);
+    expect(["am_michael", "af_heart", "am_fenrir", "bm_fable", "bm_george"].map((v) => VOICE_NAMES[v])).toEqual(["Michael", "Heart", "Fenrir", "Fable", "George"]);
   });
 
-  it("Crito: the sheet asks for a male narrator; Socrates is Fable, Crito is Lewis, neither a narrator voice", () => {
+  it("Crito: the sheet asks for a male narrator; Socrates is Fenrir, Crito is Puck, neither a narrator voice", () => {
     expect(sheet).toEqual({ narrator: "m", speakers: { SOCRATES: "m", CRITO: "m" } });
     const c = cast(cues, sheet);
-    expect(c.narrator).toBe("bm_george");
+    expect(c.narrator).toBe("am_michael");
     expect(c.parts.map((p) => [p.speaker, p.voice])).toEqual([
-      ["SOCRATES", "bm_fable"],
-      ["CRITO", "bm_lewis"],
+      ["SOCRATES", "am_fenrir"],
+      ["CRITO", "am_puck"],
     ]);
     expect(c.narrated).toBe(false);
     expect(c.voices.length).toBe(cues.length);
     // The first two turns are in different voices.
     const second = cues.findIndex((q) => q.speaker === "CRITO");
-    expect(c.voices[0]).toBe("bm_fable");
-    expect(c.voices[second]).toBe("bm_lewis");
-    cues.forEach((q, i) => expect(c.voices[i]).toBe(q.speaker === "SOCRATES" ? "bm_fable" : "bm_lewis"));
-    expect(c.voices).not.toContain("bm_george");
+    expect(c.voices[0]).toBe("am_fenrir");
+    expect(c.voices[second]).toBe("am_puck");
+    cues.forEach((q, i) => expect(c.voices[i]).toBe(q.speaker === "SOCRATES" ? "am_fenrir" : "am_puck"));
+    expect(c.voices).not.toContain("am_michael");
     expect(voiceCount(c)).toBe(2);
   });
 
-  it("is deterministic, by order of first appearance, and wraps after the palette", () => {
+  it("is deterministic: the same text gives the same cast", () => {
     expect(JSON.stringify(cast(segment(crito), sheet))).toBe(JSON.stringify(cast(cues, sheet)));
-    const four = segment("BEN: One.\n\nAMY: Two.\n\nCAL: Three.\n\nAMY: Four.");
-    expect(cast(four).parts.map((p) => [p.speaker, p.voice])).toEqual([
-      ["BEN", "bm_fable"],
-      ["AMY", "bm_lewis"],
-      ["CAL", "bm_fable"],
-    ]);
-    expect(cast(four).voices).toEqual(["bm_fable", "bm_lewis", "bm_fable", "bm_lewis"]);
+    const src = "BEN: One.\n\nAMY: Two.\n\nCAL: Three.\n\nAMY: Four.";
+    expect(cast(segment(src))).toEqual(cast(segment(src)));
+    expect(new Set(cast(segment(src)).parts.map((p) => p.voice)).size).toBe(3);
   });
 
   it("never reads a name: renaming the speakers leaves the cast's voices unchanged", () => {
     const renamed = crito.replace(/^SOCRATES:/gm, "XANTHIPPE:").replace(/^CRITO:/gm, "ZEUS:");
-    expect(cast(segment(renamed)).voices).toEqual(cast(cues, sheet).voices);
+    expect(cast(segment(renamed)).voices).toEqual(cast(cues).voices);
+    expect(cast(segment(renamed), { narrator: "m", speakers: { XANTHIPPE: "m", ZEUS: "m" } }).voices).toEqual(cast(cues, sheet).voices);
   });
 
   it("narration is the narrator's role, apart from the speakers: the male narrator by default, af_heart where the sheet says f", () => {
     const src = segment("The prison, before dawn.\n\nSOCRATES:  Why?\n\nCRITO:  No reason.");
     const byDefault = cast(src);
-    expect(byDefault.narrator).toBe("bm_george");
-    expect(byDefault.voices).toEqual(["bm_george", "bm_fable", "bm_lewis"]);
+    expect(byDefault.narrator).toBe("am_michael");
+    expect(byDefault.voices[0]).toBe("am_michael");
+    expect(byDefault.voices.slice(1)).not.toContain("am_michael");
     expect(byDefault.narrated).toBe(true);
-    const female = cast(src, { narrator: "f" });
+    const female = cast(src, { narrator: "f", speakers: { SOCRATES: "m", CRITO: "m" } });
     expect(female.narrator).toBe("af_heart");
-    expect(female.voices).toEqual(["af_heart", "bm_fable", "bm_lewis"]);
+    expect(female.voices[0]).toBe("af_heart");
+    expect(female.voices.slice(1)).not.toContain("af_heart");
     expect(narratorVoice({ narrator: "f" })).toBe("af_heart");
     // A work with no labels, declared f, is read entirely by af_heart.
     expect(new Set(cast(segment(text("cave")), { narrator: "f" }).voices)).toEqual(new Set(["af_heart"]));
   });
 
   it("narrator voices never go to characters, even when a palette offers them", () => {
-    const withNarrators = [
-      { id: "bm_george", sex: "m" as const },
-      { id: "af_heart", sex: "f" as const },
-      { id: "m1", sex: "m" as const },
-      { id: "f1", sex: "f" as const },
-    ];
+    const withNarrators = TABLE.filter((v) => ["am_michael", "af_heart", "am_puck", "af_kore"].includes(v.id));
     const names = Array.from({ length: 8 }, (_, i) => `S${String.fromCharCode(65 + i)}`);
-    for (const s of [undefined, { narrator: "m" as const }, { narrator: "f" as const }]) {
+    const all = (sex: "m" | "f") => Object.fromEntries(names.map((n, i) => [n, i % 2 === 0 ? sex : sex === "m" ? "f" : "m"])) as Record<string, "m" | "f">;
+    for (const s of [undefined, { narrator: "m" as const, speakers: all("m") }, { narrator: "f" as const, speakers: all("f") }]) {
       const got = castVoices(names.map((speaker) => ({ speaker, words: 1 })), s, withNarrators);
-      for (const v of got.values()) expect(Object.values(NARRATORS) as string[]).not.toContain(v);
+      for (const v of got.values()) expect(Object.values(NARRATORS) as string[]).not.toContain(v.voice);
     }
     for (const w of WORKS) {
       const c = cast(segment(text(w.slug)), w.cast);
@@ -199,7 +196,7 @@ describe("the works without labels are unchanged", () => {
       expect(got.every((c) => !("speaker" in c) && !("speakerRule" in c))).toBe(true);
       const c = cast(got);
       expect(c.parts).toEqual([]);
-      expect(new Set(c.voices)).toEqual(new Set(["bm_george"]));
+      expect(new Set(c.voices)).toEqual(new Set(["am_michael"]));
     });
   }
 });
@@ -209,14 +206,19 @@ describe("the page tells the truth about the cast", () => {
 
   it("Crito's Bookplate states the cast, and no longer promises voices to come", () => {
     const html = bookplateHtml(WORKS[1]!, casts.crito);
-    expect(html).toContain("Socrates: Fable. Crito: Lewis.");
+    expect(html).toContain("Socrates: Fenrir. Crito: Puck. Voices are cast in one accent, by the voice model's published grade and their measured contrast, never from the speakers' names.");
+    expect(html).not.toMatch(/measured quality/);
+    // "in one accent" only where it is true: a British cast under the American narrator does not say it.
+    const uk = bookplateHtml(WORKS[1]!, cast(cues, { ...WORKS[1]!.cast!, accent: "uk" }));
+    expect(uk).toContain("Voices are cast by the voice model's published grade and their measured contrast, never from the speakers' names.");
+    expect(uk).not.toContain("in one accent");
     expect(html).toContain("The speech is made by Kokoro-82M");
     expect(html).not.toMatch(/read aloud|until each part/);
   });
 
-  it("the works without labels say one voice, George", () => {
+  it("the works without labels say one voice, Michael", () => {
     for (const w of [WORKS[0]!, WORKS[2]!]) {
-      expect(bookplateHtml(w, casts[w.slug])).toContain("One voice, George, reads every part. The speech is made by Kokoro-82M");
+      expect(bookplateHtml(w, casts[w.slug])).toContain("One voice, Michael, reads every part. The speech is made by Kokoro-82M");
     }
   });
 
@@ -254,10 +256,13 @@ describe("the page tells the truth about the cast", () => {
 });
 
 describe("the cast's voices are staged and pinned", () => {
-  it("fetch-voice pins exactly the cast's voices (both narrators and the palette), George's pin unchanged", () => {
-    expect(Object.keys(VOICES)).toEqual([...ALL_VOICES]);
+  it("fetch-voice pins exactly the narrators and the catalogue's cast voices, each pin the measured file's", () => {
+    const used = WORKS.flatMap((w) => cast(segment(text(w.slug)), w.cast).voices);
+    expect(Object.keys(VOICES)).toEqual([...new Set([NARRATORS.m, NARRATORS.f, ...used])]);
+    const measured = JSON.parse(read("design/voices.json")) as { voices: { id: string; file_sha256: string }[] };
+    for (const [id, pin] of Object.entries(VOICES)) expect(pin, id).toBe(measured.voices.find((v) => v.id === id)!.file_sha256);
     expect(VOICES.af_heart).toBe("d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b");
-    expect(VOICES.bm_george).toBe("c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc");
+    expect(VOICES.am_michael).toBe("1d1f21dd8da39c30705cd4c75d039d265e9bc4a2a93ed09bc9e1b1225eb95ba1");
   });
 
   it("the worker speaks each cue in its cast voice, and only a pinned one", () => {
@@ -290,67 +295,29 @@ describe("names on the dial", () => {
   });
 });
 
-describe("castVoices: the replaceable casting rule, and the curator's cast sheet", () => {
-  const stats = (...names: string[]) => names.map((speaker) => ({ speaker, words: 10 }));
-  const mixed = [
-    { id: "m1", sex: "m" as const },
-    { id: "f1", sex: "f" as const },
-    { id: "m2", sex: "m" as const },
-    { id: "f2", sex: "f" as const },
-  ];
-
-  it("without a sheet: order of first appearance through the palette, wrapping", () => {
-    expect([...castVoices(stats("A", "B", "C", "D", "E"), undefined, mixed)]).toEqual([
-      ["A", "m1"],
-      ["B", "f1"],
-      ["C", "m2"],
-      ["D", "f2"],
-      ["E", "m1"],
-    ]);
-  });
-
-  it("a speaker the sheet declares f never receives a male voice, and m never a female one", () => {
-    for (let n = 1; n <= 6; n++) {
-      const names = Array.from({ length: n }, (_, i) => `S${String.fromCharCode(65 + i)}`);
-      for (const sex of ["f", "m"] as const) {
-        const sheet = { narrator: "m" as const, speakers: Object.fromEntries(names.map((s) => [s, sex])) };
-        const got = castVoices(stats(...names), sheet, mixed);
-        for (const s of names) expect(mixed.find((v) => v.id === got.get(s))!.sex, `${s} of ${n}`).toBe(sex);
-      }
-    }
-    // Only the declared speaker is constrained; the next speaker takes the first voice not yet used.
-    const got = castVoices(stats("A", "B"), { narrator: "m", speakers: { A: "f" } }, mixed);
-    expect([...got]).toEqual([
-      ["A", "f1"],
-      ["B", "m1"],
-    ]);
-  });
-
-  it("refuses a sheet the palette cannot honour, rather than casting the wrong voice", () => {
-    // Today's character palette is all male: a character declared f cannot be cast, so casting refuses.
-    expect(() => castVoices(stats("A"), { narrator: "f", speakers: { A: "f" } }, PALETTE_VOICES)).toThrow(/no character voice in the palette for A \(declared f\)/);
-  });
-
-  it("the palette's voices are the pinned ones, in casting order, and all male (Kokoro's bm_)", () => {
-    expect(PALETTE_VOICES.map((v) => v.id)).toEqual([...PALETTE]);
-    expect(PALETTE_VOICES.every((v) => v.sex === "m")).toBe(true);
+describe("castVoices and the curator's cast sheet", () => {
+  it("refuses a sheet the pool cannot honour, rather than casting the wrong voice", () => {
+    const males = TABLE.filter((v) => v.sex === "m");
+    expect(() => castVoices([{ speaker: "A", words: 1 }], { narrator: "f", speakers: { A: "f" } }, males)).toThrow(/no character voice in the palette for A \(declared f\)/);
   });
 
   it("Crito's sheet names exactly the labelled speakers, and the cast with it is the cast without it", () => {
     const sheet = WORKS[1]!.cast!;
     expect(Object.keys(sheet.speakers!).sort()).toEqual([...new Set(cues.map((c) => c.speaker!))].sort());
-    expect(cast(cues, sheet)).toEqual(cast(cues));
+    // Without the sheet any sex may be cast; with it, only male voices are.
+    for (const p of cast(cues, sheet).parts) expect(TABLE.find((v) => v.id === p.voice)!.sex).toBe("m");
     // No sheet ever carries anything but voice sex.
     for (const w of WORKS) {
       if (!w.cast) continue;
-      expect(Object.keys(w.cast).sort()).toEqual(["narrator", "speakers"]);
+      for (const k of Object.keys(w.cast)) expect(["accent", "narrator", "speakers"]).toContain(k);
+      if (w.cast.accent) expect(["us", "uk"]).toContain(w.cast.accent);
       for (const v of [w.cast.narrator, ...Object.values(w.cast.speakers ?? {})]) expect(["m", "f"]).toContain(v);
     }
     expect(WORKS[0]!.cast).toBeUndefined();
     expect(WORKS[2]!.cast).toBeUndefined();
   });
 
-  it("the speakers reach castVoices in order of first appearance, with their word counts", () => {
+  it("the parts come in order of first appearance, with their word counts", () => {
     const parts = cast(cues, WORKS[1]!.cast).parts;
     expect(parts.map((p) => p.speaker)).toEqual(["SOCRATES", "CRITO"]);
     const spoken = (who: string) => cues.filter((c) => c.speaker === who).reduce((n, c) => n + c.spoken.split(/\s+/).filter(Boolean).length, 0);
@@ -362,6 +329,8 @@ describe("castVoices: the replaceable casting rule, and the curator's cast sheet
     const withSheet = bookplateHtml(WORKS[1]!, cast(cues, WORKS[1]!.cast));
     expect(withSheet).toContain("The curator's cast sheet, from the edition's list of persons, asks only for voice sex: narrator male; Socrates male; Crito male.");
     expect(bookplateHtml(WORKS[0]!)).not.toContain("cast sheet");
+    const uk = bookplateHtml({ ...WORKS[1]!, cast: { ...WORKS[1]!.cast!, accent: "uk" } }, cast(cues, { ...WORKS[1]!.cast!, accent: "uk" }));
+    expect(uk).toContain("asks only for voice sex and accent: accent British; narrator male; Socrates male; Crito male.");
   });
 });
 
@@ -398,8 +367,17 @@ describe("T2b review: labels are never headings or honorifics", () => {
 });
 
 describe("T2b review: a cast failure silences one station only", () => {
+  it("a sheet that leaves out a labelled speaker is not honoured: the station is left uncast", () => {
+    expect(tryCast(cues, { narrator: "m", speakers: { SOCRATES: "m" } })).toBeNull();
+    expect(tryCast(cues, { narrator: "m" })).toBeNull();
+    expect(() => cast(cues, { narrator: "m", speakers: { SOCRATES: "m" } })).toThrow(/does not declare CRITO/);
+    // A work with no labels needs no speaker in its sheet.
+    expect(tryCast(segment(text("cave")), { narrator: "f" })).not.toBeNull();
+  });
+
   it("tryCast returns null where the sheet cannot be honoured, and the cast otherwise", () => {
-    expect(tryCast(cues, { narrator: "m", speakers: { SOCRATES: "f", CRITO: "m" } })).toBeNull();
+    const males = TABLE.filter((v) => v.sex === "m");
+    expect(tryCast(cues, { narrator: "m", speakers: { SOCRATES: "f", CRITO: "m" } }, males)).toBeNull();
     expect(tryCast(cues, WORKS[1]!.cast)).toEqual(cast(cues, WORKS[1]!.cast));
     expect(CAST_FAILED).toBe("Dial could not cast this work's voices.");
   });
@@ -446,7 +424,7 @@ describe("T2b review: the size shown is what actually downloads", () => {
   it("the manifest lists every staged file's size; they sum to totalBytes; there is no second narrator field", () => {
     const m = manifest();
     expect(Object.values(m.sizes).reduce((a, b) => a + b, 0)).toBe(m.totalBytes);
-    for (const id of ALL_VOICES) expect(voiceSize(m, id), id).toBeGreaterThan(0);
+    for (const id of Object.keys(VOICES)) expect(voiceSize(m, id), id).toBeGreaterThan(0);
     for (const part of m.parts) expect(m.sizes[`/voice/models/${m.repo}/onnx/${part}`]).toBeGreaterThan(0);
     expect(Object.keys(m.sizes).filter((p) => p.startsWith("/ort/")).length).toBe(2);
     expect(m.narrator).toBeUndefined();
@@ -455,23 +433,23 @@ describe("T2b review: the size shown is what actually downloads", () => {
   it("a cache holding everything except Crito's new voices: only those voices are counted and named", () => {
     const m = manifest();
     const crito = [...new Set(cast(cues, WORKS[1]!.cast).voices)];
-    expect(crito).toEqual(["bm_fable", "bm_lewis"]);
-    const got = neededBytes(m, crito, everything(m, ["bm_george"]));
-    expect(got).toEqual({ bytes: voiceSize(m, "bm_fable") + voiceSize(m, "bm_lewis"), need: "voices", missingVoices: 2 });
+    expect(crito).toEqual(["am_fenrir", "am_puck"]);
+    const got = neededBytes(m, crito, everything(m, ["am_michael"]));
+    expect(got).toEqual({ bytes: voiceSize(m, "am_fenrir") + voiceSize(m, "am_puck"), need: "voices", missingVoices: 2 });
     expect(warmingLine(got.bytes, got.need, "Crito", got.missingVoices)).toBe("Adding the voices for Crito (about 1 MB) to this device.");
-    expect(warmingLine(voiceSize(m, "bm_george"), "voices", "the Cave", 1)).toBe("Adding the voice for the Cave (about 1 MB) to this device.");
+    expect(warmingLine(voiceSize(m, "am_michael"), "voices", "the Cave", 1)).toBe("Adding the voice for the Cave (about 1 MB) to this device.");
   });
 
   it("everything held: nothing downloads, and no download is claimed", () => {
     const m = manifest();
-    const got = neededBytes(m, ["bm_george"], everything(m, ["bm_george"]));
+    const got = neededBytes(m, ["am_michael"], everything(m, ["am_michael"]));
     expect(got).toEqual({ bytes: 0, need: "none", missingVoices: 0 });
     expect(warmingLine(got.bytes, got.need, "the Cave", 0)).toBe("Warming the voice from this device.");
   });
 
   it("a first visit downloads the model, tokenizer and config, the runtime, and only that work's voices", () => {
     const m = manifest();
-    const shared = m.totalBytes - ALL_VOICES.reduce((n, id) => n + voiceSize(m, id), 0);
+    const shared = m.totalBytes - Object.keys(VOICES).reduce((n, id) => n + voiceSize(m, id), 0);
     for (const w of WORKS) {
       const voices = [...new Set(cast(segment(text(w.slug)), w.cast).voices)];
       const got = neededBytes(m, voices, nothing);

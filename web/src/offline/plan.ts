@@ -49,7 +49,7 @@ export function unionVoices(old: readonly string[] | null, today: readonly strin
   return workVoices([...(old ?? []), ...today]);
 }
 
-/** A recorded voice list ("bm_george,bm_fable"), or null when there is no usable record. */
+/** A recorded voice list ("am_fenrir,am_puck"), or null when there is no usable record. */
 export function parseVoices(header: string | null): string[] | null {
   if (!header) return null;
   const ids = header.split(",").map((v) => v.trim());

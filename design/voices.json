@@ -1,0 +1,106 @@
+{
+  "provenance": {
+    "measured_source_data": "Measured source data, read by casting (T2c). Not a build artifact: it is written by scripts/voice-bench.mjs on a developer machine, reviewed, and committed; no build step regenerates it.",
+    "date": "2026-09-27",
+    "engine": {
+      "model": "onnx-community/Kokoro-82M-v1.0-ONNX@1939ad2a8e416c0acfeecc08a694d14ef25f2231",
+      "model_sha256": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
+      "dtype": "q8",
+      "runtime": "onnxruntime-node 1.21.0 (CPU, 4 threads)",
+      "kokoro-js": "1.2.1",
+      "@huggingface/transformers": "3.8.1",
+      "speed": 1,
+      "sample_rate": 24000
+    },
+    "method": {
+      "summary": "Each voice renders the same passages cue by cue at speed 1.0, as the tab does, on onnxruntime-node (the tab runs onnxruntime-web); numbers are measured on the rendered samples by scripts/lib/voice-measure.mjs.",
+      "wpm": "articulation rate: words (whitespace and dashes separate; a token needs a letter or digit) over speaking seconds, each cue trimmed of its leading and trailing silence (a 20 ms frame is silent below the loudest frame -40 dB, or -60 dBFS). Pauses inside a cue count; the tab's pause table between cues does not. Only same-passage numbers compare.",
+      "wpm_as_played": "the same words over the seconds a listener hears in Dial: each cue as Kokoro renders it (its own leading and trailing silence included) plus the tab's fixed pause table between cues (web/src/engine/segment.ts PAUSE_MS), none after a passage's last cue. This is the number to hold against a presenter's 150 to 165 wpm; wpm above is the voice's articulation rate.",
+      "median_f0_hz": "normalized autocorrelation on the signal decimated to 8 kHz, 40 ms windows every 10 ms, 60 to 400 Hz, voiced when not silent and the best peak is >= 0.5; shortest-lag peak within 90 % of the best, parabolic refinement; median over voiced windows.",
+      "spectral_centroid_hz": "1024-point Hann FFT every 512 samples; magnitude-weighted mean frequency per non-silent frame, averaged.",
+      "loudness_dbfs": "RMS over non-silent frames of the trimmed speech (an active-speech level, not LUFS).",
+      "pause_to_speech": "inside the trimmed cues, silent runs of at least 150 ms over the remaining time.",
+      "distance": "af_heart and the four male narrator candidates only: the Cave's paragraphs 0 to 14 rendered as one run, cue by cue (about 3 minutes as played); first and last 30 s of speech (whole cues). Kokoro renders each cue independently, so drift here reflects the text more than the voice. The 10-minute render was skipped for time.",
+      "hexgrad": "grade, target quality and training duration are copied from hexgrad's table and describe training data, not naturalness. Duration: HH hours: 10 to 100 h; H hours: 1 to 10 h; MM minutes: 10 to 100 min; M minutes: 1 to 10 min."
+    },
+    "passages": {
+      "narration": {
+        "work": "cave",
+        "paragraphs": [
+          14,
+          14
+        ],
+        "sha256": "da81c003c94da961ed084ebd0a0f344139ae88cbc4b07a7e19c9483fd96049de",
+        "words_in_text": 170,
+        "words_spoken": 170
+      },
+      "dialogue": {
+        "work": "crito",
+        "paragraphs": [
+          9,
+          9
+        ],
+        "sha256": "24bc4c690f23b7fd3cdb4c849f537245fb2af67a0be200534020c9d5593ad566",
+        "words_in_text": 76,
+        "words_spoken": 75
+      },
+      "audition": {
+        "work": "cave",
+        "paragraphs": [
+          0,
+          0
+        ],
+        "sha256": "465d6757c620284c153fe4488e3c7da8acae22f90ab5c8efbdfd5eb9780d821f",
+        "words_in_text": 129,
+        "words_spoken": 129
+      },
+      "distance": {
+        "work": "cave",
+        "paragraphs": [
+          0,
+          14
+        ],
+        "sha256": "9fe96c653180111f809b232a7958e83efcf2df2ba7abb67d1ba97a93e55556d4",
+        "words_in_text": 510,
+        "words_spoken": 510
+      }
+    },
+    "hexgrad_table": {
+      "source": "https://huggingface.co/hexgrad/Kokoro-82M/raw/main/VOICES.md",
+      "repo_commit": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+      "sha256": "ec7e4941ad7e194af61e3455928528a9ff5360c7c505e412efab27d6a69ea106",
+      "fetched": "2026-09-26",
+      "note": "grade, target quality and training duration are hexgrad's estimates of each voice's training data. hexgrad's SHA256 column (a prefix) is of the PyTorch .pt voice, not kokoro-js's .bin, so it is kept only for reference."
+    }
+  },
+  "voices": [
+    {"id":"af_alloy","sex":"f","accent":"us","hexgrad":{"grade":"C","target_quality":"B","training_duration":"MM minutes","pt_sha256_prefix":"6d877149"},"file_sha256":"c4a6b876047fd7fb472edf4ebd63cfac7c3b958a7cae7c106e8f038ca6308c45","wpm":226.3,"wpm_as_played":200.1,"wpm_narration":231,"wpm_dialogue":216.3,"median_f0_hz":140.7,"spectral_centroid_hz":1909,"loudness_dbfs":-22.6,"pause_to_speech":0.066,"render_rtf":0.457},
+    {"id":"af_aoede","sex":"f","accent":"us","hexgrad":{"grade":"C+","target_quality":"B","training_duration":"H hours","pt_sha256_prefix":"c03bd1a4"},"file_sha256":"4a004c33430762e2461eedb2013fad808ef4ab3121f5300f554476caf58d8361","wpm":209.2,"wpm_as_played":185.8,"wpm_narration":213,"wpm_dialogue":200.9,"median_f0_hz":175.5,"spectral_centroid_hz":2109,"loudness_dbfs":-17.5,"pause_to_speech":0.064,"render_rtf":0.451},
+    {"id":"af_bella","sex":"f","accent":"us","hexgrad":{"grade":"A-","target_quality":"A","training_duration":"HH hours","pt_sha256_prefix":"8cb64e02"},"file_sha256":"f69d836209b78eb8c66e75e3cda491e26ea838a3674257e9d4e5703cbaf55c8b","wpm":200.6,"wpm_as_played":180.1,"wpm_narration":203.4,"wpm_dialogue":194.5,"median_f0_hz":200.4,"spectral_centroid_hz":2852,"loudness_dbfs":-20.3,"pause_to_speech":0.129,"render_rtf":0.449},
+    {"id":"af_heart","sex":"f","accent":"us","hexgrad":{"grade":"A","target_quality":null,"training_duration":null,"pt_sha256_prefix":"0ab5709b"},"file_sha256":"d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b","wpm":205.9,"wpm_as_played":187.4,"wpm_narration":210,"wpm_dialogue":197,"median_f0_hz":193.9,"spectral_centroid_hz":2623,"loudness_dbfs":-21.9,"pause_to_speech":0.116,"render_rtf":0.456,"distance":{"speech_seconds":149.3,"seconds_as_played":177.3,"words":510,"wpm":204.9,"wpm_as_played":172.6,"wpm_first_30s":196.8,"wpm_last_30s":211.9,"wpm_drift":15.1,"f0_first_30s_hz":193.7,"f0_last_30s_hz":192.2,"f0_drift_hz":-1.5}},
+    {"id":"af_jessica","sex":"f","accent":"us","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"cdfdccb8"},"file_sha256":"a240a5e3c15b43563d6e923bdca8ef5613a23471d9b77653694012435df23bd8","wpm":234.5,"wpm_as_played":210.5,"wpm_narration":239.2,"wpm_dialogue":224.6,"median_f0_hz":205,"spectral_centroid_hz":2414,"loudness_dbfs":-22,"pause_to_speech":0.063,"render_rtf":0.46},
+    {"id":"af_kore","sex":"f","accent":"us","hexgrad":{"grade":"C+","target_quality":"B","training_duration":"H hours","pt_sha256_prefix":"8bfbc512"},"file_sha256":"9be5221b6a941c04b561959b8ff0b06e809444dcc4ab7e75a7b23606f691819e","wpm":206.1,"wpm_as_played":182.5,"wpm_narration":208.9,"wpm_dialogue":199.8,"median_f0_hz":148.2,"spectral_centroid_hz":2404,"loudness_dbfs":-18,"pause_to_speech":0.031,"render_rtf":0.45},
+    {"id":"af_nicole","sex":"f","accent":"us","hexgrad":{"grade":"B-","target_quality":"B","training_duration":"HH hours","pt_sha256_prefix":"c5561808"},"file_sha256":"cd2191ab31b914ed7b318416b0e4440fdf392ddad9106a060819aa600a64f59a","wpm":129.9,"wpm_as_played":121,"wpm_narration":130.1,"wpm_dialogue":129.3,"median_f0_hz":149.7,"spectral_centroid_hz":2738,"loudness_dbfs":-20.9,"pause_to_speech":0.448,"render_rtf":0.45},
+    {"id":"af_nova","sex":"f","accent":"us","hexgrad":{"grade":"C","target_quality":"B","training_duration":"MM minutes","pt_sha256_prefix":"e0233676"},"file_sha256":"18778272caa0d0eebaea251c35fd635f038434f9eee5e691d02a174bd328414f","wpm":230.7,"wpm_as_played":203.6,"wpm_narration":235,"wpm_dialogue":221.5,"median_f0_hz":155.2,"spectral_centroid_hz":1981,"loudness_dbfs":-26.6,"pause_to_speech":0.059,"render_rtf":0.448},
+    {"id":"af_river","sex":"f","accent":"us","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"e149459b"},"file_sha256":"00a2bcf82b1d86e8f19902ede58c65ccf6c0e43b44b7d74fad54e5d8933c9c30","wpm":239.3,"wpm_as_played":214.9,"wpm_narration":243.6,"wpm_dialogue":230.3,"median_f0_hz":166.3,"spectral_centroid_hz":2474,"loudness_dbfs":-22,"pause_to_speech":0.063,"render_rtf":0.448},
+    {"id":"af_sarah","sex":"f","accent":"us","hexgrad":{"grade":"C+","target_quality":"B","training_duration":"H hours","pt_sha256_prefix":"49bd364e"},"file_sha256":"4409fbc125afabacc615d94db5398d847006a737b0247d6892b7a9a0007a2f0a","wpm":209.9,"wpm_as_played":183.9,"wpm_narration":212.6,"wpm_dialogue":204,"median_f0_hz":189.9,"spectral_centroid_hz":2681,"loudness_dbfs":-20.6,"pause_to_speech":0.138,"render_rtf":0.448},
+    {"id":"af_sky","sex":"f","accent":"us","hexgrad":{"grade":"C-","target_quality":"B","training_duration":"M minutes","pt_sha256_prefix":"c799548a"},"file_sha256":"4435255c9744f3f31659e0d714ab7689bf65d9e77ec1cce060f083912614f0b9","wpm":211.8,"wpm_as_played":189.9,"wpm_narration":216.1,"wpm_dialogue":202.5,"median_f0_hz":149.8,"spectral_centroid_hz":2017,"loudness_dbfs":-23.7,"pause_to_speech":0.125,"render_rtf":0.449},
+    {"id":"am_adam","sex":"m","accent":"us","hexgrad":{"grade":"F+","target_quality":"D","training_duration":"H hours","pt_sha256_prefix":"ced7e284"},"file_sha256":"162b035ed91cfc48b6046982184c645f72edcdd1b82843347f605d7bf7b15716","wpm":215.9,"wpm_as_played":192.5,"wpm_narration":218.6,"wpm_dialogue":210.1,"median_f0_hz":111.2,"spectral_centroid_hz":2138,"loudness_dbfs":-18,"pause_to_speech":0.101,"render_rtf":0.448},
+    {"id":"am_echo","sex":"m","accent":"us","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"8bcfdc85"},"file_sha256":"3968b92c3c4cd1c4416dbded36c13eaa388a90d5788d02a13e4d781f5f8cf3c3","wpm":225.2,"wpm_as_played":199.9,"wpm_narration":228,"wpm_dialogue":219.1,"median_f0_hz":105.2,"spectral_centroid_hz":1915,"loudness_dbfs":-22.4,"pause_to_speech":0.078,"render_rtf":0.447},
+    {"id":"am_eric","sex":"m","accent":"us","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"ada66f0e"},"file_sha256":"e8b5be17edd1e3636901ce7598baafe2dc8dd8ff707a0c23bf9e461add7e2832","wpm":237.6,"wpm_as_played":212.5,"wpm_narration":241.5,"wpm_dialogue":229.4,"median_f0_hz":152.2,"spectral_centroid_hz":1800,"loudness_dbfs":-21.1,"pause_to_speech":0.051,"render_rtf":0.448},
+    {"id":"am_fenrir","sex":"m","accent":"us","hexgrad":{"grade":"C+","target_quality":"B","training_duration":"H hours","pt_sha256_prefix":"98e507ec"},"file_sha256":"c27989f741f7ee34d273a39d8a595cc0837d35f5ced9a29b7cc162614616df43","wpm":206.2,"wpm_as_played":186.6,"wpm_narration":209.9,"wpm_dialogue":198.4,"median_f0_hz":132.2,"spectral_centroid_hz":2433,"loudness_dbfs":-19.2,"pause_to_speech":0.037,"render_rtf":0.457,"distance":{"speech_seconds":147.5,"seconds_as_played":175.5,"words":510,"wpm":207.5,"wpm_as_played":174.4,"wpm_first_30s":204.5,"wpm_last_30s":211.9,"wpm_drift":7.4,"f0_first_30s_hz":132.2,"f0_last_30s_hz":131.3,"f0_drift_hz":-0.9}},
+    {"id":"am_liam","sex":"m","accent":"us","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"c8255075"},"file_sha256":"52403be32fd047c6a44517cb0bcd6b134f2a18baa73e70ef41651e0eab921ade","wpm":231.2,"wpm_as_played":208.4,"wpm_narration":235.5,"wpm_dialogue":222.1,"median_f0_hz":124.3,"spectral_centroid_hz":2105,"loudness_dbfs":-21.5,"pause_to_speech":0.085,"render_rtf":0.45},
+    {"id":"am_michael","sex":"m","accent":"us","hexgrad":{"grade":"C+","target_quality":"B","training_duration":"H hours","pt_sha256_prefix":"9a443b79"},"file_sha256":"1d1f21dd8da39c30705cd4c75d039d265e9bc4a2a93ed09bc9e1b1225eb95ba1","wpm":185.5,"wpm_as_played":167.6,"wpm_narration":189.3,"wpm_dialogue":177.4,"median_f0_hz":109.6,"spectral_centroid_hz":2429,"loudness_dbfs":-23.8,"pause_to_speech":0.117,"render_rtf":0.5,"distance":{"speech_seconds":165.1,"seconds_as_played":196.6,"words":510,"wpm":185.3,"wpm_as_played":155.6,"wpm_first_30s":179.2,"wpm_last_30s":187.5,"wpm_drift":8.3,"f0_first_30s_hz":110,"f0_last_30s_hz":108.4,"f0_drift_hz":-1.6}},
+    {"id":"am_onyx","sex":"m","accent":"us","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"e8452be1"},"file_sha256":"da5d135b424164916d75a68ffb4c2abce3d7d5ccc82dd1ee6cf447ce286145e6","wpm":228.3,"wpm_as_played":200,"wpm_narration":232.2,"wpm_dialogue":219.9,"median_f0_hz":82.1,"spectral_centroid_hz":1486,"loudness_dbfs":-23.2,"pause_to_speech":0.062,"render_rtf":0.448},
+    {"id":"am_puck","sex":"m","accent":"us","hexgrad":{"grade":"C+","target_quality":"B","training_duration":"H hours","pt_sha256_prefix":"dd1d8973"},"file_sha256":"fcf73c989033e9233e0b98713eca600c8c74dcc1614b37009d5450ff4a2274a0","wpm":212.4,"wpm_as_played":190.6,"wpm_narration":215.5,"wpm_dialogue":205.9,"median_f0_hz":106.6,"spectral_centroid_hz":2245,"loudness_dbfs":-19,"pause_to_speech":0.025,"render_rtf":0.458,"distance":{"speech_seconds":143.7,"seconds_as_played":172.1,"words":510,"wpm":213,"wpm_as_played":177.8,"wpm_first_30s":216.2,"wpm_last_30s":216.8,"wpm_drift":0.6,"f0_first_30s_hz":104.9,"f0_last_30s_hz":105.8,"f0_drift_hz":0.9}},
+    {"id":"am_santa","sex":"m","accent":"us","hexgrad":{"grade":"D-","target_quality":"C","training_duration":"M minutes","pt_sha256_prefix":"7f2f7582"},"file_sha256":"61150cf726ab6c5ed7a99f90a304f91f5a72c00c592e89ec94e5df11c319227a","wpm":194.2,"wpm_as_played":183.9,"wpm_narration":196.6,"wpm_dialogue":189.1,"median_f0_hz":140,"spectral_centroid_hz":2266,"loudness_dbfs":-22.7,"pause_to_speech":0.076,"render_rtf":0.448},
+    {"id":"bf_alice","sex":"f","accent":"uk","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"d292651b"},"file_sha256":"08afa6ba24da61ea5e8efa139e5aadc938d83f0a6da5a900adaf763ac1da5573","wpm":210.9,"wpm_as_played":191.3,"wpm_narration":214.7,"wpm_dialogue":202.7,"median_f0_hz":200.1,"spectral_centroid_hz":2463,"loudness_dbfs":-20.5,"pause_to_speech":0.015,"render_rtf":0.448},
+    {"id":"bf_emma","sex":"f","accent":"uk","hexgrad":{"grade":"B-","target_quality":"B","training_duration":"HH hours","pt_sha256_prefix":"d0a423de"},"file_sha256":"669fe0647f9dd04fcab92f1439a40eeb4c8b4ab1f82e4996fe3d918ce4a63b73","wpm":223.4,"wpm_as_played":197.8,"wpm_narration":226.1,"wpm_dialogue":217.6,"median_f0_hz":177.2,"spectral_centroid_hz":3198,"loudness_dbfs":-20.4,"pause_to_speech":0.127,"render_rtf":0.447},
+    {"id":"bf_isabella","sex":"f","accent":"uk","hexgrad":{"grade":"C","target_quality":"B","training_duration":"MM minutes","pt_sha256_prefix":"cdd4c370"},"file_sha256":"3754352c4aaa46d17f27654ab7518d65b62ad6163a0f55a5f4330c2da2c4e94f","wpm":223,"wpm_as_played":197.4,"wpm_narration":225.1,"wpm_dialogue":218.4,"median_f0_hz":196.2,"spectral_centroid_hz":2735,"loudness_dbfs":-17.9,"pause_to_speech":0.12,"render_rtf":0.449},
+    {"id":"bf_lily","sex":"f","accent":"uk","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"6e09c2e4"},"file_sha256":"5e0ee32ebe64a467124976b14e69590746f1c4ce41a12b587a50c862edfea335","wpm":211.9,"wpm_as_played":192.4,"wpm_narration":214.3,"wpm_dialogue":206.6,"median_f0_hz":190.9,"spectral_centroid_hz":2338,"loudness_dbfs":-21,"pause_to_speech":0.068,"render_rtf":0.448},
+    {"id":"bm_daniel","sex":"m","accent":"uk","hexgrad":{"grade":"D","target_quality":"C","training_duration":"MM minutes","pt_sha256_prefix":"fc3fce4e"},"file_sha256":"6b3194bbceffb746733cbc22c8f593dd44e401a71d53895a2dca891bc595a1e8","wpm":224,"wpm_as_played":202.3,"wpm_narration":227.2,"wpm_dialogue":217.2,"median_f0_hz":119.2,"spectral_centroid_hz":2050,"loudness_dbfs":-20.6,"pause_to_speech":0.07,"render_rtf":0.448},
+    {"id":"bm_fable","sex":"m","accent":"uk","hexgrad":{"grade":"C","target_quality":"B","training_duration":"MM minutes","pt_sha256_prefix":"d44935f3"},"file_sha256":"f889083196807b4adb15e9204252165f503b8d33d3982e681c52443c49d798f1","wpm":220.3,"wpm_as_played":205,"wpm_narration":222.8,"wpm_dialogue":214.7,"median_f0_hz":113.2,"spectral_centroid_hz":1987,"loudness_dbfs":-24.5,"pause_to_speech":0,"render_rtf":0.447},
+    {"id":"bm_george","sex":"m","accent":"uk","hexgrad":{"grade":"C","target_quality":"B","training_duration":"MM minutes","pt_sha256_prefix":"f1bc8122"},"file_sha256":"c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc","wpm":187.7,"wpm_as_played":172.3,"wpm_narration":189.8,"wpm_dialogue":183.1,"median_f0_hz":135.6,"spectral_centroid_hz":2200,"loudness_dbfs":-20.4,"pause_to_speech":0.163,"render_rtf":0.459,"distance":{"speech_seconds":165.6,"seconds_as_played":192.9,"words":510,"wpm":184.8,"wpm_as_played":158.7,"wpm_first_30s":185.5,"wpm_last_30s":193.4,"wpm_drift":7.9,"f0_first_30s_hz":134.3,"f0_last_30s_hz":135,"f0_drift_hz":0.7}},
+    {"id":"bm_lewis","sex":"m","accent":"uk","hexgrad":{"grade":"D+","target_quality":"C","training_duration":"H hours","pt_sha256_prefix":"b5204750"},"file_sha256":"b8f671cef828c30e66fdf0b0756a76bba58f6bb3398cbbf27058642acbcedb97","wpm":195.5,"wpm_as_played":174.9,"wpm_narration":198,"wpm_dialogue":190,"median_f0_hz":86.1,"spectral_centroid_hz":2387,"loudness_dbfs":-22.9,"pause_to_speech":0.144,"render_rtf":0.448}
+  ]
+}

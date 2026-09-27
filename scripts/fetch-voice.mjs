@@ -6,7 +6,7 @@
 //   revision, downloaded once into .cache/ and checked against SHA-256 pins.
 //   The model is split into parts under 20 MiB, because Workers Static
 //   Assets serves at most 25 MiB per file; web/src/voice.ts stitches them.
-// - The cast's voice files (the palette in web/src/engine/cast.ts), from
+// - The voice files the catalogue's casts use (web/src/engine/cast.ts), from
 //   the kokoro-js package.
 // - onnxruntime-web's WASM runtime, from its package.
 //
@@ -35,16 +35,19 @@ export const MODEL_FILES = {
   "tokenizer_config.json": "be1cb066d6ef6b074b3f15e6a6dd21ac88ff3cdaedf325f0aaed686c70f75d20",
   "onnx/model_quantized.onnx": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 };
-// The cast's voice files, each pinned (web/src/engine/cast.ts's ALL_VOICES,
-// same order): the male narrator (a placeholder until one is chosen by ear),
-// the female narrator, then the character palette.
+// The voice files, each pinned: the two narrators (web/src/engine/cast.ts
+// NARRATORS, male then female), then every character voice the catalogue's
+// casts use, in order of first use. tests/speakers.test.ts recomputes the
+// casts and keeps this list exactly equal to them, and checks each pin
+// against design/voices.json's file_sha256. A voice no work uses is not
+// staged: the pool is the whole table, the download is only what is cast.
 // The pins also go into manifest.json (voices), where the page checks each
 // file on fetch and on every read from its cache.
 export const VOICES = {
-  bm_george: "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc",
+  am_michael: "1d1f21dd8da39c30705cd4c75d039d265e9bc4a2a93ed09bc9e1b1225eb95ba1",
   af_heart: "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b",
-  bm_fable: "f889083196807b4adb15e9204252165f503b8d33d3982e681c52443c49d798f1",
-  bm_lewis: "b8f671cef828c30e66fdf0b0756a76bba58f6bb3398cbbf27058642acbcedb97",
+  am_fenrir: "c27989f741f7ee34d273a39d8a595cc0837d35f5ced9a29b7cc162614616df43",
+  am_puck: "fcf73c989033e9233e0b98713eca600c8c74dcc1614b37009d5450ff4a2274a0",
 };
 // onnxruntime-web's runtime, pinned like the model: a changed byte fails the
 // build. The .wasm's pin also goes into manifest.json (runtimeSha256), where
@@ -153,7 +156,7 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
   // so its "about N MB" and its meter are computed, never guessed. A first
   // visit downloads the model, tokenizer and config, the runtime's .wasm and
   // .mjs, and the voices that work's cast uses (the Cave and the Meditations:
-  // George; Crito: Fable and Lewis); a later work adds only its new voices.
+  // Michael; Crito: Fenrir and Puck); a later work adds only its new voices.
   const sizes = stagedSizes();
   const totalBytes = Object.values(sizes).reduce((a, b) => a + b, 0);
   writeFileSync(

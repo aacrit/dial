@@ -3,6 +3,7 @@
 // back. Messages carry only cue text in and
 // audio out; this worker has no other channel.
 
+import type { KokoroTTS } from "kokoro-js";
 import { loadVoice } from "./voice";
 import type { VoiceId } from "./engine/cast";
 import type { Cue } from "./engine/segment";
@@ -18,6 +19,9 @@ export type FromWorker =
   | { type: "done" }
   | { type: "error"; message: string };
 
+/** The ids kokoro-js knows; the cast only ever holds ids from design/voices.json, which is measured from the same files. */
+type KokoroVoiceId = NonNullable<NonNullable<Parameters<KokoroTTS["generate"]>[1]>["voice"]>;
+
 const ctx = self as unknown as {
   postMessage(message: FromWorker, transfer?: Transferable[]): void;
   onmessage: ((event: MessageEvent<ToWorker>) => void) | null;
@@ -32,7 +36,7 @@ ctx.onmessage = async (event) => {
     ctx.postMessage({ type: "ready", kept });
     for (let i = 0; i < cues.length; i++) {
       // Only a voice the manifest pins, and so the loader has checked, is ever used.
-      const voice = voices[i];
+      const voice = voices[i] as KokoroVoiceId | undefined;
       if (!voice || !Object.hasOwn(manifest.voices, voice)) throw new Error(`voice: no pinned voice for line ${i + 1}`);
       const raw = await tts.generate(cues[i]!.spoken, { voice });
       const audio = raw.audio as Float32Array<ArrayBuffer>;

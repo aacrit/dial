@@ -27,7 +27,7 @@ import {
   workVoices,
   type SavePlan,
 } from "./plan";
-import { CAST_ENGINE_VERSION } from "../engine/cast";
+import { CAST_ENGINE_VERSION } from "../engine/cast-version";
 import { offlineKey, pinsOf } from "./routes";
 import { coverVoiceRecord, isPersisted, offlineWorks, planFor, readManifest, removeWork, requestPersistence, saveWork, savedSlugs, shellState, type Manifest } from "./store";
 
