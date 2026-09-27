@@ -18,7 +18,7 @@ import {
 } from "../worker/src/config";
 import { LIMITER_LIMITS, LIMITER_PERIOD_SECONDS, LIMITER_V6_PREFIX, clientKey, limiterFor, rateLimitedMessage, type RateLimiter } from "../worker/src/guard";
 import { API_CSP } from "../worker/src/headers";
-import { PAGE_CSP_HEADER, SECURITY_HEADERS, headersFile } from "../scripts/lib/csp.mjs";
+import { PAGE_CSP_HEADER, PREVIEW_ORIGIN, SECURITY_HEADERS, headersFile } from "../scripts/lib/csp.mjs";
 import { createSqliteD1 } from "./helpers/sqlite-d1";
 import { createMockAssets, createMockD1 } from "./helpers/mock-d1";
 import { IDLE_SCENARIOS, runIdleScenario, simulateRetention } from "./helpers/retention-sim";
@@ -158,16 +158,34 @@ describe("the account's D1 writes: every ceiling together stays within this prod
     quotas: { name: string; ceiling: number; worst_case_rows?: number; worst_case_max_share?: number }[];
   };
   const row = budget.quotas.find((q) => q.name === "d1_rows_written_per_day")!;
+  /** Every Worker wrangler.jsonc deploys (production and each env), with its own ceilings: each writes its own D1 on the same account. */
+  const perEnv = () => {
+    const c = wranglerConfig();
+    const all: [string, Record<string, any>][] = [["production", c], ...Object.entries((c.env ?? {}) as Record<string, Record<string, any>>)];
+    return all.map(([name, e]) => {
+      const vars = e.vars as Record<string, string> | undefined;
+      // A deployed Worker with no ceilings would fall back to the code's defaults: make that explicit instead.
+      expect(vars?.EVENT_DAILY_CEILING, name).toMatch(/^\d+$/);
+      expect(vars?.FEEDBACK_DAILY_CEILING, name).toMatch(/^\d+$/);
+      return { name, ...worstCaseDailyWrites({ event: Number(vars!.EVENT_DAILY_CEILING), feedback: Number(vars!.FEEDBACK_DAILY_CEILING) }) };
+    });
+  };
   const fromWrangler = () => {
-    const vars = wranglerConfig().vars as Record<string, string>;
-    return worstCaseDailyWrites({ event: Number(vars.EVENT_DAILY_CEILING), feedback: Number(vars.FEEDBACK_DAILY_CEILING) });
+    const envs = perEnv();
+    return { envs, lines: envs.flatMap((e) => e.lines), total: envs.reduce((s, e) => s + e.total, 0) };
   };
 
-  it("budget.yaml states the worst case exactly as wrangler.jsonc's ceilings give it", () => {
-    const { total, lines } = fromWrangler();
+  it("budget.yaml states the worst case exactly as wrangler.jsonc's ceilings give it, summed over every env", () => {
+    const { total, lines, envs } = fromWrangler();
+    expect(envs.map((e) => e.name)).toEqual(["production", "preview"]);
     expect(lines.every((l) => Number.isFinite(l.rows) && l.rows > 0)).toBe(true);
     expect(row.ceiling).toBe(ACCOUNT_D1_WRITES_PER_DAY);
     expect(row.worst_case_rows).toBe(total);
+  });
+
+  it("the preview's ceilings are small: it adds a sliver, not a second production (T11 review)", () => {
+    const [prod, preview] = perEnv();
+    expect(preview!.total).toBeLessThan(prod!.total / 10);
   });
 
   it("the worst case is at most budget.yaml's share of the account, and that share is small", () => {
@@ -510,9 +528,6 @@ describe("wrangler.jsonc", () => {
     const rl = p.ratelimits as { name: string; namespace_id: string; simple: unknown }[];
     expect(Object.fromEntries(rl.map((r) => [r.name, r.namespace_id]))).toEqual({ RL_API: "7311", RL_EVENTS: "7312", RL_FEEDBACK: "7313" });
     for (const r of rl) expect(r.simple, r.name).toEqual((c.ratelimits as typeof rl).find((x) => x.name === r.name)!.simple);
-    // Vars are not inherited: the ceilings match production's, so the preview proves the same limits.
-    expect(p.vars.EVENT_DAILY_CEILING).toBe(c.vars.EVENT_DAILY_CEILING);
-    expect(p.vars.FEEDBACK_DAILY_CEILING).toBe(c.vars.FEEDBACK_DAILY_CEILING);
   });
 
   it("a path no file matches gets the static 404 page, never the Worker (T11, M2)", () => {
@@ -549,6 +564,38 @@ describe("wrangler.jsonc", () => {
     expect(checkPinnedActions("x.yml", `      - uses: actions/checkout@${"a".repeat(40)}\n`)).toHaveLength(1);
     expect(checkPinnedActions("x.yml", "      - uses: actions/checkout@11d5960 # v4.4.0\n")).toHaveLength(1);
     expect(checkPinnedActions("x.yml", "      - uses: ./local-action\n")).toHaveLength(0);
+    // CRLF checkouts (Windows) lint the same.
+    expect(checkPinnedActions("x.yml", `      - uses: actions/checkout@${"a".repeat(40)} # v4.4.0\r\n      - uses: actions/checkout@v4\r\n`)).toEqual([
+      expect.stringContaining("x.yml:2:"),
+    ]);
+  });
+
+  it("HEAD /healthz answers 200 with the same headers and no body (T11 review)", async () => {
+    const env = mockEnv();
+    const head = await handle(new Request(`${ORIGIN}/healthz`, { method: "HEAD" }), env);
+    expect(head.status).toBe(200);
+    expect(head.body).toBeNull();
+    expect(head.headers.get("content-security-policy")).toBe(API_CSP);
+    expect(head.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("the preview says noindex on every answer, the Worker's and its static files'; production never does (T11 review)", async () => {
+    const c = wranglerConfig();
+    expect(c.env.preview.vars.ROBOTS).toBe("noindex");
+    expect(c.vars.ROBOTS).toBeUndefined();
+    const preview = mockEnv({ ROBOTS: "noindex" });
+    for (const req of [get("/healthz"), post("/e", { name: "not_an_event" }), get("/nothing-here")]) {
+      expect((await handle(req, preview)).headers.get("x-robots-tag"), req.url).toBe("noindex");
+      expect((await handle(req, mockEnv())).headers.get("x-robots-tag"), req.url).toBeNull();
+    }
+    // A failure answer too.
+    expect((await handle(get("/healthz"), { ...preview, ASSETS: { fetch: () => Promise.reject(new Error("x")) } as unknown as Fetcher, DB: brokenDb() })).headers.get("x-robots-tag")).toBe("noindex");
+    // Static files: a rule for the preview's host only, after the "/*" block production matches.
+    const file = headersFile();
+    const [all, host] = file.split(`${PREVIEW_ORIGIN}/*\n`);
+    expect(all).not.toMatch(/X-Robots-Tag/i);
+    expect(host).toBe("  X-Robots-Tag: noindex\n");
+    expect(PREVIEW_ORIGIN).toBe(`https://${c.env.preview.name}.aacrit.workers.dev`);
   });
 
   it("docs never claim gitleaks: the secret scan is the repo's own pattern scan (T11, L5)", () => {

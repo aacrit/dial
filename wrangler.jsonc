@@ -105,10 +105,19 @@
           "database_id": "d80d584d-b7f5-41fb-adae-468fb66b810e"
         }
       ],
+      // Small ceilings: the preview's D1 writes count against the same
+      // account's 100,000 a day, so it adds a sliver (budget.yaml, summed
+      // over every env by tests/hardening.test.ts), enough for the contract
+      // and a few manual checks. The bursts write nothing (their bodies are
+      // refused), so they pass at any ceiling.
       "vars": {
         "BUILD_TAG": "preview",
-        "EVENT_DAILY_CEILING": "3500",
-        "FEEDBACK_DAILY_CEILING": "100"
+        // Every Worker answer on the preview says X-Robots-Tag: noindex
+        // (worker/src/index.ts withRobots); static files get it from
+        // dist/_headers' rule for this host.
+        "ROBOTS": "noindex",
+        "EVENT_DAILY_CEILING": "50",
+        "FEEDBACK_DAILY_CEILING": "10"
       }
     }
   }

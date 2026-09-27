@@ -104,6 +104,122 @@ export async function cachedPinnedFile(cache: Pick<Cache, "match" | "delete">, m
   return hit;
 }
 
+/** The model's other files, each pinned in the manifest's files; loadVoice checks all three before the runtime is built. */
+export const PINNED_MODEL_FILES = ["config.json", "tokenizer.json", "tokenizer_config.json"] as const;
+
+/**
+ * A response whose body fails with `err` when read. transformers.js swallows
+ * a throw from its cache's match() and then fetches the local path itself,
+ * unchecked, so the pinned cache never throws and never answers undefined
+ * for a model file: a miss or a mismatch becomes a body that cannot be read,
+ * and the load rejects with the pin error (T11 review).
+ */
+export function failingResponse(err: unknown): Response {
+  const reason = err instanceof Error ? err : new Error(String(err));
+  return new Response(new ReadableStream<Uint8Array>({ start: (c) => c.error(reason) }));
+}
+
+/** Where a pinned file is kept; `keep` stores a checked copy and may fail quietly (a full quota). */
+export type PinnedStore = Pick<Cache, "match" | "delete">;
+export type Keep = (key: string, response: Response) => Promise<void>;
+
+/**
+ * One pinned model file's bytes: the cached copy while it matches its pin,
+ * else a fresh, checked copy from this origin, which is then kept. Throws on
+ * an unpinned key, a failed fetch or a mismatch.
+ */
+export async function loadPinnedFile(cache: PinnedStore, m: Partial<FilePins>, key: string, count: (bytes: number) => void, keep: Keep): Promise<ArrayBuffer> {
+  const held = await cachedPinnedFile(cache, m, key);
+  if (held) return held;
+  const buf = await fetchPinnedFile(m, key, count);
+  await keep(key, new Response(buf.slice(0)));
+  return buf;
+}
+
+/**
+ * Checks tokenizer.json, tokenizer_config.json and config.json before the
+ * runtime is built (loadVoice): a manifest that does not pin one, or a file
+ * that fails its pin from the cache and from this origin, aborts the load.
+ */
+export async function preparePinnedFiles(cache: PinnedStore, m: Partial<FilePins> & { repo: string }, count: (bytes: number) => void, keep: Keep): Promise<void> {
+  for (const name of PINNED_MODEL_FILES) {
+    const key = `${MODELS}${m.repo}/${name}`;
+    if (!modelFilePin(m, key)) throw new Error(`voice: ${key} is not pinned`);
+    await loadPinnedFile(cache, m, key, count, keep);
+  }
+}
+
+/** The pinned cache's answer for a model file (not the model): always a Response, whose body fails on a miss or mismatch. */
+export function pinnedFileResponse(cache: PinnedStore, m: Partial<FilePins>, key: string, count: (bytes: number) => void, keep: Keep): Response {
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      async start(c) {
+        try {
+          c.enqueue(new Uint8Array(await loadPinnedFile(cache, m, key, count, keep)));
+          c.close();
+        } catch (err) {
+          c.error(err instanceof Error ? err : new Error(String(err)));
+        }
+      },
+    }),
+  );
+}
+
+/**
+ * transformers.js's put() for a /voice/models/ key: kept only when the bytes
+ * match that file's pin; anything else (the model, which loadVoice keeps
+ * itself, an unpinned file, a mismatch) is refused and not stored. Returns
+ * whether it was kept.
+ */
+export async function putPinnedFile(m: Partial<FilePins>, key: string, response: Response, keep: Keep): Promise<boolean> {
+  const pin = modelFilePin(m, key);
+  if (!pin) return false;
+  const buf = await response.arrayBuffer();
+  if ((await sha256Hex(buf)) !== pin) return false;
+  await keep(key, new Response(buf));
+  return true;
+}
+
+/**
+ * The cache transformers.js reads the model and its files through (its
+ * env.customCache). For every /voice/models/ key it answers a Response and
+ * never throws: the model by presence in its pin-named cache (voice-cache.ts)
+ * or freshly stitched and checked, every other file checked against its pin
+ * on each read. So a failed check can never fall through to transformers.js
+ * fetching the file itself, unchecked.
+ */
+export function pinnedModelCache(
+  cache: PinnedStore,
+  m: Partial<FilePins> & { repo: string; model: string },
+  count: (bytes: number) => void,
+  keep: Keep,
+  stitch: () => Promise<Response>,
+) {
+  const keyOf = (request: string | Request) => (typeof request === "string" ? request : request.url);
+  return {
+    async match(request: string | Request): Promise<Response | undefined> {
+      const key = keyOf(request);
+      if (!key.startsWith(MODELS)) return undefined;
+      if (key === `${MODELS}${m.repo}/${m.model}`) {
+        try {
+          const hit = await cache.match(key);
+          if (hit) return hit;
+          const stitched = await stitch();
+          await keep(key, stitched.clone());
+          return stitched;
+        } catch (err) {
+          return failingResponse(err);
+        }
+      }
+      return pinnedFileResponse(cache, m, key, count, keep);
+    },
+    async put(request: string | Request, response: Response): Promise<void> {
+      const key = keyOf(request);
+      if (key.startsWith(MODELS)) await putPinnedFile(m, key, response, keep);
+    },
+  };
+}
+
 export interface StitchManifest {
   repo: string;
   parts: string[];

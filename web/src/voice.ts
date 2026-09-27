@@ -12,7 +12,7 @@
 
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-import { KOKORO_VOICES_CACHE, MODELS, cachedPinnedFile, fetchPinnedFile, hfVoiceKey, modelFilePin, sha256Hex, stitchModel, unpinnedVoiceKeys, type FilePins } from "./voice-files";
+import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, pinnedModelCache, preparePinnedFiles, sha256Hex, stitchModel, unpinnedVoiceKeys, type FilePins } from "./voice-files";
 import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
 export interface VoiceManifest extends VoicePins, SizedManifest, FilePins {
@@ -113,33 +113,15 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
   env.localModelPath = MODELS;
   env.useBrowserCache = false;
   env.useCustomCache = true;
-  env.customCache = {
-    async match(request: string | Request): Promise<Response | undefined> {
-      const key = typeof request === "string" ? request : request.url;
-      if (!key.startsWith("/voice/")) return undefined;
-      if (key.endsWith(manifest.model)) {
-        const hit = await cache.match(key);
-        if (hit) return hit;
-        const stitched = await stitchModel(manifest, count);
-        await hold(cache, key, stitched.clone());
-        return stitched;
-      }
-      // Tokenizer and config: checked against their pins (the manifest's
-      // files) on every read from the cache and on fetch, like the voices
-      // (T11). Fetched here so their bytes are counted too. A file the
-      // manifest does not pin is not staged, so there is nothing to serve.
-      if (!key.startsWith(MODELS) || !modelFilePin(manifest, key)) return undefined;
-      const held = await cachedPinnedFile(cache, manifest, key);
-      if (held) return new Response(held);
-      const file = new Response(await fetchPinnedFile(manifest, key, count));
-      await hold(cache, key, file.clone());
-      return file;
-    },
-    async put(request: string | Request, response: Response): Promise<void> {
-      const key = typeof request === "string" ? request : request.url;
-      if (key.startsWith("/voice/")) await hold(cache, key, response);
-    },
-  };
+  // Every /voice/models/ key is answered from pinned bytes and never falls
+  // through to an unchecked fetch (voice-files.ts pinnedModelCache): the
+  // tokenizer and config are checked on every read and on fetch, and put()
+  // keeps only bytes that match their pin (T11).
+  const keepModelFile = (key: string, response: Response) => hold(cache, key, response);
+  env.customCache = pinnedModelCache(cache, manifest, count, keepModelFile, () => stitchModel(manifest, count));
+  // Before the runtime is built: a tokenizer or config that fails its pin,
+  // from the cache and from this origin, aborts the load here.
+  await preparePinnedFiles(cache, manifest, count, keepModelFile);
   const wasm = env.backends.onnx.wasm;
   if (wasm) {
     wasm.wasmPaths = "/ort/";

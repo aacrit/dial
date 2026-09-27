@@ -59,7 +59,8 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
 - **Previews** (`/ship`) deploy the separate Worker `dial-preview`
   (`npm run build && npx wrangler deploy --env preview`), served at
   `https://dial-preview.aacrit.workers.dev` with its own D1 (`dial-preview`)
-  and rate-limit namespaces (7311 to 7313). A preview never touches
+  and rate-limit namespaces (7311 to 7313), small day ceilings (counted in
+  `budget.yaml`'s worst case) and `X-Robots-Tag: noindex`. A preview never touches
   production's D1 or counters (`tests/hardening.test.ts`).
 
 ## Dial's three laws

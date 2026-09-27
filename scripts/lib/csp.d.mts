@@ -4,5 +4,6 @@ export declare const CSP: string;
 export declare const PAGE_CSP_HEADER: string;
 export declare const SECURITY_HEADERS: Record<string, string>;
 export declare function headersFile(): string;
+export declare const PREVIEW_ORIGIN: string;
 export declare function injectCsp(html: string): string;
 export declare function cspViolations(html: string): string[];

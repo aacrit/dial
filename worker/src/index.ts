@@ -23,6 +23,8 @@ export interface Env extends GuardEnv {
   DB: D1Database;
   ASSETS: Fetcher;
   BUILD_TAG?: string;
+  /** "noindex" on the preview Worker only (withRobots). */
+  ROBOTS?: string;
   EVENT_DAILY_CEILING?: string;
   FEEDBACK_DAILY_CEILING?: string;
 }
@@ -200,12 +202,27 @@ export function unavailableLogLine(err: unknown): string {
 
 /** The Worker's whole request path, with every failure answered as a 503 (unavailableResponse). */
 export async function handle(request: Request, env: Env): Promise<Response> {
+  let res: Response;
   try {
-    return await guarded(request, env);
+    res = await guarded(request, env);
   } catch (err) {
     console.error(unavailableLogLine(err));
-    return unavailableResponse();
+    res = unavailableResponse();
   }
+  return withRobots(res, env);
+}
+
+/**
+ * The preview Worker (wrangler.jsonc env.preview sets ROBOTS "noindex")
+ * asks search engines to keep every Worker answer out of their index;
+ * production sets nothing. Its static files get the same header from
+ * dist/_headers' rule for the preview host (scripts/lib/csp.mjs).
+ */
+export function withRobots(res: Response, env: Pick<Env, "ROBOTS">): Response {
+  if (env.ROBOTS !== "noindex") return res;
+  const headers = new Headers(res.headers);
+  headers.set("X-Robots-Tag", "noindex");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
 /** Guards, then the route, then headers. */
@@ -242,6 +259,11 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method === "POST" && url.pathname === "/e") return handleEvent(request, env);
   if (request.method === "POST" && url.pathname === "/feedback") return handleFeedback(request, env);
   if (request.method === "GET" && url.pathname === "/healthz") return handleHealthz(env);
+  // A monitor's HEAD gets the same status and headers, and no body.
+  if (request.method === "HEAD" && url.pathname === "/healthz") {
+    const res = await handleHealthz(env);
+    return new Response(null, { status: res.status, headers: res.headers });
+  }
 
   // Not a Worker route: whatever Workers Static Assets has at this path.
   // With run_worker_first limited to the Worker's own routes, this is

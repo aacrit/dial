@@ -65,8 +65,16 @@ export const SECURITY_HEADERS = {
  */
 export function headersFile() {
   const lines = ["/*", ...Object.entries(SECURITY_HEADERS).map(([k, v]) => `  ${k}: ${v}`), `  Content-Security-Policy: ${PAGE_CSP_HEADER}`];
+  // The preview Worker serves the same dist/ at its own host; a rule
+  // matched on that host keeps its static files out of search indexes,
+  // and never matches production's (the Worker's own answers get the
+  // header from worker/src/index.ts withRobots). T11 review.
+  lines.push(`${PREVIEW_ORIGIN}/*`, "  X-Robots-Tag: noindex");
   return lines.join("\n") + "\n";
 }
+
+/** Where the preview Worker (wrangler.jsonc env.preview, dial-preview) is served. */
+export const PREVIEW_ORIGIN = "https://dial-preview.aacrit.workers.dev";
 
 const META = `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`;
 

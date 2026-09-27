@@ -16,7 +16,7 @@ const MAX_EXPIRY_DAYS = 14;
 
 export function checkWorkflowText(filename, text) {
   const violations = [];
-  const lines = text.split("\n");
+  const lines = text.split(/\r?\n/);
   lines.forEach((line, i) => {
     for (const pattern of FORBIDDEN_WORKFLOW_PATTERNS) {
       if (pattern.test(line)) {
@@ -34,8 +34,8 @@ export function checkWorkflowText(filename, text) {
  */
 export function checkPinnedActions(filename, text) {
   const violations = [];
-  text.split("\n").forEach((line, i) => {
-    const m = /^\s*-?\s*uses:\s*(\S+)(.*)$/.exec(line);
+  text.split(/\r?\n/).forEach((line, i) => {
+    const m =/^\s*-?\s*uses:\s*(\S+)(.*)$/.exec(line);
     if (!m || m[1].startsWith("./")) return;
     if (!/@[0-9a-f]{40}$/.test(m[1]) || !/^\s+#\s*v\d/.test(m[2])) {
       violations.push(`${filename}:${i + 1}: action not pinned to a full commit SHA with a "# vX.Y.Z" comment - "${line.trim()}"`);
@@ -106,7 +106,7 @@ function main() {
 
   for (const file of listTestFiles()) {
     const text = readFileSync(file, "utf8");
-    text.split("\n").forEach((line, i) => {
+    text.split(/\r?\n/).forEach((line, i) => {
       const problem = checkSkippedTestLine(line);
       if (problem) violations.push(`${path.relative(repoRoot, file)}:${i + 1}: ${problem}`);
     });
