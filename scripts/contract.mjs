@@ -237,10 +237,21 @@ async function runCheck(check, baseUrl) {
   }
 }
 
+/**
+ * Where a burst goes. On a host under the contract's `burst_zone` (the
+ * production domain), the zone's WAF blocks a burst before the Worker's own
+ * limit can answer, so it goes to `burst_host`, the same deployment's
+ * workers.dev address. Any other base (a preview, localhost) is used as is.
+ */
+export function burstBase(contract, baseUrl) {
+  if (contract.burst_zone && contract.burst_host && onHost(baseUrl, contract.burst_zone)) return contract.burst_host;
+  return baseUrl;
+}
+
 export async function runContract(contract, baseUrl) {
   const results = [];
   for (const check of contract.checks) {
-    const r = await runCheck(check, baseUrl);
+    const r = await runCheck(check, check.type === "burst" ? burstBase(contract, baseUrl) : baseUrl);
     // A check that waits on someone (a zone setting, a Board ask) says who, in its failure.
     if (!r.pass && check.failure_note) r.detail = `${r.detail ?? "failed"}. ${check.failure_note}`;
     results.push(r);
