@@ -22,6 +22,7 @@ import {
 } from "../web/src/feedback-copy";
 import { bookplateHtml, directionSentence } from "../web/src/render";
 import { METER_MAKING, METER_WARMING } from "../web/src/status-copy";
+import { retryDelayMs, sendEvent, setCounts, type SendDeps } from "../web/src/telemetry";
 import { partPath, readInto, stitchModel } from "../web/src/voice-files";
 import { MAX_FEEDBACK_TEXT_BYTES } from "../worker/src/config";
 import { handleFeedback, type Env } from "../worker/src/index";
@@ -42,6 +43,10 @@ describe("the feedback form checks on the page, and every refusal says what to d
     // 1,500 characters of Greek are 3,000 bytes, and fit; 2,000 of them (the textarea's maxlength) are 4,000 and fit; 1,400 emoji are 5,600 and do not.
     expect(feedbackProblem("α".repeat(2000))).toBeNull();
     expect(feedbackProblem("\u{1F600}".repeat(1400))).toBe(FEEDBACK_TOO_LONG);
+    // The case the audit found: CJK text within the textarea's 2,000 characters is up to 6,000 bytes.
+    const cjk = "漢".repeat(1500);
+    expect(cjk.length).toBeLessThanOrEqual(Number(/<textarea id="feedback-text"[^>]*maxlength="(\d+)"/.exec(html)![1]));
+    expect(feedbackProblem(cjk)).toBe(FEEDBACK_TOO_LONG);
   });
 
   it("what the page lets through, the Worker accepts; what it stops, the Worker would refuse", async () => {
@@ -79,6 +84,68 @@ describe("the feedback form checks on the page, and every refusal says what to d
 
   it("no em dash in any of the form's words", () => {
     for (const line of [FEEDBACK_EMPTY, FEEDBACK_TOO_LONG, FEEDBACK_DAY_FULL, FEEDBACK_TOO_MANY, FEEDBACK_FAILED]) expect(line).not.toContain("—");
+  });
+});
+
+describe("a count refused on a shared network is tried once more, after Retry-After (CoS decision K)", () => {
+  const setup = (statuses: number[], retryAfter: string | null = "60") => {
+    const store = { data: {} as Record<string, string>, getItem(k: string) { return this.data[k] ?? null; }, setItem(k: string, v: string) { this.data[k] = v; } };
+    const queued: { ms: number; fn: () => void }[] = [];
+    const fetch = vi.fn(async () => new Response(null, { status: statuses.shift() ?? 202, headers: retryAfter ? { "retry-after": retryAfter } : {} }));
+    const failed = vi.fn();
+    const d: SendDeps = { fetch, store, note: () => ({ t: 1, path: "/e" }) as never, failed, later: (ms, fn) => void queued.push({ ms, fn }) };
+    return { d, fetch, failed, queued, store };
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it("one retry per count, after the answer's Retry-After; a second refusal is not retried", async () => {
+    const s = setup([429, 429]);
+    sendEvent("chapter_rendered", s.d);
+    await settle();
+    expect(s.queued).toHaveLength(1);
+    expect(s.queued[0]!.ms).toBe(60_000);
+    expect(s.failed).toHaveBeenCalledTimes(1);
+    s.queued.shift()!.fn();
+    await settle();
+    expect(s.fetch).toHaveBeenCalledTimes(2);
+    expect(s.queued).toHaveLength(0);
+    expect(s.failed).toHaveBeenCalledTimes(2);
+  });
+
+  it("a retry that lands is counted once; an accepted count is never retried; the switch is read again before the retry", async () => {
+    const ok = setup([429, 202]);
+    sendEvent("page_view", ok.d);
+    await settle();
+    ok.queued.shift()!.fn();
+    await settle();
+    expect(ok.fetch).toHaveBeenCalledTimes(2);
+    expect(ok.queued).toHaveLength(0);
+    const accepted = setup([202]);
+    sendEvent("page_view", accepted.d);
+    await settle();
+    expect(accepted.queued).toHaveLength(0);
+    const off = setup([429]);
+    sendEvent("work_opened", off.d);
+    await settle();
+    setCounts(false, off.store);
+    off.queued.shift()!.fn();
+    await settle();
+    expect(off.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits the Retry-After it was given, within 1 to 120 s, else a minute", () => {
+    expect(retryDelayMs("10")).toBe(10_000);
+    expect(retryDelayMs("60")).toBe(60_000);
+    expect(retryDelayMs("3600")).toBe(120_000);
+    expect(retryDelayMs(null)).toBe(60_000);
+    expect(retryDelayMs("soon")).toBe(60_000);
+    expect(retryDelayMs("0")).toBe(60_000);
+  });
+
+  it("the charter says counts may undercount on shared networks, and how a spike is read", () => {
+    expect(read("CHARTER.md")).toContain(
+      "Counts are rate limited per network; large shared networks may undercount; a spike of counts at the daily ceiling is treated as suspect (see the counter's ceiling flag).",
+    );
   });
 });
 

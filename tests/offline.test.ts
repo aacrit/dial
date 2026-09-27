@@ -131,10 +131,14 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) expect(["request", 'path, { cache: "reload" }'], c).toContain(c);
     // The shell's paths come from the build's list; the page's request only after route() said this origin.
-    expect(sw).toMatch(/for \(const path of __SHELL__\)/);
+    expect(sw).toContain('const BUILD: ShellBuild = { tag: __BUILD_TAG__, shell: __SHELL__, get: (path) => fetch(path, { cache: "reload" }) };');
     // precache fetches only the lists the build compiled in.
     const precacheArgs = [...sw.matchAll(/\bprecache\(([^)]*)\)/g)].map((m) => m[1]!.trim());
-    for (const a of precacheArgs) expect(["paths: readonly string[]", "saved ? __SHELL__ : __CORE_SHELL__", "__SHELL__"], a).toContain(a);
+    for (const a of precacheArgs) expect(["saved ? __SHELL__ : __CORE_SHELL__", "__SHELL__"], a).toContain(a);
+    // The shell-cache module fetches only through the build's own `get`, never by itself.
+    const shellCache = read("web/src/offline/shell-cache.ts");
+    expect(shellCache).not.toMatch(/\bfetch\(/);
+    expect(shellCache).toContain("const res = await b.get(path);");
     expect(sw).toMatch(/const r = route\(new URL\(request\.url\), request\.method, sw\.location\.origin, request\.mode\);\s*if \(r === "ignore"\) return;/);
     expect(sw).not.toMatch(/sendBeacon|WebSocket|EventSource|XMLHttpRequest|method:\s*"POST"/);
   });
@@ -180,12 +184,13 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
       "/privacy",
     ]);
     const sw = read("web/src/sw.ts");
-    expect(sw).toMatch(/anySaved\(\)\s*\.then\(\(saved\) => precache\(saved \? __SHELL__ : __CORE_SHELL__\)\)/);
+    const shellCache = read("web/src/offline/shell-cache.ts");
+    expect(sw).toMatch(/anySaved\(caches\)\s*\.then\(\(saved\) => precache\(saved \? __SHELL__ : __CORE_SHELL__\)\)/);
     expect(sw).toContain('if (data?.type === "ensure-shell") event.waitUntil(precache(__SHELL__)');
     // "Saved" still needs the whole shell.
-    expect(sw).toMatch(/for \(const path of __SHELL__\) if \(!\(await cache\.match\(path\)\)\) return false;/);
+    expect(shellCache).toMatch(/for \(const path of b\.shell\) if \(!\(await cache\.match\(path\)\)\) return false;/);
     // Looking for a saved work opens no cache that does not exist.
-    expect(sw).toMatch(/if \(!\(await caches\.has\(SAVED_CACHE\)\)\) return false;/);
+    expect(shellCache).toMatch(/if \(!\(await caches\.has\(SAVED_CACHE\)\)\) return false;/);
     expect(read("scripts/build.mjs")).toContain("__CORE_SHELL__: JSON.stringify(coreShellPaths(shell))");
   });
 
@@ -195,7 +200,8 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(sw).toMatch(/precache\(saved \? __SHELL__ : __CORE_SHELL__\)\)\s*\.then\(\(ok\) => \{\s*if \(!ok\) throw/);
     // A fetched home page from another build is refused.
     // Every page kept (not only "/") must be this build's.
-    expect(sw).toContain('if (isPage(copy.headers.get("content-type")) && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw');
+    const shellCache = read("web/src/offline/shell-cache.ts");
+    expect(shellCache).toContain('if (isPage(copy.headers.get("content-type")) && !isThisBuild(await copy.clone().text(), b.tag)) throw');
     expect(isPage("text/html; charset=utf-8")).toBe(true);
     expect(isPage("application/javascript")).toBe(false);
     expect(isPage(null)).toBe(false);
@@ -203,7 +209,7 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(isThisBuild('<meta name="build" content="def5678" />', "abc1234")).toBe(false);
     expect(isThisBuild("<p>no meta</p>", "abc1234")).toBe(false);
     // "Saved" needs every shell path, checked by the helper for this page's build.
-    expect(sw).toMatch(/for \(const path of __SHELL__\) if \(!\(await cache\.match\(path\)\)\) return false;/);
+    expect(sw).toContain("const shellComplete = () => shellCompleteIn(caches, BUILD);");
     const store = read("web/src/offline/store.ts");
     expect(store).toContain("const helper = \"serviceWorker\" in navigator ? navigator.serviceWorker.controller : null;");
     expect(store).toContain("resolve({ ok: e.data?.ok === true, key: typeof e.data?.key === \"string\" ? e.data.key : null });");

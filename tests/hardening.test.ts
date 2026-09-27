@@ -7,8 +7,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
-import { describe, expect, it } from "vitest";
-import { handle, handleEvent, handleFeedback, type Env } from "../worker/src/index";
+import { describe, expect, it, vi } from "vitest";
+import { handle, handleEvent, handleFeedback, unavailableLogLine, type Env } from "../worker/src/index";
 import { COUNT_UNDER_CEILING_SQL, incrementUnderCeiling } from "../worker/src/events";
 import {
   ACCOUNT_D1_WRITES_PER_DAY,
@@ -16,7 +16,7 @@ import {
   RATE_LIMITER_ERROR_DAILY_CEILING,
   worstCaseDailyWrites,
 } from "../worker/src/config";
-import { LIMITER_LIMITS, LIMITER_PERIOD_SECONDS, clientKey, limiterFor, rateLimitedMessage, type RateLimiter } from "../worker/src/guard";
+import { LIMITER_LIMITS, LIMITER_PERIOD_SECONDS, LIMITER_V6_PREFIX, clientKey, limiterFor, rateLimitedMessage, type RateLimiter } from "../worker/src/guard";
 import { API_CSP } from "../worker/src/headers";
 import { PAGE_CSP_HEADER, SECURITY_HEADERS, headersFile } from "../scripts/lib/csp.mjs";
 import { createSqliteD1 } from "./helpers/sqlite-d1";
@@ -304,10 +304,25 @@ describe("rate-limit keys: IPv4 whole, IPv6 by its /64", () => {
     expect(clientKey(null)).toBe("no-ip");
   });
 
-  it("the Worker hands the binding the /64, never the full IPv6 address", async () => {
-    const RL_EVENTS = fakeLimiter(5);
-    await handle(post("/e", { name: "page_view" }, { "cf-connecting-ip": "2001:db8:1:2:3:4:5:6" }), mockEnv({ RL_EVENTS }));
-    expect(RL_EVENTS.keys).toEqual(["2001:db8:1:2::/64"]);
+  it("the Worker hands each binding the network, never the full IPv6 address: /56 for the write paths, /64 for the rest (CoS decision J)", async () => {
+    const ip = { "cf-connecting-ip": "2001:db8:1:2a3b:3:4:5:6" };
+    const limiters = { RL_API: fakeLimiter(5), RL_EVENTS: fakeLimiter(5), RL_FEEDBACK: fakeLimiter(5) };
+    const env = mockEnv(limiters);
+    await handle(post("/e", { name: "page_view" }, ip), env);
+    await handle(post("/feedback", { text: "hi" }, ip), env);
+    await handle(get("/healthz", ip), env);
+    expect(limiters.RL_EVENTS.keys).toEqual(["2001:db8:1:2a00::/56"]);
+    expect(limiters.RL_FEEDBACK.keys).toEqual(["2001:db8:1:2a00::/56"]);
+    expect(limiters.RL_API.keys).toEqual(["2001:db8:1:2a3b::/64"]);
+    expect(LIMITER_V6_PREFIX).toEqual({ RL_API: 64, RL_EVENTS: 56, RL_FEEDBACK: 56 });
+  });
+
+  it("a /56 key joins every /64 in the /56, and only those; IPv4 stays the whole address", () => {
+    expect(clientKey("2001:db8:1:2a00::1", 56)).toBe(clientKey("2001:db8:1:2aff:ffff::1", 56));
+    expect(clientKey("2001:db8:1:2b00::1", 56)).not.toBe(clientKey("2001:db8:1:2a00::1", 56));
+    expect(clientKey("2001:db8:1:ff::1", 56)).toBe("2001:db8:1:0::/56");
+    expect(clientKey("203.0.113.7", 56)).toBe("203.0.113.7");
+    expect(clientKey("::ffff:203.0.113.7", 56)).toBe("203.0.113.7");
   });
 });
 
@@ -370,17 +385,39 @@ describe("security headers", () => {
     expect(headersFile()).toContain("  Permissions-Policy: camera=(), microphone=(), geolocation=(), usb=()\n");
   });
 
-  it("a failure inside a route (D1 past its read cap) is a 503 in JSON with the headers, never an error page or a stack trace", async () => {
-    for (const req of [post("/e", { name: "page_view" }), post("/feedback", { text: "hello", page: "/" })]) {
-      const res = await handle(req, mockEnv({ DB: brokenDb() }));
-      expect(res.status).toBe(503);
-      expect(res.headers.get("content-type")).toBe("application/json");
-      expect(res.headers.get("retry-after")).toBe("60");
-      expect(res.headers.get("content-security-policy")).toBe(API_CSP);
-      const text = await res.text();
-      expect(JSON.parse(text)).toEqual({ error: "unavailable", message: "Dial could not answer just now. Try again in a minute." });
-      expect(text).not.toMatch(/D1_ERROR|secret|\.ts:|at /);
+  it("the Worker's main module exports only functions and its handler object, or workerd will not start", async () => {
+    const mod = (await import("../worker/src/index")) as Record<string, unknown>;
+    for (const [name, value] of Object.entries(mod)) {
+      if (name === "default") expect(typeof (value as { fetch?: unknown }).fetch, name).toBe("function");
+      else expect(typeof value, name).toBe("function");
     }
+  });
+
+  it("a failure inside a route (D1 past its read cap) is a 503 in JSON with the headers, never an error page or a stack trace, and logs one fixed line with the error's name only", async () => {
+    const logged: unknown[][] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => void logged.push(args));
+    try {
+      for (const req of [post("/e", { name: "page_view" }), post("/feedback", { text: "my email is a@b.example", page: "/" })]) {
+        const res = await handle(req, mockEnv({ DB: brokenDb() }));
+        expect(res.status).toBe(503);
+        expect(res.headers.get("content-type")).toBe("application/json");
+        // No retry time is promised (CoS decision L).
+        expect(res.headers.get("retry-after")).toBeNull();
+        expect(res.headers.get("content-security-policy")).toBe(API_CSP);
+        const text = await res.text();
+        expect(JSON.parse(text)).toEqual({ error: "unavailable", message: "Dial's counter is resting. Try again later." });
+        expect(text).not.toMatch(/D1_ERROR|secret|\.ts:|at /);
+      }
+    } finally {
+      spy.mockRestore();
+    }
+    // One line per failure: fixed words and the error's name, never its message, the body or an address.
+    expect(logged).toEqual([["dial worker: unavailable (Error)"], ["dial worker: unavailable (Error)"]]);
+    expect(JSON.stringify(logged)).not.toMatch(/D1_ERROR|secret|a@b|daily read/);
+    const named = Object.assign(new Error("x"), { name: "D1_ERROR" });
+    expect(unavailableLogLine(named)).toBe("dial worker: unavailable (D1_ERROR)");
+    expect(unavailableLogLine(Object.assign(new Error("x"), { name: "evil name with spaces 203.0.113.9" }))).toBe("dial worker: unavailable (unknown)");
+    expect(unavailableLogLine("a string")).toBe("dial worker: unavailable (unknown)");
     // The assets binding throwing on a fallthrough path is answered the same way.
     const assetsDown = mockEnv({ ASSETS: { fetch: async () => { throw new Error("assets down"); } } as unknown as Fetcher });
     expect((await handle(get("/no-such-path"), assetsDown)).status).toBe(503);

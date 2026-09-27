@@ -83,20 +83,29 @@ function ipv6Hextets(ip: string): number[] | null {
 }
 
 /**
- * The rate-limit key for a client address: an IPv4 address as is; an IPv6
- * address by its /64 network (the first four hextets), since one
- * subscriber usually holds a whole /64 and could otherwise rotate through
- * it; an IPv4-mapped IPv6 address (::ffff:a.b.c.d) as the IPv4 address it
- * is. Anything unparseable is used as given.
+ * How much of an IPv6 address keys each limit. One subscriber usually holds
+ * a whole /64 and often a /56 (the common home delegation), and could
+ * otherwise rotate through it; the write paths, where rotating would buy
+ * counts or messages, key by /56 (CoS decision J), the rest by /64.
  */
-export function clientKey(ip: string | null): string {
+export const LIMITER_V6_PREFIX: Record<LimiterName, 56 | 64> = { RL_API: 64, RL_EVENTS: 56, RL_FEEDBACK: 56 };
+
+/**
+ * The rate-limit key for a client address: an IPv4 address as is (whole);
+ * an IPv6 address by its network, /64 (the first four hextets) or /56 (the
+ * first three and a half); an IPv4-mapped IPv6 address (::ffff:a.b.c.d) as
+ * the IPv4 address it is. Anything unparseable is used as given.
+ */
+export function clientKey(ip: string | null, v6Prefix: 56 | 64 = 64): string {
   if (!ip) return "no-ip";
   const h = ipv6Hextets(ip);
   if (!h) return ip.trim();
   if (h.slice(0, 5).every((x) => x === 0) && h[5] === 0xffff) {
     return [h[6] >> 8, h[6] & 255, h[7] >> 8, h[7] & 255].join(".");
   }
-  return `${h.slice(0, 4).map((x) => x.toString(16)).join(":")}::/64`;
+  const net = h.slice(0, 4);
+  if (v6Prefix === 56) net[3] = net[3]! & 0xff00;
+  return `${net.map((x) => x.toString(16)).join(":")}::/${v6Prefix}`;
 }
 
 /**
@@ -116,7 +125,7 @@ export async function withinRateLimit(
   const limiter = env[name];
   if (!limiter) return true;
   // Derived here and handed straight to the binding; never stored or logged.
-  const key = clientKey(request.headers.get("cf-connecting-ip"));
+  const key = clientKey(request.headers.get("cf-connecting-ip"), LIMITER_V6_PREFIX[name]);
   try {
     const { success } = await limiter.limit({ key });
     return success;

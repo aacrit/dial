@@ -11,7 +11,8 @@ import { CAST_ENGINE_VERSION } from "./engine/cast-version";
 import { REQUESTS_ASK, REQUESTS_MESSAGE, watchWorkerRequests } from "./worker-requests";
 import { answerFor, claim, groupByClient, prune, remember, settle, type HelperEntry, type PendingFetch } from "./offline/attribution";
 import type { RawEntry } from "./request-log";
-import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
+import { OFFLINE_HEADER, SAVED_CACHE, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey } from "./offline/routes";
+import { activateShell, anySaved, precache as precacheShell, shellComplete as shellCompleteIn, shellMatch, type ShellBuild } from "./offline/shell-cache";
 
 declare const __BUILD_TAG__: string;
 declare const __SHELL__: string[];
@@ -48,58 +49,20 @@ interface Scope {
 const sw = self as unknown as Scope;
 const SHELL = shellCacheName(__BUILD_TAG__);
 
-/** A cacheable copy: a redirected response is stored as its final page, since a page cannot be answered with a redirect it followed. */
-async function clean(res: Response): Promise<Response> {
-  if (!res.redirected) return res;
-  return new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers });
-}
-
-/**
- * Keeps every path in `paths` not yet kept. True only when all of them are
- * in place. A page is kept only if it is this build's (its <meta name="build">
- * is this helper's tag), so a shell never mixes two releases.
- */
-async function precache(paths: readonly string[]): Promise<boolean> {
-  const cache = await caches.open(SHELL);
-  let ok = true;
-  for (const path of paths) {
-    if (await cache.match(path)) continue;
-    try {
-      const res = await fetch(path, { cache: "reload" });
-      if (!res.ok) throw new Error(`${path}: ${res.status}`);
-      const copy = await clean(res);
-      // Every page kept must be this build's, never another release's.
-      if (isPage(copy.headers.get("content-type")) && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw new Error(`${path}: another build`);
-      await cache.put(path, copy);
-    } catch {
-      ok = false;
-    }
-  }
-  return ok;
-}
-
-/** Whether every shell path is kept. */
-async function shellComplete(): Promise<boolean> {
-  const cache = await caches.open(SHELL);
-  for (const path of __SHELL__) if (!(await cache.match(path))) return false;
-  return true;
-}
-
-/** Whether a work is saved on this device (its text is in the saved cache). Opens no cache that does not exist. */
-async function anySaved(): Promise<boolean> {
-  if (!(await caches.has(SAVED_CACHE))) return false;
-  const saved = await caches.open(SAVED_CACHE);
-  return (await saved.keys()).some((r) => new URL(r.url).pathname.startsWith("/works/"));
-}
+/** This build's shell: its tag, its paths, and how a path is fetched (this origin only, past the HTTP cache). */
+const BUILD: ShellBuild = { tag: __BUILD_TAG__, shell: __SHELL__, get: (path) => fetch(path, { cache: "reload" }) };
+const precache = (paths: readonly string[]) => precacheShell(caches, BUILD, paths);
+const shellComplete = () => shellCompleteIn(caches, BUILD);
 
 // An incomplete shell fails the install: the browser keeps the previous
-// helper (and its complete shell) serving, and tries this one again later.
-// A first visit keeps only the core shell (the pages open offline); the
-// rest waits for a save (ensure-shell). Where a work is already saved, the
-// whole shell is kept now, so an update never leaves a saved work unplayable.
+// helper (and its shell) serving, and tries this one again later. A first
+// visit keeps only the core shell (the pages open offline); the rest waits
+// for a save (ensure-shell, which the page sends to this helper while it
+// waits as well as to the one in control). Where a work is already saved,
+// the whole shell is kept now.
 sw.addEventListener("install", (event) => {
   event.waitUntil(
-    anySaved()
+    anySaved(caches)
       .then((saved) => precache(saved ? __SHELL__ : __CORE_SHELL__))
       .then((ok) => {
         if (!ok) throw new Error("offline helper: the shell is incomplete");
@@ -107,10 +70,13 @@ sw.addEventListener("install", (event) => {
   );
 });
 
+// A work may have been saved through the previous helper after this one
+// installed its core: activateShell completes this shell first, and keeps
+// the previous shells when it cannot (offline), so a saved work still plays.
 sw.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
-      for (const stale of staleShellCaches(await caches.keys(), __BUILD_TAG__)) await caches.delete(stale);
+      await activateShell(caches, BUILD);
       await sw.clients.claim();
     })(),
   );
@@ -128,8 +94,8 @@ sw.addEventListener("message", (event) => {
 });
 
 async function fromShell(request: Request, client: string): Promise<Response> {
-  const cache = await caches.open(SHELL);
-  const hit = await cache.match(request, { ignoreSearch: true });
+  // This build's shell, else an older build's still kept (activateShell).
+  const hit = await shellMatch(caches, __BUILD_TAG__, request);
   if (hit) return hit;
   forPage(request, client);
   return fetch(request).finally(() => settled(request, client));

@@ -194,7 +194,11 @@ export interface ShellState {
 
 async function askHelper(type: "ensure-shell" | "shell-status", timeoutMs: number): Promise<ShellState> {
   const helper = "serviceWorker" in navigator ? navigator.serviceWorker.controller : null;
-  if (!helper) return { ok: false, key: null };
+  return ask(helper, type, timeoutMs);
+}
+
+function ask(helper: ServiceWorker | null | undefined, type: "ensure-shell" | "shell-status", timeoutMs: number): Promise<ShellState> {
+  if (!helper) return Promise.resolve({ ok: false, key: null });
   return new Promise<ShellState>((resolve) => {
     const ch = new MessageChannel();
     const timer = setTimeout(() => resolve({ ok: false, key: null }), timeoutMs);
@@ -206,9 +210,27 @@ async function askHelper(type: "ensure-shell" | "shell-status", timeoutMs: numbe
   });
 }
 
-/** Asks the offline helper to keep every file of its app shell; true once it has. */
+/**
+ * Asks the offline helper to keep every file of its app shell; true once it
+ * has. A newer helper waiting to take over (a release while this tab is
+ * open) is asked too, so the shell it serves once it activates is whole for
+ * the work being saved now; its answer does not decide the save, since it
+ * also completes its shell when it activates (offline/shell-cache.ts).
+ */
 export async function ensureShell(timeoutMs = 30_000): Promise<boolean> {
-  return (await askHelper("ensure-shell", timeoutMs)).ok;
+  const [own] = await Promise.all([askHelper("ensure-shell", timeoutMs), ask(await waitingHelper(), "ensure-shell", timeoutMs)]);
+  return own.ok;
+}
+
+/** A newer helper installed and waiting to take over, if there is one. */
+async function waitingHelper(): Promise<ServiceWorker | null> {
+  try {
+    const container = "serviceWorker" in navigator ? navigator.serviceWorker : undefined;
+    if (typeof container?.getRegistration !== "function") return null;
+    return (await container.getRegistration())?.waiting ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether every file of the serving helper's shell is kept (the helper checks each one), and the helper's key. */

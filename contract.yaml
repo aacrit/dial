@@ -360,6 +360,18 @@ checks:
     header: permissions-policy
     expect: "camera=(), microphone=(), geolocation=(), usb=()"
 
+  # http:// answers 301 to https:// (CoS decision I). The redirect is the
+  # zone's "Always Use HTTPS" setting, not the Worker's, so this fails until
+  # the founder switches it on; G3 requires it.
+  - name: http:// redirects to https:// (deployed only)
+    type: redirect
+    path: /
+    scheme: http
+    expect: 301
+    location_starts_with: "https://"
+    requires: deployed
+    failure_note: "Waiting on the founder: switch on Always Use HTTPS for the voidvision.org zone (the open Board ask). G3 requires this check."
+
   - name: healthz allows no camera, microphone, location or USB
     type: header
     path: /healthz

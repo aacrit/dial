@@ -58,6 +58,11 @@ beforeAll(async () => {
       });
       return;
     }
+    if (req.url === "/moved") {
+      res.writeHead(301, { location: "https://dial.voidvision.org/moved" });
+      res.end();
+      return;
+    }
     if (req.url === "/ua") {
       seenAgents.push(String(req.headers["user-agent"]));
       res.writeHead(200, { "content-type": "text/plain" });
@@ -241,6 +246,26 @@ describe("verify-production checks the deployed release's contract, not main's",
     expect(wf.indexOf("gh label create prod-red")).toBeGreaterThan(0);
     expect(wf.indexOf("gh label create prod-red")).toBeLessThan(wf.indexOf("gh issue create"));
     expect(wf).not.toMatch(/continue-on-error|\|\|\s*true/);
+  });
+});
+
+describe("http:// must redirect to https:// (CoS decision I)", () => {
+  it("a redirect check passes on a 301 to https, fails on a 200, and a failing check names what it waits on", async () => {
+    const check = { name: "r", type: "redirect", path: "/moved", scheme: "http", expect: 301, location_starts_with: "https://", failure_note: "Waiting on the founder." };
+    const [ok] = await runContract({ checks: [check] }, baseUrl);
+    expect(ok.pass).toBe(true);
+    const [served] = await runContract({ checks: [{ ...check, path: "/" }] }, baseUrl);
+    expect(served.pass).toBe(false);
+    expect(served.detail).toMatch(/answered 200, expected 301 to https:\/\/\. Waiting on the founder\.$/);
+  });
+
+  it("contract.yaml checks it on the deployed site only, over http, and names the Board ask when it fails", () => {
+    const file = fileURLToPath(new URL("../contract.yaml", import.meta.url));
+    const c = loadContract(path.resolve(file)).checks.find((x: { type: string }) => x.type === "redirect");
+    expect(c).toMatchObject({ path: "/", scheme: "http", expect: 301, location_starts_with: "https://", requires: "deployed" });
+    expect(c.failure_note).toMatch(/Always Use HTTPS/);
+    expect(c.failure_note).toMatch(/Board ask/);
+    expect(c.failure_note).toMatch(/G3/);
   });
 });
 

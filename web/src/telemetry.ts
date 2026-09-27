@@ -72,14 +72,34 @@ export interface SendDeps {
   store: SettingStore | null;
   /** Records the send in the Seal's log before it posts. */
   note: (path: string, bytes: number, event?: string) => SendToken | undefined;
-  /** Marks that send "not delivered" when the network failed. */
+  /** Marks that send "not delivered": the network failed, or the count was refused as too many. */
   failed: (token: SendToken) => void;
+  /** Runs `fn` after `ms` (a timer: it dies with the tab, so a queued retry is dropped when the tab closes). */
+  later?: (ms: number, fn: () => void) => void;
 }
 
-const defaults = (): SendDeps => ({ fetch: globalThis.fetch.bind(globalThis), store: localStore(), note: noteSend, failed: noteSendFailed });
+const defaults = (): SendDeps => ({
+  fetch: globalThis.fetch.bind(globalThis),
+  store: localStore(),
+  note: noteSend,
+  failed: noteSendFailed,
+  later: (ms, fn) => void setTimeout(fn, ms),
+});
 
-/** Posts one count, unless counts are off. */
-export function sendEvent(name: string, deps: SendDeps = defaults()): void {
+/** The wait before retrying a refused count: the answer's Retry-After in seconds (1 to 120), else a minute. */
+export function retryDelayMs(retryAfter: string | null | undefined): number {
+  const s = Number(retryAfter);
+  return Number.isFinite(s) && s >= 1 ? Math.min(s, 120) * 1000 : 60_000;
+}
+
+/**
+ * Posts one count, unless counts are off. On a shared network the per-
+ * network limit may refuse it (429): that one count is tried once more,
+ * after the answer's Retry-After, and never again (CoS decision K). The
+ * retry is a send of its own, checked against the switch again, and the
+ * refused one is marked not delivered in the Seal's log.
+ */
+export function sendEvent(name: string, deps: SendDeps = defaults(), retries = 1): void {
   if (!countsOn(deps.store)) return;
   const body = JSON.stringify({ name });
   const token = deps.note("/e", new TextEncoder().encode(body).length, name);
@@ -89,6 +109,12 @@ export function sendEvent(name: string, deps: SendDeps = defaults()): void {
       headers: { "content-type": "application/json" },
       body,
       keepalive: true,
+    })
+    .then((res) => {
+      const r = res as { status?: number; headers?: { get(name: string): string | null } } | undefined;
+      if (r?.status !== 429) return;
+      if (token) deps.failed(token);
+      if (retries > 0 && deps.later) deps.later(retryDelayMs(r.headers?.get("retry-after")), () => sendEvent(name, deps, retries - 1));
     })
     .catch(() => {
       // Best-effort telemetry: a failed send is not the user's problem. The

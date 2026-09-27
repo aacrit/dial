@@ -145,6 +145,18 @@ async function runCheck(check, baseUrl) {
       return { label, pass: matched, detail: matched ? undefined : `no ${want} in ${check.count} requests (got ${[...new Set(statuses)].join(", ")})` };
     }
 
+    if (check.type === "redirect") {
+      // The same host and path over `scheme` (http), not followed: it must
+      // answer `expect` (301) with a Location starting `location_starts_with`.
+      const from = new URL(target);
+      if (check.scheme) from.protocol = `${check.scheme}:`;
+      const r = await contractFetch(from, { redirect: "manual" });
+      await r.arrayBuffer();
+      const location = r.headers.get("location") ?? "";
+      const pass = r.status === check.expect && (check.location_starts_with === undefined || location.startsWith(check.location_starts_with));
+      return { label, pass, detail: pass ? undefined : `${from} answered ${r.status}${location ? ` to ${location}` : ""}, expected ${check.expect} to ${check.location_starts_with ?? "anywhere"}` };
+    }
+
     const response = await contractFetch(target);
 
     switch (check.type) {
@@ -211,7 +223,10 @@ async function runCheck(check, baseUrl) {
 export async function runContract(contract, baseUrl) {
   const results = [];
   for (const check of contract.checks) {
-    results.push(await runCheck(check, baseUrl));
+    const r = await runCheck(check, baseUrl);
+    // A check that waits on someone (a zone setting, a Board ask) says who, in its failure.
+    if (!r.pass && check.failure_note) r.detail = `${r.detail ?? "failed"}. ${check.failure_note}`;
+    results.push(r);
   }
   return results;
 }
