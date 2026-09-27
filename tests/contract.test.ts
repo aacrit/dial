@@ -374,7 +374,7 @@ describe("http:// must redirect to https:// (CoS decision I)", () => {
       answer = new Response("page", { status: 200 });
       const [bad] = await runContract({ checks: [yamlCheck()] }, "https://dial.voidvision.org");
       expect(bad.pass).toBe(false);
-      expect(bad.detail).toMatch(/answered 200, expected 301 to https:\/\/\. Waiting on the founder/);
+      expect(bad.detail).toMatch(/answered 200, expected 301 to https:\/\/\. The Worker's http:\/\/ redirect \(T12/);
     } finally {
       globalThis.fetch = realFetch;
     }
@@ -383,12 +383,19 @@ describe("http:// must redirect to https:// (CoS decision I)", () => {
     expect(onHost("https://notvoidvision.org", "voidvision.org")).toBe(false);
   });
 
-  it("contract.yaml limits it to the production zone's host, over http, and names the Board ask when it fails", () => {
+  it("contract.yaml limits it to the production zone's host, over http, and names what answers it when it fails (T12)", () => {
     const c = yamlCheck();
     expect(c).toMatchObject({ path: "/", scheme: "http", expect: 301, location_starts_with: "https://", host_suffix: "voidvision.org" });
+    expect(c.failure_note).toMatch(/worker\/src\/https\.ts/);
     expect(c.failure_note).toMatch(/Always Use HTTPS/);
-    expect(c.failure_note).toMatch(/Board ask/);
-    expect(c.failure_note).toMatch(/G3/);
+  });
+
+  it("contract.yaml also proves the Worker's redirect on every deployed host, to the very same URL (T12)", () => {
+    const checks = loadContract(path.resolve(fileURLToPath(new URL("../contract.yaml", import.meta.url)))).checks as Record<string, unknown>[];
+    const c = checks.find((x) => x.type === "redirect" && x.same_url_on_https === true);
+    expect(c).toMatchObject({ scheme: "http", expect: 301, requires: "deployed" });
+    expect(c!.host_suffix).toBeUndefined();
+    expect(String(c!.path)).toMatch(/^\/play\/.+\?/);
   });
 });
 
