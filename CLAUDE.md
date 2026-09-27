@@ -75,7 +75,9 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
    `web/src/engine/` reads form only (paragraphs, sentence and clause marks,
    speaker labels, later speech tags). Unlabelled text is read by one of two
    fixed narrator voices; speakers are cast from a palette that never holds
-   a narrator voice, never from a name (`web/src/engine/cast.ts`). A Repertory work may carry a cast sheet,
+   a narrator voice, never from a name (`web/src/engine/cast.ts`).
+   Casting is a fixed integer score over `design/voices.json` (grade x word
+   share, contrast weighted by turn exchanges, a pace band, never re-timed). A Repertory work may carry a cast sheet,
    written by the curator from the text's own list of persons and shown on
    the Bookplate, that declares only voice sex; the engine never parses
    names. No LLM, ever, in the render path.
