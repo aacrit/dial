@@ -162,7 +162,7 @@ checks:
     path: /sw.js
     expect: 200
 
-  - name: the offline helper never answers the count or feedback routes
+  - name: the offline helper served is the built one (it names the routes it leaves alone)
     type: contains
     path: /sw.js
     text: "/feedback"

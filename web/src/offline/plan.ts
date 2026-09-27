@@ -16,15 +16,29 @@ export function workVoices(voices: readonly string[]): string[] {
 }
 
 /**
- * The voices Remove may delete: the removed work's own, less every voice
- * another saved work still uses. `saved` maps each saved work to its voices
- * and may include the one being removed.
+ * The voices Remove may delete: the removed work's recorded voices, less
+ * every voice another saved work records. `saved` maps each saved work (the
+ * removed one included) to its voices as recorded at save time, or null
+ * where no record exists. With any record unknown, no voice is deleted:
+ * one might be needed, and a voice left behind costs only space.
  */
-export function voicesToRemove(removing: string, saved: ReadonlyMap<string, readonly string[]>): string[] {
-  const mine = saved.get(removing) ?? [];
+export function voicesToRemove(removing: string, saved: ReadonlyMap<string, readonly string[] | null>): string[] {
+  const mine = saved.get(removing);
+  if (!mine) return [];
   const kept = new Set<string>();
-  for (const [slug, voices] of saved) if (slug !== removing) for (const v of voices) kept.add(v);
+  for (const [slug, voices] of saved) {
+    if (slug === removing) continue;
+    if (voices === null) return [];
+    for (const v of voices) kept.add(v);
+  }
   return workVoices(mine).filter((v) => !kept.has(v));
+}
+
+/** A recorded voice list ("bm_george,bm_fable"), or null when there is no usable record. */
+export function parseVoices(header: string | null): string[] | null {
+  if (!header) return null;
+  const ids = header.split(",").map((v) => v.trim());
+  return ids.every((v) => /^[a-z]{2}_[a-z]+$/.test(v)) ? ids : null;
 }
 
 /** Files an offline Tune in fetches that only the saved cache keeps: the voice manifest and the runtime's scripts. */
@@ -124,6 +138,7 @@ export const OFFLINE_NOTICE = "Offline. Works saved on this device play as usual
 
 /** Why a save stopped, in plain words with the fix; engine and browser text is never shown. */
 export function saveFailedLine(raw: string): string {
+  if (/ShellError/.test(raw)) return "Dial could not keep its own page files on this device, so nothing was saved. Reload the page, then try again.";
   if (/QuotaExceeded|quota|no room|out of (storage|space)/i.test(raw)) return "There is no room on this device to save it. Free some space, then try again.";
   if (/: \d{3}$/.test(raw)) return "Dial could not send the files. Try again later.";
   if (/pin/i.test(raw)) return "A file arrived damaged, so nothing was saved from it. Try again.";

@@ -18,6 +18,7 @@ import { INSTALL_SNOOZE_DAYS, installCard, isIosSafari, type InstallInput } from
 import {
   OFFLINE_NOTICE,
   WORK_NOT_ON_DEVICE,
+  parseVoices,
   isSaved,
   kilobytes,
   offlineExtras,
@@ -31,7 +32,7 @@ import {
   voicesToRemove,
   workVoices,
 } from "../web/src/offline/plan";
-import { SAVED_CACHE, isNeverCached, pageHeaders, route, shellCacheName, shellKey, shellPaths, staleShellCaches } from "../web/src/offline/routes";
+import { SAVED_CACHE, isNeverCached, isThisBuild, pageHeaders, route, shellCacheName, shellKey, shellPaths, staleShellCaches } from "../web/src/offline/routes";
 import type { Held, SizedManifest } from "../web/src/voice-cache";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -130,7 +131,8 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
 
   it("the built helper's shell list names only same-origin paths", () => {
     const built = path.join(root, "dist", "sw.js");
-    if (!existsSync(built)) return; // the gate builds before it tests
+    // The gate builds before it tests: a missing helper is a failure, not a skip.
+    expect(existsSync(built), "dist/sw.js: run npm run build first").toBe(true);
     const list = /`(\/[^`]*)`\.split\(`,`\)/.exec(readFileSync(built, "utf8"))?.[1];
     expect(list).toBeDefined();
     for (const p of list!.split(",")) {
@@ -138,6 +140,39 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
       expect(p, p).not.toMatch(/^\/(voice|ort|works)\/|\.wasm$|^\/sw\.js$|^\/e$|^\/feedback$/);
     }
     expect(list!.split(",")).toContain("/");
+    // privacy.html says the shell is about 3 MB.
+    const bytes = list!.split(",").reduce((sum, p) => {
+      const f = path.join(root, "dist", p === "/" ? "index.html" : p === "/privacy" ? "privacy.html" : p.slice(1));
+      return sum + readFileSync(f).byteLength;
+    }, 0);
+    expect(Math.round(bytes / 1_000_000)).toBe(3);
+  });
+
+  it("a partial shell never replaces a complete one", () => {
+    const sw = read("web/src/sw.ts");
+    // Install fails on an incomplete shell, so the previous helper keeps serving.
+    expect(sw).toMatch(/precache\(\)\.then\(\(ok\) => \{\s*if \(!ok\) throw/);
+    // A fetched home page from another build is refused.
+    expect(sw).toContain('if (path === "/" && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw');
+    expect(isThisBuild('<meta name="build" content="abc1234" />', "abc1234")).toBe(true);
+    expect(isThisBuild('<meta name="build" content="def5678" />', "abc1234")).toBe(false);
+    expect(isThisBuild("<p>no meta</p>", "abc1234")).toBe(false);
+    // "Saved" needs every shell path, checked by the helper for this page's build.
+    expect(sw).toMatch(/for \(const path of __SHELL__\) if \(!\(await cache\.match\(path\)\)\) return false;/);
+    const store = read("web/src/offline/store.ts");
+    expect(store).toContain("const helper = \"serviceWorker\" in navigator ? navigator.serviceWorker.controller : null;");
+    expect(store).toContain("resolve(e.data?.ok === true);");
+    expect(store).toContain('return askHelper("shell-status", timeoutMs);');
+    expect(read("web/src/offline/ui.ts")).toContain("if (isSaved(plan, await shellKept()))");
+  });
+
+  it("the save row shows only where the helper also serves the render worker's requests", () => {
+    const probe = read("web/src/offline/probe.worker.ts");
+    expect(probe).toContain('fetch("/voice/manifest.json", { cache: "no-store" })');
+    expect(read("web/src/sw.ts")).toContain("headers.set(OFFLINE_HEADER, \"1\");");
+    const ui = read("web/src/offline/ui.ts");
+    expect(ui).toContain("let supported = false;");
+    expect(ui).toMatch(/offlineWorks\(\)\.then\(\(ok\) => \{\s*if \(!ok \|\| supported\) return;\s*supported = true;/);
   });
 
   it("saving fetches only allowlisted downloads, and sends nothing", () => {
@@ -179,6 +214,27 @@ describe("save and remove", () => {
     const c = tryCast(segment(read(`web/public/works/${slug}.txt`)), w.cast)!;
     return workVoices(c.voices);
   };
+
+  it("with any saved work's voice record unknown, Remove deletes no voice", () => {
+    const saved = new Map<string, readonly string[] | null>([
+      ["cave", ["bm_george"]],
+      ["crito", null],
+    ]);
+    expect(voicesToRemove("cave", saved)).toEqual([]);
+    expect(voicesToRemove("crito", saved)).toEqual([]);
+    expect(parseVoices(null)).toBeNull();
+    expect(parseVoices("")).toBeNull();
+    expect(parseVoices("bm_george,<img src=x>")).toBeNull();
+    expect(parseVoices("bm_george,bm_fable")).toEqual(["bm_george", "bm_fable"]);
+  });
+
+  it("Remove reads the voices recorded at save time, never today's cast", () => {
+    const store = read("web/src/offline/store.ts");
+    expect(store).toContain("[VOICES_HEADER]: [...voices].join(\",\")");
+    expect(store).toMatch(/export async function removeWork\(m: VoiceManifest, slug: string\): Promise<void> \{\s*const records = await savedVoiceRecords\(\);/);
+    // A refresh by the helper keeps the record.
+    expect(read("web/src/sw.ts")).toContain('if (k.startsWith("x-dial-")) headers.set(k, v);');
+  });
 
   it("a voice two saved works share survives removing one of them", () => {
     const saved = new Map([
@@ -255,6 +311,7 @@ describe("the save row's words, from measured bytes", () => {
     expect(saveFailedLine("QuotaExceededError: x")).toMatch(/no room on this device/);
     expect(saveFailedLine("TypeError: Failed to fetch")).toMatch(/Check your connection/);
     expect(saveFailedLine("Error: voice part model_quantized.part2: 503")).toMatch(/could not send/);
+    expect(saveFailedLine("Error: ShellError: x")).toMatch(/could not keep its own page files on this device, so nothing was saved/);
   });
 
   it("Save for offline and Download as an audio file stay two labelled things", () => {
@@ -282,6 +339,17 @@ describe("installing Dial", () => {
     expect(ios).not.toContain(">Install<");
     expect(ios).toContain("Scroll down and tap Add to Home Screen.");
     expect(ios).toContain("iPhone can clear saved works if you do not open Dial for a week");
+    // Safari and a Home Screen app keep separate storage on iOS.
+    expect(ios).toContain("Works you save in the Home Screen app stay with it. Works saved in Safari need saving again there.");
+  });
+
+  it("no card claims lock-screen controls (playback is Web Audio); Media Session is metadata and play/pause only", () => {
+    expect(read("web/index.html")).not.toMatch(/lock-screen/i);
+    const main = read("web/src/main.ts");
+    expect(main).toContain('if (session === own && own.live && audio.state === "suspended") pause.click();');
+    expect(main).toContain('if (session === own && own.live && audio.state === "running") pause.click();');
+    expect(main).toMatch(/const offAir = \(\) => \{[\s\S]*?clearMediaSession\(\);[\s\S]*?\};/);
+    expect(main).toContain("navigator.mediaSession.metadata = null;");
   });
 
   it("Not now hides it for 30 days", () => {

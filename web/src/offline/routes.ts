@@ -24,6 +24,15 @@ export const SHELL_CACHE_PREFIX = "dial-shell-";
 /** Works saved for offline, with the voice manifest and runtime script an offline Tune in fetches. */
 export const SAVED_CACHE = "dial-saved";
 
+/** Set by the helper on every saved-route response it answers, so a probe can tell it is in the path. */
+export const OFFLINE_HEADER = "x-dial-offline-helper";
+
+/** Whether a page is this build's: its <meta name="build"> content is the tag. */
+export function isThisBuild(html: string, buildTag: string): boolean {
+  const m = /<meta\s+name="build"\s+content="([^"]*)"/i.exec(html);
+  return !!m && m[1] === buildTag;
+}
+
 /** The shell cache for one build. */
 export function shellCacheName(buildTag: string): string {
   return `${SHELL_CACHE_PREFIX}${buildTag}`;

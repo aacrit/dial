@@ -24,7 +24,7 @@ import {
   workVoices,
   type SavePlan,
 } from "./plan";
-import { canSaveOffline, isPersisted, planFor, readManifest, removeWork, requestPersistence, saveWork, savedSlugs, shellKept, type Manifest } from "./store";
+import { isPersisted, offlineWorks, planFor, readManifest, removeWork, requestPersistence, saveWork, savedSlugs, shellKept, type Manifest } from "./store";
 
 type RowState =
   | { kind: "idle"; plan: SavePlan; error?: string }
@@ -80,7 +80,8 @@ export function mountOffline(hooks: OfflineHooks) {
   let offline = !navigator.onLine;
   let listened = false;
   let deferredPrompt: BeforeInstallPromptEvent | null = null;
-  const supported = !!row && canSaveOffline();
+  // Unknown until the probe answers: the row stays hidden until offline is known to work here.
+  let supported = false;
 
   // ---- the save row ---------------------------------------------------------
   /** Said once per change of state (the row's numbers are not announced). */
@@ -219,12 +220,7 @@ export function mountOffline(hooks: OfflineHooks) {
 
   const remove_ = async (w: Work) => {
     if (!manifest) return;
-    const saved = new Map<string, readonly string[]>();
-    for (const slug of await savedSlugs()) {
-      const t = hooks.textOf(slug);
-      if (t) saved.set(slug, workVoices(t.voices));
-    }
-    await removeWork(manifest.manifest, w.slug, saved);
+    await removeWork(manifest.manifest, w.slug);
     states.delete(w.slug);
     await refresh(w.slug);
     say(`Removed ${w.called} from this device.`);
@@ -290,7 +286,17 @@ export function mountOffline(hooks: OfflineHooks) {
   return {
     /** The needle moved, or the texts arrived: repaint the row from the device. */
     station: () => {
-      if (!supported) return;
+      if (!row) return;
+      if (!supported) {
+        // Where the helper cannot serve the render worker, no offline promise is made.
+        void offlineWorks().then((ok) => {
+          if (!ok || supported) return;
+          supported = true;
+          paint();
+          void refresh(hooks.tuned().slug);
+        });
+        return;
+      }
       paint();
       void refresh(hooks.tuned().slug);
     },

@@ -3,22 +3,29 @@
 // privacy-allowlist.json) and keeps them in the browser's Cache Storage:
 //
 // - the voice in the same caches the render worker reads (voice.ts): the
-//   model and tokenizer, the runtime's .wasm keyed to its pin, and the
-//   voices the work's cast uses, each checked against its pin; a file
-//   already kept is never downloaded again;
+//   model (checked against its pin), its tokenizer and config (which, as in
+//   voice.ts, have no pin of their own), the runtime's .wasm and the voices
+//   the work's cast uses (each checked against its pin); a file already
+//   kept is never downloaded again. What is already kept is judged by
+//   presence here; the render worker checks every pin again on each load;
 // - the work's text, the voice manifest and the runtime's script in the
 //   saved cache (offline/routes.ts SAVED_CACHE), which the offline helper
 //   reads when there is no connection;
 // - the app shell, which the offline helper keeps (web/src/sw.ts).
 //
-// Remove deletes the work's text and each voice no other saved work uses
-// (plan.ts voicesToRemove). Nothing is ever sent.
+// Each saved text records its work's voices (VOICES_HEADER), as cast when
+// it was saved. Remove deletes the work's text and each of its recorded
+// voices no other saved work records (plan.ts voicesToRemove); if any saved
+// work's record is missing, it deletes no voice. Nothing is ever sent.
 
 import type { VoiceManifest } from "../voice";
 import { runtimeCacheKey, runtimeCacheName, voiceCacheName, type Held } from "../voice-cache";
 import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
-import { offlineExtras, savePlan, voicesToRemove, type SavePlan } from "./plan";
+import { offlineExtras, parseVoices, savePlan, voicesToRemove, type SavePlan } from "./plan";
 import { SAVED_CACHE } from "./routes";
+
+/** On a saved text: the work's voices, comma separated, as cast when it was saved. */
+export const VOICES_HEADER = "x-dial-voices";
 
 const workKey = (slug: string) => `/works/${slug}.txt`;
 const MANIFEST_KEY = "/voice/manifest.json";
@@ -26,6 +33,36 @@ const MANIFEST_KEY = "/voice/manifest.json";
 /** Whether this browser can keep works for offline at all: Cache Storage and an offline helper. */
 export function canSaveOffline(): boolean {
   return typeof caches !== "undefined" && "serviceWorker" in navigator && window.isSecureContext;
+}
+
+let probe: Promise<boolean> | null = null;
+
+/**
+ * Whether offline saving works in this browser: Cache Storage, an offline
+ * helper in control of this page, and that helper answering the render
+ * worker's requests too (offline/probe.worker.ts). Asked once per visit.
+ */
+export function offlineWorks(timeoutMs = 10_000): Promise<boolean> {
+  probe ??= (async () => {
+    if (!canSaveOffline()) return false;
+    const sw = navigator.serviceWorker;
+    if (!sw.controller) {
+      await Promise.race([new Promise((r) => sw.addEventListener("controllerchange", r, { once: true })), new Promise((r) => setTimeout(r, timeoutMs))]);
+      if (!sw.controller) return false;
+    }
+    return new Promise<boolean>((resolve) => {
+      const w = new Worker(new URL("./probe.worker.ts", import.meta.url), { type: "module" });
+      const done = (ok: boolean) => {
+        clearTimeout(timer);
+        w.terminate();
+        resolve(ok);
+      };
+      const timer = setTimeout(() => done(false), timeoutMs);
+      w.onmessage = (e: MessageEvent<boolean>) => done(e.data === true);
+      w.onerror = () => done(false);
+    });
+  })();
+  return probe;
 }
 
 /** Registers the offline helper for the whole site. A failure only means no offline; the page works as before. */
@@ -103,27 +140,34 @@ export async function planFor(man: Manifest, slug: string, voices: readonly stri
   );
 }
 
-/** Asks the offline helper to keep the whole app shell; true once it has. */
-export async function ensureShell(timeoutMs = 20_000): Promise<boolean> {
-  if (!("serviceWorker" in navigator)) return false;
-  const reg = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((r) => setTimeout(() => r(null), timeoutMs))]);
-  const active = reg?.active;
-  if (!active) return false;
+/**
+ * Asks the helper in control of this page, the one that answers when there
+ * is no connection. Its shell is its own build's, complete or not at all
+ * (web/src/sw.ts): after a release, until every Dial tab closes, it may be
+ * the previous build's, which still plays offline as a whole.
+ */
+async function askHelper(type: "ensure-shell" | "shell-status", timeoutMs: number): Promise<boolean> {
+  const helper = "serviceWorker" in navigator ? navigator.serviceWorker.controller : null;
+  if (!helper) return false;
   return new Promise<boolean>((resolve) => {
     const ch = new MessageChannel();
     const timer = setTimeout(() => resolve(false), timeoutMs);
-    ch.port1.onmessage = (e: MessageEvent<{ ok?: boolean }>) => {
+    ch.port1.onmessage = (e: MessageEvent<{ ok?: boolean; build?: string }>) => {
       clearTimeout(timer);
       resolve(e.data?.ok === true);
     };
-    active.postMessage({ type: "ensure-shell" }, [ch.port2]);
+    helper.postMessage({ type }, [ch.port2]);
   });
 }
 
-/** Whether the helper has kept the shell for the build this page came from. */
-export async function shellKept(): Promise<boolean> {
-  if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) return false;
-  return !!(await caches.match("/"));
+/** Asks the offline helper to keep every file of its app shell; true once it has. */
+export function ensureShell(timeoutMs = 30_000): Promise<boolean> {
+  return askHelper("ensure-shell", timeoutMs);
+}
+
+/** Whether every file of the serving helper's shell is kept (the helper checks each one). */
+export function shellKept(timeoutMs = 5_000): Promise<boolean> {
+  return askHelper("shell-status", timeoutMs);
 }
 
 /**
@@ -171,6 +215,9 @@ export async function saveWork(man: Manifest, slug: string, text: string, voices
     loaded += n;
     onProgress(loaded);
   };
+  // The app's own files first: without them nothing plays offline, so nothing else is downloaded.
+  if (!(await ensureShell())) throw new Error("ShellError: the app's own files could not be kept");
+  signal.throwIfAborted();
   const h = await held(m, voices);
   const cache = await caches.open(voiceCacheName(m));
   const saved = await caches.open(SAVED_CACHE);
@@ -220,21 +267,33 @@ export async function saveWork(man: Manifest, slug: string, text: string, voices
     await put(saved, extra.path, new Response(buf, { headers: res.headers }));
   }
   signal.throwIfAborted();
-  if (!(await ensureShell())) throw new Error("the app's own files could not be kept");
-  signal.throwIfAborted();
   const textBytes = new TextEncoder().encode(text).byteLength;
-  await put(saved, workKey(slug), new Response(text, { headers: { "content-type": "text/plain; charset=utf-8" } }));
+  await put(saved, workKey(slug), new Response(text, { headers: { "content-type": "text/plain; charset=utf-8", [VOICES_HEADER]: [...voices].join(",") } }));
   count(textBytes);
 }
 
+/** Every saved work's recorded voices, by slug; null where a text carries no usable record. */
+export async function savedVoiceRecords(): Promise<Map<string, readonly string[] | null>> {
+  const cache = await caches.open(SAVED_CACHE);
+  const out = new Map<string, readonly string[] | null>();
+  for (const req of await cache.keys()) {
+    const m = /^\/works\/([a-z0-9-]+)\.txt$/.exec(new URL(req.url).pathname);
+    if (!m) continue;
+    const hit = await cache.match(req);
+    out.set(m[1]!, parseVoices(hit?.headers.get(VOICES_HEADER) ?? null));
+  }
+  return out;
+}
+
 /**
- * Removes a saved work: its text, and each of its voices no other saved
- * work uses. `saved` maps every saved work (this one included) to its voices.
- * The voice model and runtime stay: every work, saved or not, uses them.
+ * Removes a saved work: its text, and each of its recorded voices that no
+ * other saved work records (never a voice another saved work needs). The
+ * voice model and runtime stay: every work, saved or not, uses them.
  */
-export async function removeWork(m: VoiceManifest, slug: string, saved: ReadonlyMap<string, readonly string[]>): Promise<void> {
+export async function removeWork(m: VoiceManifest, slug: string): Promise<void> {
+  const records = await savedVoiceRecords();
   const cache = await caches.open(SAVED_CACHE);
   await cache.delete(workKey(slug));
   const kv = await caches.open(KOKORO_VOICES_CACHE);
-  for (const id of voicesToRemove(slug, saved)) await kv.delete(hfVoiceKey(m.repo, id));
+  for (const id of voicesToRemove(slug, records)) await kv.delete(hfVoiceKey(m.repo, id));
 }

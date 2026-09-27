@@ -51,9 +51,19 @@ describe("web/privacy.html, claim by claim", () => {
     expect(store).toContain("await put(saved, workKey(slug), new Response(text");
     expect(store).toMatch(/await put\(kv, hfVoiceKey\(m\.repo, id\)/);
     expect(store).not.toMatch(/method:\s*"POST"|sendBeacon/);
-    expect(read("web/src/sw.ts")).toContain("await cache.put(path, await clean(res));");
+    expect(read("web/src/sw.ts")).toContain("await cache.put(path, copy);");
     // Every fetch in store.ts is an allowlisted download (tests/no-network.test.ts, tests/offline.test.ts).
     expect(JSON.parse(read("privacy-allowlist.json")).sends).toEqual(["/e", "/feedback"]);
+  });
+
+  it("the shell (about 3 MB) is kept for every visitor, and the model and runtime stay after the last Remove", () => {
+    expect(text).toContain("The offline helper also keeps this site's page files (about 3 MB: the pages, scripts, styles, fonts and icons) in cache storage for every visitor");
+    expect(text).toContain("The voice model and its runtime stay after the last Remove");
+    // Registered on every page load, not on the first save.
+    expect(read("web/src/main.ts")).toMatch(/^registerOfflineHelper\(\);$/m);
+    const store = read("web/src/offline/store.ts");
+    expect(store.slice(store.indexOf("export async function removeWork"))).not.toMatch(/voiceCacheName|runtimeCacheName/);
+    // "about 3 MB" is the built shell's size (tests/offline.test.ts computes it from dist/).
   });
 
   it("the offline helper never stores the daily counts or feedback", async () => {
@@ -69,7 +79,7 @@ describe("web/privacy.html, claim by claim", () => {
     const saved = new Map([["cave", ["bm_george"]], ["crito", ["bm_george", "bm_fable"]]]);
     expect(voicesToRemove("crito", saved)).toEqual(["bm_fable"]);
     const store = read("web/src/offline/store.ts");
-    expect(store).toMatch(/await cache\.delete\(workKey\(slug\)\);[\s\S]*for \(const id of voicesToRemove\(slug, saved\)\) await kv\.delete/);
+    expect(store).toMatch(/const records = await savedVoiceRecords\(\);[\s\S]*await cache\.delete\(workKey\(slug\)\);[\s\S]*for \(const id of voicesToRemove\(slug, records\)\) await kv\.delete/);
     expect(store.slice(store.indexOf("export async function removeWork"))).not.toMatch(/voiceCacheName|runtimeCacheName/);
   });
 
@@ -83,7 +93,7 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("Not now on the install card is kept in cache storage for 30 days and never sent", async () => {
-    expect(text).toContain("that date is kept in the same cache storage so the card stays hidden for thirty days. It is never sent.");
+    expect(text).toContain("that date is kept in the same cache storage so the card stays hidden for 30 days. It is never sent.");
     const install = read("web/src/offline/install.ts");
     expect(install).toMatch(/await \(await caches\.open\(DEVICE_CACHE\)\)\.put\(NOT_NOW_KEY/);
     expect(install).not.toMatch(/fetch\(/);
@@ -158,6 +168,9 @@ describe("web/privacy.html, claim by claim", () => {
     // developers.cloudflare.com/d1/platform/limits: Time Travel is 7 days on
     // Workers Free and 30 on Workers Paid. This product runs on the free tier.
     expect(text).toContain("any moment in the last 7 days");
-    expect(text).not.toMatch(/30 days/);
+    // Scoped to the restore sentence: other claims (the install card's 30 days) may name 30 days.
+    const restore = /Cloudflare D1, the database Dial uses,[^.]*\.[^.]*\./.exec(text)?.[0] ?? "";
+    expect(restore).toContain("7 days");
+    expect(restore).not.toMatch(/(30|thirty) days/i);
   });
 });

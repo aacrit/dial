@@ -220,6 +220,7 @@ function setupRadio(): void {
       s.wav = null;
     }
     setLamp();
+    clearMediaSession();
     readAlong.hidden = true;
     progress.textContent = "";
     paintTuneIn();
@@ -236,6 +237,7 @@ function setupRadio(): void {
     if (!s?.live) return;
     const settle = () => {
       setLamp(); // repaints Tune in too: "Paused" once nothing is live
+      setPlaybackState(s.audio.state === "running" ? "playing" : "paused");
       paintProgress();
       if (s.audio.state === "suspended") {
         const at = s.starts[0] === undefined ? 0 : Math.max(0, s.audio.currentTime - s.starts[0]);
@@ -344,7 +346,15 @@ function setupRadio(): void {
     let playing = 0;
 
     raWho.textContent = `On air: ${work.title}`;
-    setMediaSession(work);
+    setMediaSession(work, {
+      // Play resumes only a paused broadcast; pause pauses only a playing one.
+      play: () => {
+        if (session === own && own.live && audio.state === "suspended") pause.click();
+      },
+      pause: () => {
+        if (session === own && own.live && audio.state === "running") pause.click();
+      },
+    });
     // The size and the meter's max arrive with the manifest (its totalBytes);
     // until then the meter is indeterminate and the line states no size.
     meter.hidden = false;
@@ -521,8 +531,12 @@ function setupRadio(): void {
   load();
 }
 
-/** Lock-screen and headset controls name the work on air (Media Session, where the browser has it). */
-function setMediaSession(work: Work): void {
+/**
+ * Media Session metadata (the work on air) and play/pause handlers, where the
+ * browser has it. Dial makes no claim about lock-screen controls: whether a
+ * browser shows them for Web Audio playback is its own choice.
+ */
+function setMediaSession(work: Work, actions: { play: () => void; pause: () => void }): void {
   if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
   navigator.mediaSession.metadata = new MediaMetadata({
     title: work.title,
@@ -530,9 +544,22 @@ function setMediaSession(work: Work): void {
     album: "Dial",
     artwork: [{ src: "/icons/dial-512.png", sizes: "512x512", type: "image/png" }],
   });
-  const press = () => document.getElementById("pause")?.click();
-  navigator.mediaSession.setActionHandler("play", press);
-  navigator.mediaSession.setActionHandler("pause", press);
+  navigator.mediaSession.setActionHandler("play", actions.play);
+  navigator.mediaSession.setActionHandler("pause", actions.pause);
+  setPlaybackState("playing");
+}
+
+function setPlaybackState(state: MediaSessionPlaybackState): void {
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = state;
+}
+
+/** Off air: nothing is named, and the handlers go. */
+function clearMediaSession(): void {
+  if (!("mediaSession" in navigator)) return;
+  navigator.mediaSession.metadata = null;
+  navigator.mediaSession.setActionHandler("play", null);
+  navigator.mediaSession.setActionHandler("pause", null);
+  setPlaybackState("none");
 }
 
 function setupFeedback(): void {
