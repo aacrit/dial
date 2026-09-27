@@ -82,9 +82,11 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the counts switch: off means no count at all, feedback still goes; each count is named for what it counts", () => {
-    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no listen (a work heard for at least 80% of its length, made on this device or Dial's recording). A feedback message you choose to send still goes, because you sent it.");
+    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no listen (a work heard for at least four fifths of its length, made on this device or Dial's recording). A feedback message you choose to send still goes, because you sent it.");
     expect(text).not.toMatch(/finished listen/);
-    expect(text).toContain("Once you have heard 80% of a work, one listen is counted");
+    expect(text).toContain("Once you have heard four fifths of a work, one listen is counted");
+    // One wording on both pages (CoS decision D), paired with HEARD_SHARE = 0.8.
+    expect(text).not.toMatch(/80%/);
     const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
     expect(seal).toContain("Totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more.");
     // Paired with the code: the three counts the page sends, and chapter_rendered once per listen, when 80% is heard on either path (broadcast-state.ts countsAsListen; tests/recordings.test.ts).
@@ -167,7 +169,7 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("nothing is made while a prepared recording plays; one listen is counted once 80% is heard", async () => {
-    expect(text).toContain("Nothing is made on your device while it plays, and the words and the audio are never sent anywhere. Once you have heard 80% of a work, one listen is counted");
+    expect(text).toContain("Nothing is made on your device while it plays, and the words and the audio are never sent anywhere. Once you have heard four fifths of a work, one listen is counted");
     const main = read("web/src/main.ts");
     // No render worker for a prepared recording.
     expect(main).toContain('const worker = rec ? null : new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });');

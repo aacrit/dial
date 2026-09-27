@@ -80,13 +80,17 @@ export class Scheduler<H> {
     return this.finished;
   }
 
-  /** Line i is made: `speech` seconds of voice, then `pause` of silence. Lines arrive in order. */
-  add(i: number, speech: number, pause: number): void {
+  /**
+   * Line i is made: `speech` seconds of voice, then `pause` of silence. Lines
+   * arrive in order. `feed: false` only records it (a whole prepared
+   * recording is added before a Resume's seek, so nothing before it is fetched).
+   */
+  add(i: number, speech: number, pause: number, feed = true): void {
     this.speech[i] = speech;
     this.lengths[i] = speech + pause;
     this.at[i] = i === 0 ? 0 : this.at[i - 1]! + this.lengths[i - 1]!;
     this.made = i + 1;
-    void this.feed();
+    if (feed) void this.feed();
   }
 
   /**
@@ -105,6 +109,10 @@ export class Scheduler<H> {
     this.nextIndex = lines.length;
     this.from = this.madeSeconds;
     this.cued = lines.length;
+    // This schedule starts at line n: its place moves once line n begins, as after a seek to its start.
+    this.first = lines.length;
+    this.firstOffset = 0;
+    this.live = lines.length - 1;
   }
 
   /** Every line is made. */
@@ -123,6 +131,12 @@ export class Scheduler<H> {
     const now = this.hooks.now();
     while (this.starts[this.live + 1] !== undefined && this.starts[this.live + 1]! <= now) this.live++;
     return this.live >= this.first ? this.live : this.cued;
+  }
+
+  /** Whether a line of this schedule has begun on the audio clock (not only been cued by a seek or a handover). */
+  get begun(): boolean {
+    this.current();
+    return this.live >= this.first;
   }
 
   /** The listener's place in work time. */

@@ -59,7 +59,9 @@ export function pausedLine(title: string, atSeconds: number, stillMaking: boolea
  * finished work is sent (chapter_rendered), but the words and the audio
  * never leave the device.
  */
-export function renderedLine(title: string, total: number, seconds: number, kept: boolean): string {
+export function renderedLine(title: string, total: number, seconds: number, kept: boolean, madeFrom = 0): string {
+  // Made here from a later line (Dial's recording could not be decoded): only those lines were made on this device.
+  if (madeFrom > 0) return withKept(`Made on this device from line ${madeFrom + 1}: the last ${total - madeFrom} lines of ${title}. The words and the audio never left this device.`, kept);
   return withKept(`Made on this device: all ${total} lines of ${title}, ${clock(seconds)}. The words and the audio never left this device.`, kept);
 }
 

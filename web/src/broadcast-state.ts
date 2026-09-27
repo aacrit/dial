@@ -70,6 +70,44 @@ export function heardStep(prevPos: number, pos: number, clockDelta: number, slac
   return d;
 }
 
+/** Per line, the stretches of it heard so far (seconds into the line, merged). */
+export type HeardSpans = Map<number, [number, number][]>;
+
+function spanTotal(spans: readonly [number, number][]): number {
+  return spans.reduce((n, [a, b]) => n + (b - a), 0);
+}
+
+/**
+ * Adds [from, to) of work time, just heard, to the lines it covers (CoS
+ * decision C: heard means distinct line time). A line's time counts once:
+ * a replay of a stretch already heard adds nothing. Lines before
+ * `silentBelow` (the recording's lines seeded on this device without their
+ * audio) never count. Returns the seconds newly heard.
+ */
+export function addHeard(spans: HeardSpans, at: readonly number[], lengths: readonly number[], from: number, to: number, silentBelow = 0): number {
+  if (!(to > from) || at.length === 0) return 0;
+  let added = 0;
+  let i = 0;
+  while (i + 1 < at.length && at[i + 1]! <= from) i++;
+  for (; i < at.length && at[i]! < to; i++) {
+    if (i < silentBelow || lengths[i] === undefined) continue;
+    const s = Math.max(from, at[i]!) - at[i]!;
+    const e = Math.min(to, at[i]! + lengths[i]!) - at[i]!;
+    if (!(e > s)) continue;
+    const had = spans.get(i) ?? [];
+    const before = spanTotal(had);
+    const merged: [number, number][] = [];
+    for (const [a, b] of [...had, [s, e] as [number, number]].sort((x, y) => x[0] - y[0])) {
+      const last = merged.at(-1);
+      if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+      else merged.push([a, b]);
+    }
+    spans.set(i, merged);
+    added += spanTotal(merged) - before;
+  }
+  return added;
+}
+
 /**
  * chapter_rendered, the success event, once per listen, on either path
  * (Dial's prepared recording or made on this device): when the listener

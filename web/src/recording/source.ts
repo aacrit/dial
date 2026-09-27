@@ -170,9 +170,9 @@ export class Recording {
   async samples(i: number): Promise<Int16Array<ArrayBuffer>> {
     const p = partOfLine(this.index, i);
     if (p < 0) throw new Error(`recording: no part holds line ${i + 1}`);
-    // The next part starts downloading while this one plays, whichever of its lines is asked for (a seek lands anywhere).
-    if (p + 1 < this.index.parts.length) void this.part(p + 1).catch(() => undefined);
     const audio = await this.part(p);
+    // Once this part is here (so it had the whole connection), the next starts downloading, whichever of its lines was asked for (a seek lands anywhere).
+    if (p + 1 < this.index.parts.length) void this.part(p + 1).catch(() => undefined);
     const { from, frames } = lineSlice(this.index, i, RECORDING_RATE, audio.length);
     return toInt16(audio.subarray(from, from + frames));
   }

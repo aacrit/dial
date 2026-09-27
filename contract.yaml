@@ -350,7 +350,8 @@ events:
     # A station chosen on the dial at /, once per station per page load
     # (web/src/main.ts).
     - work_opened
-    # The whole passage finished rendering in the tab (web/src/main.ts).
+    # A listen heard to four fifths of its length, on either path: Dial's
+    # prepared recording or made in the tab (web/src/main.ts; CoS decision A).
     - chapter_rendered
     - feedback_received
     - rate_limiter_error

@@ -115,7 +115,8 @@ describe("the live region announces state changes only", () => {
     expect(cue).not.toContain("announce(");
     const follow = block(main, "const follow = () => {", 4)!;
     expect([...follow.matchAll(/announce\(/g)].length).toBe(1);
-    expect(follow).toMatch(/if \(own\.line < 0 && audio\.state === "running"\) announce\(rec \? preparedOnAirLine\(work\.translator\) : onAirLine/);
+    // Said once, when a line has really begun (after a handover, the line is cued before its audio exists).
+    expect(follow).toMatch(/if \(!own\.onAirSaid && sched\.begun && audio\.state === "running"\) \{\s*own\.onAirSaid = true;\s*announce\(rec \? preparedOnAirLine\(work\.translator\) : onAirLine/);
   });
 
   it("the progress line names the work, the heard line and how far it is made, and says Paused when paused", () => {

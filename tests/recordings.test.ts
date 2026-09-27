@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { WORKS } from "../web/src/catalogue";
-import { HEARD_SHARE, countsAsListen, heardStep } from "../web/src/broadcast-state";
+import { HEARD_SHARE, addHeard, countsAsListen, heardStep, type HeardSpans } from "../web/src/broadcast-state";
 import { CAST_ENGINE_VERSION, tryCast } from "../web/src/engine/cast";
 import { segment } from "../web/src/engine/segment";
 import {
@@ -45,7 +45,7 @@ import {
   type RecordingPlan,
 } from "../web/src/offline/plan";
 import { offlineKey, pageOfflineKey, route } from "../web/src/offline/routes";
-import { preparedDoneLine, preparedSkippedLine, preparedOnAirLine, progressLine, recordingStopLine, resumeAtLine, makeItHere, PLAYS_AT_ONCE, RECORDING_UNPLAYABLE } from "../web/src/status-copy";
+import { renderedLine, preparedDoneLine, preparedSkippedLine, preparedOnAirLine, progressLine, recordingStopLine, resumeAtLine, makeItHere, PLAYS_AT_ONCE, RECORDING_UNPLAYABLE } from "../web/src/status-copy";
 import { bookplateHtml, madeOn, recordingSentence } from "../web/src/render";
 import { assetUrl, indexMatchesLock, lockFrom, lockProblems, privateIndexEntries, releaseTag } from "../scripts/lib/recordings-lock.mjs";
 import { stage } from "../scripts/fetch-recordings.mjs";
@@ -216,6 +216,25 @@ describe("the prepared recording as a source of lines", () => {
     expect(fetched.filter((f) => f === "part1.webm")).toHaveLength(1);
   });
 
+  it("the next part is asked for only once this part has arrived, so the first part has the whole connection", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const rec = new Recording("cave", idx, { bytes: 1, sha256: "i" }, async () => new Float32Array(2 * 2640), async (file) => {
+      order.push(`start ${file}`);
+      if (file === "part0.webm") await gate;
+      const b = partBytes(Number(file.match(/\d+/)![0]));
+      return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+    }, 0);
+    const first = rec.samples(0);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(order).toEqual(["start part0.webm"]);
+    release();
+    await first;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(order).toEqual(["start part0.webm", "start part1.webm"]);
+  });
+
   it("prefetches the next part from any line of a part, so a seek into the middle of one does not stall at the next", async () => {
     const fetched: string[] = [];
     // Line 5 is the second line of part 2: part 3 is asked for too.
@@ -304,6 +323,28 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     expect(completed()).toBe(1);
   });
 
+  it("after the handover, the listener's place and the line on air move on as line n plays", async () => {
+    const t = fake();
+    t.sched.seed([
+      { speech: 10, pause: 1 },
+      { speech: 10, pause: 1 },
+    ]);
+    expect(t.sched.position()).toBeCloseTo(22, 6);
+    expect(t.sched.current()).toBe(2);
+    expect(t.sched.begun).toBe(false);
+    t.sched.add(2, 10, 1);
+    await new Promise((r) => setTimeout(r, 0));
+    const at = t.sched.starts[2]!;
+    // Past line 2's start on the audio clock: the place advances with it, and line 2 is on air.
+    t.tick(at + 3);
+    expect(t.sched.current()).toBe(2);
+    expect(t.sched.position()).toBeCloseTo(25, 6);
+    t.tick(4);
+    expect(t.sched.position()).toBeCloseTo(29, 6);
+    // It has begun, so the page says it is on air (before, the line was only cued).
+    expect(t.sched.begun).toBe(true);
+  });
+
   it("made here from a later line: the earlier lines keep the recording's lengths, and playback starts at that line", async () => {
     const { sched, asked } = fake();
     sched.seed([
@@ -323,7 +364,9 @@ describe("a prepared recording plays through the one scheduler, and seeks across
 
   it("the page gives the scheduler every line of the recording, fully made, and its samples from the recording", () => {
     const main = read("web/src/main.ts");
-    expect(main).toMatch(/if \(rec\) \{[\s\S]*?for \(let i = 0; i < rec\.lineCount; i\+\+\) \{\s*const l = rec\.line\(i\);\s*sched\.add\(i, l\.speech, l\.pause\);[\s\S]*?own\.renderDone = true;[\s\S]*?sched\.renderFinished\(\);/);
+    expect(main).toMatch(/if \(rec\) \{[\s\S]*?for \(let i = 0; i < rec\.lineCount; i\+\+\) \{\s*const l = rec\.line\(i\);\s*sched\.add\(i, l\.speech, l\.pause, false\);[\s\S]*?own\.renderDone = true;[\s\S]*?sched\.renderFinished\(\);/);
+    // Resume at line N: the seek comes before anything is fed, so no part before that line is fetched.
+    expect(main).toMatch(/if \(opts\.fromLine\) sched\.seek\(sched\.at\[opts\.fromLine\]!\);\s*sched\.renderFinished\(\);/);
     expect(main).toMatch(/if \(rec\) \{\s*return rec\.samples\(i\)\.catch\(/);
     expect(main).toContain("let sampleRate = rec ? RECORDING_RATE : 24_000;");
     // One analyser for both paths: the wave, meters and eye read the recording like a render.
@@ -335,7 +378,7 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     expect(main).toMatch(/if \(isDecodeError\(err\)\) makeHereInstead\(\);\s*\/\/[^\n]*\n\s*else stopped\(recordingStopLine\([^\n]*\), Math\.max\(0, own\.line\)\);/);
     const instead = /const makeHereInstead = \(\) => \{([\s\S]*?)\n {4}\};/.exec(main)![1]!;
     expect(instead).toContain("recordingsPlayable = false;");
-    expect(instead).toMatch(/start\(work, "made", \{ fromLine: at, lengths, heard: own\.heard, counted: own\.counted, reason: RECORDING_UNPLAYABLE \}\);/);
+    expect(instead).toMatch(/start\(work, "made", \{ fromLine: at, lengths, heard: own\.heard, spans: own\.spans, counted: own\.counted, reason: RECORDING_UNPLAYABLE \}\);/);
     expect(RECORDING_UNPLAYABLE).toBe("This browser can't play Dial's recording, so it's being made on this device.");
     // The reason leads what is said while the voice warms.
     expect(main).toContain("announce(rec ? preparedTuningLine(work.title) : `${lead}Warming the voice.`);");
@@ -343,7 +386,7 @@ describe("a prepared recording plays through the one scheduler, and seeks across
     expect(read("web/src/narrate.worker.ts")).toMatch(/for \(let i = from; i < cues\.length; i\+\+\)/);
     expect(main).toContain("downloadUrl = own.file && !seeded.length ? URL.createObjectURL(own.file) : null;");
     // Resume at line N carries the same listen on.
-    expect(main).toMatch(/resumeLine\.onclick = \(\) => start\(work, "prepared", \{ fromLine: resumeAt, heard, counted \}\);/);
+    expect(main).toMatch(/resumeLine\.onclick = \(\) => start\(work, "prepared", \{ fromLine: resumeAt, heard, spans, counted \}\);/);
   });
 });
 
@@ -380,7 +423,7 @@ describe("chapter_rendered: once per listen, when 80% is heard, on either path (
     const main = read("web/src/main.ts");
     // reportCoreSuccess is defined once and called only from the tally.
     expect(main.match(/reportCoreSuccess\(\)/g)).toHaveLength(2);
-    expect(main).toMatch(/own\.heard \+= heardStep\(own\.lastPos, pos, clockNow - own\.lastClock\);/);
+    expect(main).toMatch(/if \(heardStep\(own\.lastPos, pos, clockNow - own\.lastClock\) > 0\) own\.heard \+= addHeard\(/);
     expect(main).toMatch(/if \(countsAsListen\(own\.heard, own\.strip\.total, own\.counted\)\) \{\s*own\.counted = true;\s*reportCoreSuccess\(\);/);
     expect(main).toMatch(/if \(audio\.state === "running"\) void sched\.feed\(\);\s*own\.tally\(\);/);
     expect(main).toMatch(/paintPlayhead\(\);\s*own\.tally\(\);\s*own\.frame = requestAnimationFrame\(follow\);/);
@@ -391,6 +434,60 @@ describe("chapter_rendered: once per listen, when 80% is heard, on either path (
     expect(done).not.toMatch(/reportCoreSuccess|countsAsListen/);
     // A listen carried on across a restart keeps what it heard, and counts once.
     expect(main).toMatch(/counted: opts\.counted \?\? false,\s*heard: opts\.heard \?\? 0,/);
+  });
+});
+
+describe("heard means distinct line time (CoS decision C)", () => {
+  const at = [0, 10, 20, 30];
+  const lengths = [10, 10, 10, 10];
+
+  it("each stretch of a line counts once: a replay adds nothing", () => {
+    const spans: HeardSpans = new Map();
+    expect(addHeard(spans, at, lengths, 0, 15)).toBeCloseTo(15, 9);
+    // Back to the start and play it again: nothing new.
+    expect(addHeard(spans, at, lengths, 0, 15)).toBe(0);
+    // Overlapping what was heard: only the new part counts.
+    expect(addHeard(spans, at, lengths, 12, 18)).toBeCloseTo(3, 9);
+    expect(spans.get(1)).toEqual([[0, 8]]);
+    // A gap inside a line is kept apart, and filling it counts.
+    expect(addHeard(spans, at, lengths, 32, 34)).toBeCloseTo(2, 9);
+    expect(addHeard(spans, at, lengths, 30, 40)).toBeCloseTo(8, 9);
+    expect(spans.get(3)).toEqual([[0, 10]]);
+  });
+
+  it("the recording's lines seeded without their audio never count; replaying a whole work twice is still one work", () => {
+    const spans: HeardSpans = new Map();
+    expect(addHeard(spans, at, lengths, 0, 40, 2)).toBeCloseTo(20, 9);
+    expect(spans.has(0) || spans.has(1)).toBe(false);
+    let heard = 0;
+    const s2: HeardSpans = new Map();
+    for (let k = 0; k < 2; k++) for (let p = 0; p < 40; p += 0.5) heard += addHeard(s2, at, lengths, p, p + 0.5);
+    expect(heard).toBeCloseTo(40, 6);
+    // Half the work, played three times, is half the work: not a listen.
+    const s3: HeardSpans = new Map();
+    let half = 0;
+    for (let k = 0; k < 3; k++) half += addHeard(s3, at, lengths, 0, 20);
+    expect(countsAsListen(half, 40, false)).toBe(false);
+  });
+
+  it("the page adds only what heardStep lets through, per line, never the seeded lines, and carries it across a restart", () => {
+    const main = read("web/src/main.ts");
+    expect(main).toMatch(/if \(heardStep\(own\.lastPos, pos, clockNow - own\.lastClock\) > 0\) own\.heard \+= addHeard\(own\.spans, sched\.at, sched\.lengths, own\.lastPos, pos, own\.madeFrom\);/);
+    expect(main).toContain("madeFrom: seeded.length,");
+    expect(main).toContain("start(work, \"made\", { fromLine: at, lengths, heard: own.heard, spans: own.spans, counted: own.counted, reason: RECORDING_UNPLAYABLE });");
+  });
+});
+
+describe("the words after the handover are true", () => {
+  it("made here from a later line says so, never 'all N lines'", () => {
+    expect(renderedLine("The Cave", 118, 1143, true)).toMatch(/^Made on this device: all 118 lines of The Cave, 19:03\./);
+    const from = renderedLine("The Cave", 118, 1143, true, 30);
+    expect(from).toBe("Made on this device from line 31: the last 88 lines of The Cave. The words and the audio never left this device.");
+    expect(from).not.toMatch(/all 118/);
+    const main = read("web/src/main.ts");
+    // Every place the page says it, it passes how the work was made.
+    expect(main.match(/renderedLine\(/g)).toHaveLength(3);
+    for (const m of main.matchAll(/renderedLine\(([^)]*)\)/g)) expect(m[1], m[0]).toMatch(/\.madeFrom$/);
   });
 });
 

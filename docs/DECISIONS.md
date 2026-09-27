@@ -65,3 +65,12 @@ Chief of Staff decision, delegated by the founder, from the T5 review. `chapter_
 
 ## 2026-09-27: A recording this browser cannot decode is made on the device instead (CoS decision B)
 Chief of Staff decision, delegated by the founder, from the T5 review. When a part of Dial's prepared recording fails to decode (an EncodingError, as older iOS Safari may give for Opus in WebM), the listen carries on made on this device from the line on air, with no dead end, and says why: "This browser can't play Dial's recording, so it's being made on this device." The lines before it keep the recording's lengths, so the strip and the script still line up; the file made from that line on is kept for seeking and is not offered as the work's download. For the rest of the visit every work is made on the device. A remuxed, Safari-friendly set of recordings is a follow-up (T5b), not built now.
+
+## 2026-09-27: Heard means distinct line time (CoS decision C)
+Chief of Staff decision, delegated by the founder, from the T5 re-review. What a listen has heard is kept per line: each stretch of a line counts once, the first time it is played, so a replay adds nothing (`web/src/broadcast-state.ts` `addHeard`, with `heardStep` still refusing seeks and pauses). The recording's lines seeded without their audio when a work is made on the device after a decode failure never count. The four-fifths threshold of decision A applies to this total.
+
+## 2026-09-27: One wording, "four fifths" (CoS decision D)
+The privacy page and the Seal both say a listen is "a work heard for at least four fifths of its length"; neither says 80%. The code's `HEARD_SHARE` stays 0.8, and the paired tests hold both pages to the wording.
+
+## 2026-09-27: The kill threshold stays at 300 (CoS decision E)
+`chapter_rendered` now counts listens heard to four fifths (decision A), not renders completed. The threshold stays at 300 until the first G4 recalibrates it. CHARTER.md's kill criteria carry one line saying what the count means, and contract.yaml's comment on the event says the same.
