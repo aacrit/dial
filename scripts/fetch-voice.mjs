@@ -88,6 +88,20 @@ function resolvePackageDir(name) {
   return dir;
 }
 
+/**
+ * The model's other files (tokenizer.json, tokenizer_config.json,
+ * config.json), by the path they are served at, with their SHA-256 pins.
+ * They go into manifest.json (files), where the page checks each on fetch
+ * and on every read from its cache, as it does the model (T11, L4).
+ */
+export function modelFilePins() {
+  return Object.fromEntries(
+    Object.entries(MODEL_FILES)
+      .filter(([file]) => !file.endsWith(".onnx"))
+      .map(([file, pin]) => [`/voice/models/${REPO}/${file}`, pin]),
+  );
+}
+
 /** Where the voice and the runtime are staged, for the build and the tests. */
 export const STAGED_DIRS = { voice: voiceOut, ort: ortOut };
 
@@ -161,7 +175,7 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
   const totalBytes = Object.values(sizes).reduce((a, b) => a + b, 0);
   writeFileSync(
     path.join(voiceOut, "manifest.json"),
-    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, voices: VOICES, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], sizes, totalBytes }, null, 2) + "\n",
+    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, files: modelFilePins(), voices: VOICES, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], sizes, totalBytes }, null, 2) + "\n",
   );
 
   console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voices ${Object.keys(VOICES).join(", ")}, onnxruntime-web`);

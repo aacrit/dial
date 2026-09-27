@@ -40,14 +40,67 @@ checks:
     expect: 200
 
   # T8: the Seal is a widget on the radio (design/spec.md 00), and /seal is
-  # gone. A 404, not a redirect: there is no page to send anyone to, and a
-  # bare 404 needs no _redirects rule for Workers Static Assets to keep
-  # (not_found_handling stays "none"). The widget's own words are on the
-  # radio's page instead.
+  # gone. A 404, not a redirect: there is no page to send anyone to, and it
+  # needs no _redirects rule. The widget's own words are on the radio's page
+  # instead.
   - name: the Seal page is gone
     type: status
     path: /seal
     expect: 404
+
+  # T11 (M2): a path no file matches gets web/404.html with a 404 from
+  # Workers Static Assets (wrangler.jsonc not_found_handling "404-page"),
+  # never the Worker, and carries the same security headers as every page.
+  - name: the gone Seal page carries the not-found page
+    type: contains
+    path: /seal
+    text: "Not on the dial"
+
+  - name: the gone Seal page cannot be framed (CSP)
+    type: header
+    path: /seal
+    header: content-security-policy
+    contains: "frame-ancestors 'none'"
+
+  - name: the gone Seal page cannot be framed (X-Frame-Options)
+    type: header
+    path: /seal
+    header: x-frame-options
+    expect: DENY
+
+  - name: an unknown path answers 404
+    type: status
+    path: /no-such-station/here
+    expect: 404
+
+  - name: an unknown path carries the not-found page
+    type: contains
+    path: /no-such-station/here
+    text: "Back to the radio"
+
+  - name: an unknown path cannot be framed (CSP)
+    type: header
+    path: /no-such-station/here
+    header: content-security-policy
+    contains: "frame-ancestors 'none'"
+
+  - name: an unknown path cannot be framed (X-Frame-Options)
+    type: header
+    path: /no-such-station/here
+    header: x-frame-options
+    expect: DENY
+
+  - name: an unknown path is not content-sniffed
+    type: header
+    path: /no-such-station/here
+    header: x-content-type-options
+    expect: nosniff
+
+  - name: an unknown path is HTTPS only (HSTS)
+    type: header
+    path: /no-such-station/here
+    header: strict-transport-security
+    expect: "max-age=31536000"
 
   - name: the radio carries the Seal widget
     type: contains

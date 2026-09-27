@@ -5,20 +5,26 @@ on:
   push:
     branches: [main]
 
+# The gate only reads the repository (T11, L2).
+permissions:
+  contents: read
+
 jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Actions are pinned to full commit SHAs, the version named beside each (scripts/lint-workflows.mjs).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
       # The prepared recordings, pinned by recordings.lock.json, are downloaded once per lock (scripts/fetch-recordings.mjs checks every byte).
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .cache/recordings
           key: recordings-${{ hashFiles('recordings.lock.json') }}
-      - run: npm install
+      # Exactly the lockfile's versions, never a fresh resolve.
+      - run: npm ci
       # The layout check (a gate step) drives Chromium through the panel map; CI never skips it.
       - run: npx playwright install --with-deps chromium
       - run: npm run gate

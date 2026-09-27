@@ -6,7 +6,7 @@
 // dist/play/<slug>.html from the same entry as dist/index.html. Workers
 // Static Assets serves it at /play/<slug> (its default html_handling drops
 // the .html, as it does for /privacy), so a reload or a shared link opens
-// the Broadcast directly, and not_found_handling stays "none".
+// the Broadcast directly; a path no file matches gets the not-found page.
 
 import { esc } from "./escape";
 

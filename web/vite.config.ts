@@ -65,6 +65,9 @@ export default defineConfig({
       input: {
         main: "index.html",
         privacy: "privacy.html",
+        // Served by Workers Static Assets for any path no asset matches
+        // (wrangler.jsonc not_found_handling "404-page"), with a 404 status.
+        notFound: "404.html",
       },
     },
   },

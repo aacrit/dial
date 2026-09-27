@@ -18,7 +18,7 @@ import {
 } from "../worker/src/config";
 import { LIMITER_LIMITS, LIMITER_PERIOD_SECONDS, LIMITER_V6_PREFIX, clientKey, limiterFor, rateLimitedMessage, type RateLimiter } from "../worker/src/guard";
 import { API_CSP } from "../worker/src/headers";
-import { PAGE_CSP_HEADER, SECURITY_HEADERS, headersFile } from "../scripts/lib/csp.mjs";
+import { PAGE_CSP_HEADER, PREVIEW_ORIGIN, SECURITY_HEADERS, headersFile } from "../scripts/lib/csp.mjs";
 import { createSqliteD1 } from "./helpers/sqlite-d1";
 import { createMockAssets, createMockD1 } from "./helpers/mock-d1";
 import { IDLE_SCENARIOS, runIdleScenario, simulateRetention } from "./helpers/retention-sim";
@@ -158,16 +158,34 @@ describe("the account's D1 writes: every ceiling together stays within this prod
     quotas: { name: string; ceiling: number; worst_case_rows?: number; worst_case_max_share?: number }[];
   };
   const row = budget.quotas.find((q) => q.name === "d1_rows_written_per_day")!;
+  /** Every Worker wrangler.jsonc deploys (production and each env), with its own ceilings: each writes its own D1 on the same account. */
+  const perEnv = () => {
+    const c = wranglerConfig();
+    const all: [string, Record<string, any>][] = [["production", c], ...Object.entries((c.env ?? {}) as Record<string, Record<string, any>>)];
+    return all.map(([name, e]) => {
+      const vars = e.vars as Record<string, string> | undefined;
+      // A deployed Worker with no ceilings would fall back to the code's defaults: make that explicit instead.
+      expect(vars?.EVENT_DAILY_CEILING, name).toMatch(/^\d+$/);
+      expect(vars?.FEEDBACK_DAILY_CEILING, name).toMatch(/^\d+$/);
+      return { name, ...worstCaseDailyWrites({ event: Number(vars!.EVENT_DAILY_CEILING), feedback: Number(vars!.FEEDBACK_DAILY_CEILING) }) };
+    });
+  };
   const fromWrangler = () => {
-    const vars = wranglerConfig().vars as Record<string, string>;
-    return worstCaseDailyWrites({ event: Number(vars.EVENT_DAILY_CEILING), feedback: Number(vars.FEEDBACK_DAILY_CEILING) });
+    const envs = perEnv();
+    return { envs, lines: envs.flatMap((e) => e.lines), total: envs.reduce((s, e) => s + e.total, 0) };
   };
 
-  it("budget.yaml states the worst case exactly as wrangler.jsonc's ceilings give it", () => {
-    const { total, lines } = fromWrangler();
+  it("budget.yaml states the worst case exactly as wrangler.jsonc's ceilings give it, summed over every env", () => {
+    const { total, lines, envs } = fromWrangler();
+    expect(envs.map((e) => e.name)).toEqual(["production", "preview"]);
     expect(lines.every((l) => Number.isFinite(l.rows) && l.rows > 0)).toBe(true);
     expect(row.ceiling).toBe(ACCOUNT_D1_WRITES_PER_DAY);
     expect(row.worst_case_rows).toBe(total);
+  });
+
+  it("the preview's ceilings are small: it adds a sliver, not a second production (T11 review)", () => {
+    const [prod, preview] = perEnv();
+    expect(preview!.total).toBeLessThan(prod!.total / 10);
   });
 
   it("the worst case is at most budget.yaml's share of the account, and that share is small", () => {
@@ -284,7 +302,7 @@ describe("per-client rate limit (Workers Rate Limiting binding)", () => {
     // Namespace ids are account-wide: Dial's are its own three (Rollbook holds 7201 to 7203).
     const ids = rls.map((r) => r.namespace_id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const id of ids) expect(["7201", "7202", "7203"]).not.toContain(id);
+    for (const id of ids) expect(["7201", "7202", "7203", "7311", "7312", "7313"]).not.toContain(id);
   });
 });
 
@@ -473,6 +491,134 @@ describe("wrangler.jsonc", () => {
     const workerFirst = (p: string) => (rules as string[]).some((r) => matchesRule(r, p));
     for (const p of ["/e", "/feedback", "/healthz", "/api/anything"]) expect(workerFirst(p), p).toBe(true);
     for (const p of ["/", "/privacy.html", "/privacy", "/assets/index.js", "/assets/inter.woff2", "/build-tag.txt"]) expect(workerFirst(p), p).toBe(false);
+  });
+
+  it("the production Worker has no preview URLs, and keeps workers.dev for the contract's burst_host (T11, decision M)", () => {
+    const c = wranglerConfig();
+    expect(c.preview_urls).toBe(false);
+    expect(c.workers_dev).toBe(true);
+    expect(c.name).toBe("dial");
+  });
+
+  it("previews run on their own Worker, D1 and rate-limit namespaces, sharing nothing with production (T11)", () => {
+    const c = wranglerConfig();
+    const envs = Object.entries((c.env ?? {}) as Record<string, Record<string, any>>);
+    const p = c.env?.preview as Record<string, any>;
+    expect(p).toBeDefined();
+    expect(p.name).toBe("dial-preview");
+    // Never the production domain: routes are not inherited only when restated.
+    expect(p.routes).toEqual([]);
+    expect(p.workers_dev).toBe(true);
+    expect(p.preview_urls).toBe(false);
+    expect(p.assets.not_found_handling).toBe(c.assets.not_found_handling);
+    expect(p.assets.run_worker_first).toEqual(c.assets.run_worker_first);
+    // Its own D1: the binding the Worker reads, a different database.
+    const dbOf = (e: Record<string, any>) => (e.d1_databases as { binding: string; database_name: string; database_id: string }[]);
+    expect(dbOf(p).map((d) => d.binding)).toEqual(["DB"]);
+    expect(dbOf(p)[0]!.database_name).toBe("dial-preview");
+    expect(dbOf(c)[0]!.database_name).toBe("dial");
+    // No two environments (production included) share a D1 id or a namespace id.
+    const all = [c, ...envs.map(([, e]) => e)];
+    const dbIds = all.flatMap((e) => dbOf(e).map((d) => d.database_id));
+    expect(dbIds.every((id) => /^[0-9a-f-]{36}$/.test(id))).toBe(true);
+    expect(new Set(dbIds).size).toBe(dbIds.length);
+    const nsIds = all.flatMap((e) => (e.ratelimits as { namespace_id: string }[]).map((r) => r.namespace_id));
+    expect(new Set(nsIds).size).toBe(nsIds.length);
+    // The preview's limits are production's, on 7311 to 7313 (unused by any product on the account).
+    const rl = p.ratelimits as { name: string; namespace_id: string; simple: unknown }[];
+    expect(Object.fromEntries(rl.map((r) => [r.name, r.namespace_id]))).toEqual({ RL_API: "7311", RL_EVENTS: "7312", RL_FEEDBACK: "7313" });
+    for (const r of rl) expect(r.simple, r.name).toEqual((c.ratelimits as typeof rl).find((x) => x.name === r.name)!.simple);
+  });
+
+  it("a path no file matches gets the static 404 page, never the Worker (T11, M2)", () => {
+    const c = wranglerConfig();
+    expect(c.assets.not_found_handling).toBe("404-page");
+    const workerFirst = (pathname: string) => (c.assets.run_worker_first as string[]).some((r) => matchesRule(r, pathname));
+    for (const p of ["/seal", "/no-such-station/here", "/404.html"]) expect(workerFirst(p), p).toBe(false);
+    const page = readFileSync(path.join(root, "web", "404.html"), "utf8");
+    expect(page).not.toMatch(/<script/i);
+    expect(page).toContain('<a href="/">Back to the radio</a>');
+    expect(page).toContain('href="../design/tokens.css"');
+    expect(page).not.toMatch(/style=|<style/i);
+    expect(page).not.toMatch(/—/);
+    expect(readFileSync(path.join(root, "web", "vite.config.ts"), "utf8")).toMatch(/notFound: "404\.html"/);
+  });
+
+  it("CI workflows: least permissions, npm ci, and every action pinned to a commit SHA (T11, L2)", async () => {
+    const { checkPinnedActions } = await import("../scripts/lint-workflows.mjs");
+    const dir = path.join(root, ".github", "workflows");
+    const wf = (f: string) => readFileSync(path.join(dir, f), "utf8");
+    for (const f of ["gate.yml", "verify-production.yml", "branch-prune.yml"]) {
+      expect(checkPinnedActions(f, wf(f)), f).toEqual([]);
+      expect(wf(f)).toMatch(/uses: actions\/checkout@[0-9a-f]{40} # v4\.4\.0/);
+    }
+    const gate = parseYaml(wf("gate.yml"));
+    expect(gate.permissions).toEqual({ contents: "read" });
+    const runs = (gate.jobs.gate.steps as { run?: string }[]).map((s) => s.run).filter(Boolean);
+    expect(runs).toContain("npm ci");
+    expect(runs.some((r) => /npm install/.test(r!))).toBe(false);
+    const verify = parseYaml(wf("verify-production.yml"));
+    expect(verify.permissions).toEqual({ contents: "read", issues: "write" });
+    // The lint itself refuses a moving tag, a SHA without its version, and a short SHA.
+    expect(checkPinnedActions("x.yml", "      - uses: actions/checkout@v4\n")).toHaveLength(1);
+    expect(checkPinnedActions("x.yml", `      - uses: actions/checkout@${"a".repeat(40)}\n`)).toHaveLength(1);
+    expect(checkPinnedActions("x.yml", "      - uses: actions/checkout@11d5960 # v4.4.0\n")).toHaveLength(1);
+    expect(checkPinnedActions("x.yml", "      - uses: ./local-action\n")).toHaveLength(0);
+    // CRLF checkouts (Windows) lint the same.
+    expect(checkPinnedActions("x.yml", `      - uses: actions/checkout@${"a".repeat(40)} # v4.4.0\r\n      - uses: actions/checkout@v4\r\n`)).toEqual([
+      expect.stringContaining("x.yml:2:"),
+    ]);
+  });
+
+  it("HEAD /healthz answers 200 with the same headers and no body (T11 review)", async () => {
+    const env = mockEnv();
+    const head = await handle(new Request(`${ORIGIN}/healthz`, { method: "HEAD" }), env);
+    expect(head.status).toBe(200);
+    expect(head.body).toBeNull();
+    expect(head.headers.get("content-security-policy")).toBe(API_CSP);
+    expect(head.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("the preview says noindex on every answer, the Worker's and its static files'; production never does (T11 review)", async () => {
+    const c = wranglerConfig();
+    expect(c.env.preview.vars.ROBOTS).toBe("noindex");
+    expect(c.vars.ROBOTS).toBeUndefined();
+    const preview = mockEnv({ ROBOTS: "noindex" });
+    for (const req of [get("/healthz"), post("/e", { name: "not_an_event" }), get("/nothing-here")]) {
+      expect((await handle(req, preview)).headers.get("x-robots-tag"), req.url).toBe("noindex");
+      expect((await handle(req, mockEnv())).headers.get("x-robots-tag"), req.url).toBeNull();
+    }
+    // A failure answer too.
+    expect((await handle(get("/healthz"), { ...preview, ASSETS: { fetch: () => Promise.reject(new Error("x")) } as unknown as Fetcher, DB: brokenDb() })).headers.get("x-robots-tag")).toBe("noindex");
+    // Static files: a rule for the preview's host only, after the "/*" block production matches.
+    const file = headersFile();
+    const [all, host] = file.split(`${PREVIEW_ORIGIN}/*\n`);
+    expect(all).not.toMatch(/X-Robots-Tag/i);
+    expect(host).toBe("  X-Robots-Tag: noindex\n");
+    expect(PREVIEW_ORIGIN).toBe(`https://${c.env.preview.name}.aacrit.workers.dev`);
+  });
+
+  it("docs never claim gitleaks: the secret scan is the repo's own pattern scan (T11, L5)", () => {
+    const docs = ["CLAUDE.md", "README.md", "CHARTER.md", "docs/DECISIONS.md", "contract.yaml", "budget.yaml", "web/privacy.html"];
+    for (const f of docs) {
+      for (const line of readFileSync(path.join(root, f), "utf8").split("\n")) {
+        if (/gitleaks/i.test(line)) expect(line, f).toMatch(/\b(not|no|has no) gitleaks\b|"gitleaks pre-commit"/i);
+      }
+    }
+    const claude = readFileSync(path.join(root, "CLAUDE.md"), "utf8");
+    expect(claude).toMatch(/the repo's own secret-pattern scan\s+\(`scripts\/secret-patterns\.mjs`/);
+  });
+
+  it("count inflation is an accepted risk that G4 reads against work_opened and the ceilings (T11, decision N)", () => {
+    const charter = readFileSync(path.join(root, "CHARTER.md"), "utf8");
+    expect(charter).toContain("G4 treats a day where chapter_rendered exceeds work_opened, or where any client event hits its ceiling, as suspect.");
+    // The comparison event is one /e already allows from the page, never a new identifier.
+    const contract = parseYaml(readFileSync(path.join(root, "contract.yaml"), "utf8"));
+    expect(contract.events.allowed).toEqual(expect.arrayContaining(["work_opened", "chapter_rendered"]));
+    expect(contract.events.server_only).not.toContain("work_opened");
+    const decisions = readFileSync(path.join(root, "docs", "DECISIONS.md"), "utf8");
+    expect(decisions).toContain("## 2026-09-27: A count can be inflated from one network: an accepted risk (CoS decision N)");
+    expect(decisions).toContain("## 2026-09-27: HSTS includeSubDomains is deferred (L3)");
   });
 
   it("keeps Worker logs but turns invocation logs off and redacts query strings", () => {

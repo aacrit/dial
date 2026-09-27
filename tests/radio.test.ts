@@ -262,7 +262,9 @@ describe("work_opened: once per station per page load, within the ceilings' shar
     // At the old 4,000 the third event would have broken the share.
     expect(worstCaseDailyWrites({ event: 4000, feedback: 100 }).total).toBeGreaterThan(0.15 * ACCOUNT_D1_WRITES_PER_DAY);
     const budget = read("budget.yaml");
-    expect(budget).toContain("worst_case_rows: 14105");
+    // Production's 14,105 plus the preview Worker's 605 (T11; tests/hardening.test.ts sums every env).
+    expect(budget).toContain("worst_case_rows: 14710");
+    expect(budget).toContain("Production's worst case is 14,105 rows");
     expect(budget).toContain("3 x (3,500 + 1 + a daily feedback purge");
   });
 

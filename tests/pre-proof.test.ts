@@ -23,7 +23,7 @@ import {
 import { bookplateHtml, directionSentence } from "../web/src/render";
 import { METER_MAKING, METER_WARMING } from "../web/src/status-copy";
 import { retryDelayMs, sendEvent, setCounts, type SendDeps } from "../web/src/telemetry";
-import { partPath, readInto, stitchModel } from "../web/src/voice-files";
+import { cachedPinnedFile, fetchPinnedFile, modelFilePin, partPath, pinnedModelCache, preparePinnedFiles, putPinnedFile, readInto, stitchModel } from "../web/src/voice-files";
 import { MAX_FEEDBACK_TEXT_BYTES } from "../worker/src/config";
 import { handleFeedback, type Env } from "../worker/src/index";
 import { createMockAssets, createMockD1 } from "./helpers/mock-d1";
@@ -260,5 +260,169 @@ describe("the model is stitched in one buffer, not three copies (pre-Proof audit
     const stitch = src.slice(src.indexOf("export async function stitchModel"));
     expect(stitch).toContain("const whole = new Uint8Array(total);");
     expect(stitch).not.toMatch(/buffers\.push|blob\.arrayBuffer\(\)|readCounted/);
+  });
+});
+
+describe("the tokenizer and config are pinned like the model (T11, L4)", () => {
+  const sha = (b: Uint8Array | Buffer) => createHash("sha256").update(b).digest("hex");
+  const repo = "onnx-community/Kokoro-82M-v1.0-ONNX";
+  const key = `/voice/models/${repo}/tokenizer.json`;
+  const good = new TextEncoder().encode('{"model":"kokoro"}');
+  const pins = { files: { [key]: sha(good) } };
+  const serve = (body: Uint8Array) => {
+    const f = vi.fn(async (url: string) => (url === key ? new Response(body) : new Response(null, { status: 404 })));
+    vi.stubGlobal("fetch", f);
+    return f;
+  };
+  /** A one-entry Cache Storage stand-in. */
+  const fakeCache = (body?: Uint8Array) => {
+    let held = body;
+    return {
+      match: vi.fn(async (k: string) => (k === key && held ? new Response(held) : undefined)),
+      delete: vi.fn(async () => {
+        const had = !!held;
+        held = undefined;
+        return had;
+      }),
+      get held() {
+        return held;
+      },
+    };
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("the voice manifest pins tokenizer.json, tokenizer_config.json and config.json by served path, with fetch-voice's own pins", async () => {
+    const { MODEL_FILES, REPO, STAGED_DIRS, modelFilePins } = await import("../scripts/fetch-voice.mjs");
+    const want = modelFilePins();
+    expect(Object.keys(want).sort()).toEqual(["config.json", "tokenizer.json", "tokenizer_config.json"].map((f) => `/voice/models/${REPO}/${f}`));
+    for (const [p, pin] of Object.entries(want)) expect(pin).toBe(MODEL_FILES[p.slice(`/voice/models/${REPO}/`.length)]);
+    const manifest = JSON.parse(readFileSync(path.join(STAGED_DIRS.voice, "manifest.json"), "utf8")) as { files: Record<string, string> };
+    expect(manifest.files).toEqual(want);
+    // The staged bytes are the pinned ones.
+    for (const [p, pin] of Object.entries(manifest.files)) {
+      expect(sha(readFileSync(path.join(STAGED_DIRS.voice, p.slice("/voice/".length)))), p).toBe(pin);
+    }
+  });
+
+  it("on fetch: a file that matches its pin is used, one that does not is refused, and an unpinned one is never fetched", async () => {
+    serve(good);
+    let counted = 0;
+    const buf = await fetchPinnedFile(pins, key, (n) => (counted += n));
+    expect(Buffer.from(buf).equals(Buffer.from(good))).toBe(true);
+    expect(counted).toBe(good.byteLength);
+    serve(new TextEncoder().encode('{"model":"swapped"}'));
+    await expect(fetchPinnedFile(pins, key, () => undefined)).rejects.toThrow(/did not match its pin/);
+    const f = serve(good);
+    await expect(fetchPinnedFile({ files: {} }, key, () => undefined)).rejects.toThrow(/is not pinned/);
+    await expect(fetchPinnedFile({}, key, () => undefined)).rejects.toThrow(/is not pinned/);
+    expect(f).not.toHaveBeenCalled();
+    expect(modelFilePin({ files: { [key]: "x" } }, "/voice/models/other.json")).toBeUndefined();
+  });
+
+  it("on read: a cached copy is used only while it matches its pin, else it is deleted and fetched again", async () => {
+    const ok = fakeCache(good);
+    expect(Buffer.from((await cachedPinnedFile(ok, pins, key))!).equals(Buffer.from(good))).toBe(true);
+    expect(ok.delete).not.toHaveBeenCalled();
+    const bad = fakeCache(new TextEncoder().encode("tampered"));
+    expect(await cachedPinnedFile(bad, pins, key)).toBeUndefined();
+    expect(bad.delete).toHaveBeenCalledWith(key);
+    expect(bad.held).toBeUndefined();
+    const unpinned = fakeCache(good);
+    expect(await cachedPinnedFile(unpinned, { files: {} }, key)).toBeUndefined();
+    expect(unpinned.delete).toHaveBeenCalled();
+    expect(await cachedPinnedFile(fakeCache(), pins, key)).toBeUndefined();
+  });
+
+  it("the pinned cache never throws and never answers undefined for a model file: a miss or mismatch is a body that fails", async () => {
+    serve(new TextEncoder().encode("tampered on the wire"));
+    const kept: string[] = [];
+    const keep = async (k: string) => void kept.push(k);
+    const m = { ...pins, repo, model: "onnx/model_quantized.onnx" };
+    const pc = pinnedModelCache(fakeCache(new TextEncoder().encode("tampered in the cache")), m, () => undefined, keep, async () => {
+      throw new Error("voice: the model did not match its pin");
+    });
+    const tok = await pc.match(key);
+    expect(tok).toBeInstanceOf(Response);
+    await expect(tok!.arrayBuffer()).rejects.toThrow(/did not match its pin/);
+    const unpinned = await pc.match(`/voice/models/${repo}/generation_config.json`);
+    expect(unpinned).toBeInstanceOf(Response);
+    await expect(unpinned!.arrayBuffer()).rejects.toThrow(/is not pinned/);
+    const model = await pc.match(`/voice/models/${repo}/onnx/model_quantized.onnx`);
+    await expect(model!.arrayBuffer()).rejects.toThrow(/did not match its pin/);
+    expect(await pc.match("https://huggingface.co/x")).toBeUndefined();
+    // put(): only bytes that match their pin are kept.
+    await pc.put(key, new Response(new TextEncoder().encode("tampered")));
+    await pc.put(`/voice/models/${repo}/generation_config.json`, new Response(good));
+    await pc.put(`/voice/models/${repo}/onnx/model_quantized.onnx`, new Response(good));
+    expect(kept).toEqual([]);
+    expect(await putPinnedFile(pins, key, new Response(good), keep)).toBe(true);
+    expect(kept).toEqual([key]);
+  });
+
+  it("the three files are checked before the runtime is built: a bad copy is replaced from this origin, and a bad origin aborts", async () => {
+    const files = Object.fromEntries(["config.json", "tokenizer.json", "tokenizer_config.json"].map((f) => [`/voice/models/${repo}/${f}`, new TextEncoder().encode(`{"f":"${f}"}`)]));
+    const m = { repo, files: Object.fromEntries(Object.entries(files).map(([k, b]) => [k, sha(b)])) };
+    const store = new Map<string, Uint8Array>(Object.entries(files));
+    store.set(key, new TextEncoder().encode("tampered"));
+    const cache = {
+      match: async (k: string) => (store.has(k) ? new Response(store.get(k)) : undefined),
+      delete: async (k: string) => store.delete(k),
+    };
+    const keep = async (k: string, r: Response) => void store.set(k, new Uint8Array(await r.arrayBuffer()));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (files[url] ? new Response(files[url]) : new Response(null, { status: 404 }))));
+    await preparePinnedFiles(cache, m, () => undefined, keep);
+    expect(Buffer.from(store.get(key)!).equals(Buffer.from(files[key]!))).toBe(true);
+    // A tampered copy and an origin that serves the same: the load aborts.
+    store.set(key, new TextEncoder().encode("tampered"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new TextEncoder().encode("tampered"))));
+    await expect(preparePinnedFiles(cache, m, () => undefined, keep)).rejects.toThrow(/did not match its pin/);
+    // Offline with a tampered copy: aborts too, never uses it.
+    store.set(key, new TextEncoder().encode("tampered"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 404 })));
+    await expect(preparePinnedFiles(cache, m, () => undefined, keep)).rejects.toThrow(/404/);
+    // A manifest without the pins (an older build's) cannot load.
+    await expect(preparePinnedFiles(cache, { repo, files: {} }, () => undefined, keep)).rejects.toThrow(/is not pinned/);
+  });
+
+  it("tampered bytes from the cache make transformers.js's own tokenizer load reject, never fall through to an unchecked fetch", async () => {
+    const { env, AutoTokenizer } = await import("@huggingface/transformers");
+    const { REPO, STAGED_DIRS, modelFilePins } = await import("../scripts/fetch-voice.mjs");
+    const before = { ...env, customCache: env.customCache };
+    const real = (p: string) => new Uint8Array(readFileSync(path.join(STAGED_DIRS.voice, p.slice("/voice/".length))));
+    const m = { repo: REPO, model: "onnx/model_quantized.onnx", files: modelFilePins() as Record<string, string> };
+    const tokKey = `/voice/models/${REPO}/tokenizer.json`;
+    const store = new Map<string, Uint8Array>(Object.keys(m.files).map((k) => [k, real(k)]));
+    const cache = {
+      match: async (k: string) => (store.has(k) ? new Response(store.get(k)) : undefined),
+      delete: async (k: string) => store.delete(k),
+    };
+    const keep = async (k: string, r: Response) => void store.set(k, new Uint8Array(await r.arrayBuffer()));
+    Object.assign(env, { allowRemoteModels: false, allowLocalModels: true, localModelPath: "/voice/models/", useBrowserCache: false, useFSCache: false, useCustomCache: true });
+    env.customCache = pinnedModelCache(cache, m, () => undefined, keep, async () => new Response(null, { status: 404 }));
+    try {
+      // Honest bytes load.
+      const tok = await AutoTokenizer.from_pretrained(REPO);
+      expect(tok).toBeTruthy();
+      // One changed byte in the cached tokenizer, and an origin serving the same: the load rejects with the pin error.
+      const bad = real(tokKey);
+      bad[bad.length - 2] = bad[bad.length - 2] === 32 ? 10 : 32;
+      store.set(tokKey, bad);
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(bad)));
+      await expect(AutoTokenizer.from_pretrained(REPO)).rejects.toThrow(/did not match its pin/);
+    } finally {
+      Object.assign(env, before);
+    }
+  });
+
+  it("the loader and Save for offline both go through the pinned helpers, never a bare fetch of a model file", () => {
+    const voice = read("web/src/voice.ts");
+    expect(voice).toContain("env.customCache = pinnedModelCache(cache, manifest, count, keepModelFile, () => stitchModel(manifest, count));");
+    expect(voice).toContain("await preparePinnedFiles(cache, manifest, count, keepModelFile);");
+    // The check comes before the runtime is built.
+    expect(voice.indexOf("await preparePinnedFiles(")).toBeLessThan(voice.indexOf("KokoroTTS.from_pretrained("));
+    expect(voice).not.toMatch(/fetch\(`\/voice\/models\//);
+    const store = read("web/src/offline/store.ts");
+    expect(store).toContain("await put(cache, p, new Response(await fetchPinnedFile(m, p, count, signal)));");
+    expect(store).not.toMatch(/fetch\(`\/voice\/models\//);
   });
 });

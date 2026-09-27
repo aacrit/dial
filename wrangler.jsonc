@@ -8,9 +8,14 @@
   "routes": [
     { "pattern": "dial.voidvision.org", "custom_domain": true }
   ],
-  // workers.dev stays on: preview versions (/ship) are served there.
+  // workers.dev stays on: the contract's burst_host (dial.aacrit.workers.dev)
+  // measures the Worker's own limit there, past the zone's WAF.
   "workers_dev": true,
-  "preview_urls": true,
+  // No preview URLs on the production Worker (T11, CoS decision M): each
+  // uploaded version would stay public at <version>-dial.aacrit.workers.dev,
+  // with whatever guards it had, bound to the production D1. Previews (/ship)
+  // run on the separate "preview" environment below instead.
+  "preview_urls": false,
   // Worker logs are kept (errors, and anything the Worker itself writes,
   // which is never a request body, IP or key), but invocation logs, one
   // record per request with its URL, headers and client details, are off,
@@ -30,13 +35,15 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "none",
+    // A path that matches no asset gets dist/404.html (web/404.html) with a
+    // 404 status from Workers Static Assets, never the Worker (T11, M2): an
+    // unknown path costs no invocation. /seal is one of them.
+    "not_found_handling": "404-page",
     // Only the Worker's own routes run the Worker: every static page,
     // script, stylesheet and font is served by Workers Static Assets
     // directly, with its headers from dist/_headers (scripts/build.mjs), and
     // costs no Worker invocation (the free plan's 100,000 a day are shared by
-    // the whole account). A path that matches no asset still falls through
-    // to the Worker, which answers 404. Add a product's API routes here.
+    // the whole account). Add a product's API routes here.
     "run_worker_first": ["/e", "/feedback", "/healthz", "/api/*"]
   },
   // Per-client rate limit (worker/src/guard.ts). The binding counts per
@@ -65,6 +72,54 @@
     // states it and tests/hardening.test.ts recomputes it from these values.
     "EVENT_DAILY_CEILING": "3500",
     "FEEDBACK_DAILY_CEILING": "100"
+  },
+  // The preview Worker (T11, CoS decision M): `npx wrangler deploy --env
+  // preview` puts a branch at https://dial-preview.aacrit.workers.dev, where
+  // /ship runs the contract, bursts included. It shares no binding with
+  // production: its own D1 (dial-preview) and its own rate-limit namespaces
+  // (7311 to 7313), so unreviewed code never writes to production's data and
+  // never shares its counters. Bindings and vars are not inherited from the
+  // top level, so each is restated; routes are set empty so the preview can
+  // never claim dial.voidvision.org. tests/hardening.test.ts pins all of it.
+  "env": {
+    "preview": {
+      "name": "dial-preview",
+      "routes": [],
+      "workers_dev": true,
+      "preview_urls": false,
+      "assets": {
+        "directory": "./dist",
+        "binding": "ASSETS",
+        "not_found_handling": "404-page",
+        "run_worker_first": ["/e", "/feedback", "/healthz", "/api/*"]
+      },
+      "ratelimits": [
+        { "name": "RL_API", "namespace_id": "7311", "simple": { "limit": 20, "period": 10 } },
+        { "name": "RL_EVENTS", "namespace_id": "7312", "simple": { "limit": 6, "period": 60 } },
+        { "name": "RL_FEEDBACK", "namespace_id": "7313", "simple": { "limit": 2, "period": 60 } }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "dial-preview",
+          "database_id": "d80d584d-b7f5-41fb-adae-468fb66b810e"
+        }
+      ],
+      // Small ceilings: the preview's D1 writes count against the same
+      // account's 100,000 a day, so it adds a sliver (budget.yaml, summed
+      // over every env by tests/hardening.test.ts), enough for the contract
+      // and a few manual checks. The bursts write nothing (their bodies are
+      // refused), so they pass at any ceiling.
+      "vars": {
+        "BUILD_TAG": "preview",
+        // Every Worker answer on the preview says X-Robots-Tag: noindex
+        // (worker/src/index.ts withRobots); static files get it from
+        // dist/_headers' rule for this host.
+        "ROBOTS": "noindex",
+        "EVENT_DAILY_CEILING": "50",
+        "FEEDBACK_DAILY_CEILING": "10"
+      }
+    }
   }
   // Cloudflare caps cron triggers at 5 per account, and this account's one
   // scheduler Worker (see the root CLAUDE.md "API" stack note) already uses

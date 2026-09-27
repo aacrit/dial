@@ -3,8 +3,8 @@
 // privacy-allowlist.json) and keeps them in the browser's Cache Storage:
 //
 // - the voice in the same caches the render worker reads (voice.ts): the
-//   model (checked against its pin), its tokenizer and config (which, as in
-//   voice.ts, have no pin of their own), the runtime's .wasm and the voices
+//   model (checked against its pin), its tokenizer and config (each
+//   checked against its pin in the manifest's files), the runtime's .wasm and the voices
 //   the work's cast uses (each checked against its pin); a file already
 //   kept is never downloaded again. What is already kept is judged by
 //   presence here. On each load the render worker checks the runtime and
@@ -28,7 +28,7 @@
 
 import type { VoiceManifest } from "../voice";
 import { runtimeCacheKey, runtimeCacheName, voiceCacheName, type Held } from "../voice-cache";
-import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
+import { KOKORO_VOICES_CACHE, MODELS, fetchPinnedFile, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
 import { NO_VOICES, offlineExtras, recordingKeysOf, parseVoices, recordingFiles, savePlan, unionVoices, voicesToRemove, type PinnedFile, type RecordingPlan, type SavePlan } from "./plan";
 import type { RecordingIndex } from "../recording/timing";
 import type { RecordingFormat } from "../recording/source";
@@ -297,10 +297,8 @@ export async function saveWork(man: Manifest, slug: string, text: string, voices
   for (const p of Object.keys(m.sizes)) {
     if (!p.startsWith(`${MODELS}${m.repo}/`) || p.includes("/onnx/") || h.modelFiles.has(p)) continue;
     signal.throwIfAborted();
-    const res = await fetch(`/voice/models/${p.slice(MODELS.length)}`, { signal });
-    if (!res.ok) throw new Error(`voice file: ${res.status}`);
-    const buf = await readCounted(res, count);
-    await put(cache, p, new Response(buf, { headers: res.headers }));
+    // Checked against its pin before it is kept (T11); an unpinned file is refused.
+    await put(cache, p, new Response(await fetchPinnedFile(m, p, count, signal)));
   }
   if (!h.runtime) {
     signal.throwIfAborted();
