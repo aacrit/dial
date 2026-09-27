@@ -9,8 +9,8 @@
 // - every part of a panel in view (the dial box, each part of the device's
 //   side, each widget; marked data-part) sits inside the panel: its bottom is
 //   at most the panel's bottom less its bottom padding (clear of the band),
-//   its top clear of the top bar, and its right edge clear of the band plate
-//   and within the viewport.
+//   its top clear of the top bar, nothing of it under the band selector, and
+//   within the viewport.
 
 /** Tolerance for sub-pixel rounding, in px. */
 export const SLACK = 1;
@@ -29,7 +29,6 @@ export function measure(panelIds) {
     const cs = getComputedStyle(el);
     const padTop = parseFloat(cs.paddingTop) || 0;
     const padBottom = parseFloat(cs.paddingBottom) || 0;
-    const padRight = parseFloat(cs.paddingRight) || 0;
     const parts = [...el.querySelectorAll("[data-part]")]
       .map((p) => {
         const b = p.getBoundingClientRect();
@@ -38,9 +37,14 @@ export function measure(panelIds) {
       })
       // Hidden parts (display: none, or a widget stepped aside) take no room.
       .filter((p) => p.width > 0 && p.height > 0);
-    return { id, top: r.top, bottom: r.bottom, right: r.right, padTop, padBottom, padRight, parts };
+    return { id, top: r.top, bottom: r.bottom, padTop, padBottom, parts };
   });
+  // The band selector, where it is drawn: nothing on a panel may sit under it.
+  const bandEl = document.getElementById("band");
+  const br = bandEl ? bandEl.getBoundingClientRect() : null;
+  const band = br && br.width > 0 && br.height > 0 ? { top: br.top, bottom: br.bottom, left: br.left, right: br.right } : null;
   return {
+    band,
     innerWidth,
     innerHeight,
     scrollWidth: doc.scrollWidth,
@@ -71,7 +75,13 @@ export function judge(m) {
       if (part.bottom > floor + SLACK) note(part.bottom - floor, `#${p.id} ${part.name} ends below the panel`);
       if (part.top < ceiling - SLACK) note(ceiling - part.top, `#${p.id} ${part.name} starts under the top bar`);
       if (part.right > m.innerWidth + SLACK) note(part.right - m.innerWidth, `#${p.id} ${part.name} runs off the right edge`);
-      else if (p.right !== undefined && part.right > p.right - (p.padRight ?? 0) + SLACK) note(part.right - (p.right - p.padRight), `#${p.id} ${part.name} runs under the band`);
+      const b = m.band;
+      if (b) {
+        // How far the part reaches into the band plate, the lesser of the two overlaps.
+        const across = Math.min(part.right, b.right) - Math.max(part.left, b.left);
+        const down = Math.min(part.bottom, b.bottom) - Math.max(part.top, b.top);
+        if (across > SLACK && down > SLACK) note(Math.min(across, down), `#${p.id} ${part.name} runs under the band`);
+      }
       if (part.left < -SLACK) note(-part.left, `#${p.id} ${part.name} runs off the left edge`);
     }
   }

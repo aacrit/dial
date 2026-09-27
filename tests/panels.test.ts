@@ -112,8 +112,8 @@ describe("style.css agrees with the map", () => {
     expect(vars(mediaBlocks(LANDSCAPE)[0]!)).toEqual({ top: String(chrome(1280, 800).top), band: String(chrome(1280, 800).band) });
     expect(vars(mediaBlocks(SHORT_LANDSCAPE)[0]!).top).toBe(String(chrome(740, 360).top));
     expect(vars(mediaBlocks(SINGLE_PANEL)[0]!).top).toBe(String(chrome(1920, 1080).top));
-    expect(mediaBlocks(LANDSCAPE)[0]).toMatch(/--padr: 84px;/);
-    expect(chrome(1280, 800).bandWidth).toBe(84);
+    expect(mediaBlocks(LANDSCAPE)[0]).toMatch(/--padr: 96px;/);
+    expect(chrome(1280, 800).bandWidth).toBe(96);
   });
 
   it("the page never scrolls sideways; vertically it snaps panel to panel inside .panels, never body", () => {
@@ -153,7 +153,7 @@ describe("style.css agrees with the map", () => {
 });
 
 describe("the no-scroll rule's verdict (layout-probe judge)", () => {
-  const panel = (parts: object[], over: object = {}) => ({ id: "work", top: 0, bottom: 812, right: 375, padTop: 52, padBottom: 52, padRight: 12, parts, ...over });
+  const panel = (parts: object[], over: object = {}) => ({ id: "work", top: 0, bottom: 812, padTop: 52, padBottom: 52, parts, ...over });
   const part = (name: string, top: number, bottom: number, left = 12, right = 363) => ({ name, top, bottom, left, right, width: right - left, height: bottom - top });
   const page = (panels: object[], over: object = {}) => ({ innerWidth: 375, innerHeight: 812, scrollWidth: 375, scrollerScrollWidth: 375, scrollerClientWidth: 375, panels, ...over });
 
@@ -169,7 +169,14 @@ describe("the no-scroll rule's verdict (layout-probe judge)", () => {
     expect(judge(page([panel([])], { scrollWidth: 402 })).problems[0]).toMatch(/402 px wide in a 375 px viewport/);
     expect(judge(page([panel([])], { scrollerScrollWidth: 400 })).problems[0]).toMatch(/panels scroll sideways/);
     expect(judge(page([panel([part("dialbox", 20, 200)])])).problems[0]).toMatch(/starts under the top bar/);
-    expect(judge(page([panel([part("w-text", 60, 200, 12, 1250)], { right: 1280, padRight: 84 })], { innerWidth: 1280, scrollWidth: 1280, scrollerScrollWidth: 1280, scrollerClientWidth: 1280 })).problems[0]).toMatch(/runs under the band/);
+    const plate = { top: 300, bottom: 480, left: 1188, right: 1270 };
+    const wide = { innerWidth: 1280, scrollWidth: 1280, scrollerScrollWidth: 1280, scrollerClientWidth: 1280, band: plate };
+    const plateHit = judge(page([panel([part("display", 280, 460, 660, 1196)])], wide));
+    expect(plateHit.problems[0]).toMatch(/runs under the band/);
+    expect(plateHit.worst).toBe(8);
+    expect(judge(page([panel([part("display", 280, 460, 660, 1180)])], wide)).ok).toBe(true);
+    // Above a bottom band, clear of it.
+    expect(judge(page([panel([part("seal", 320, 760)])], { band: { top: 768, bottom: 812, left: 0, right: 375 } })).ok).toBe(true);
     expect(judge(page([{ id: "radio", missing: true, parts: [] }])).ok).toBe(false);
   });
 

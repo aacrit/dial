@@ -149,6 +149,12 @@ async function main() {
       await page.waitForSelector('[data-device][data-state="ready"]', { timeout: 15_000 });
       await page.waitForTimeout(200);
       await check("radio", "radio");
+      // The connection drops: the offline notice joins the device's side.
+      await context.setOffline(true);
+      await page.waitForTimeout(300);
+      await check("offline", "radio");
+      await context.setOffline(false);
+      await page.waitForTimeout(300);
       if (await toPanel("work", "work")) {
         await check("work", "work");
         if (await press("#seal-reqs > summary", "seal open")) {

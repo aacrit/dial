@@ -80,14 +80,14 @@ export function panelLayout(width: number, height: number): PanelLayout {
 export function chrome(width: number, height: number): { top: number; band: number; bandWidth: number } {
   const l = panelLayout(width, height);
   if (l.band === "none") return { top: 60, band: 0, bandWidth: 0 };
-  if (l.band === "right") return { top: matchesQuery(SHORT_LANDSCAPE, width, height) ? 38 : 56, band: 0, bandWidth: 84 };
+  if (l.band === "right") return { top: matchesQuery(SHORT_LANDSCAPE, width, height) ? 38 : 56, band: 0, bandWidth: 96 };
   return matchesQuery(TABLET_PORTRAIT, width, height) ? { top: 60, band: 52, bandWidth: 0 } : { top: 48, band: 44, bandWidth: 0 };
 }
 
 /**
  * A panel's content box: the viewport less the top bar, the band and the
  * padding style.css gives .panel (4 px under the top bar, 8 px over the
- * band, 12 px at the sides or the band plate's 84 px at the right).
+ * band, 12 px at the sides or the band plate's 96 px at the right).
  * Safe-area insets are 0 in a desktop browser.
  */
 export function panelBox(width: number, height: number): { width: number; height: number } {
