@@ -1,10 +1,14 @@
 // Which of this device's engines makes the speech (T7): the processor
-// (onnxruntime-web's WASM with threads and SIMD, the baseline) or the
-// graphics chip (WebGPU, through the same pinned runtime: its .jsep build
-// carries both). Measured, never assumed: the render worker times one fixed
-// sentence on each engine it can open (narrate.worker.ts speedTest), checks
+// (onnxruntime-web's WASM with threads and SIMD, the baseline, running the
+// q8 model) or the graphics chip (WebGPU, through the same pinned runtime:
+// its .jsep build carries both, running the fp32 model, because q8's
+// quantized operators fall back to the processor on WebGPU and fp16 does
+// not speak right there). Measured, never assumed: the processor's speed
+// comes from the lines it makes; where the graphics chip's model is on this
+// device (downloaded only at the listener's choice), the render worker times
+// one fixed sentence on both engines (narrate.worker.ts speedTest), checks
 // the graphics chip's speech against the processor's (soundsRight), and the
-// faster one that sounds right makes the work. The winner and its measured
+// faster one that sounds right makes the work. The choice and its measured
 // speed are kept on this device only (speed/store.ts), keyed to the model's
 // and the runtime's pins, so a new voice or runtime is measured afresh.
 // Nothing here is ever sent: not the speeds, not the engine, not a count.
@@ -46,6 +50,18 @@ export interface SpeedEntry {
   gpu: boolean;
   backend: Backend;
   rtf: number;
+  /** The graphics chip's measured speed once it was tested (0 when it did not speak right), so it is not offered again. */
+  gpuRtf?: number;
+}
+
+/**
+ * The graphics chip's model to offer, in bytes, or 0: only where this
+ * browser offers WebGPU, the model is not on this device yet, and this
+ * device's graphics chip has not been tested before.
+ */
+export function gpuOffer(gpu: boolean, bytes: number | undefined, held: boolean, entry: SpeedEntry | null): number {
+  if (!gpu || held || !(bytes && bytes > 0)) return 0;
+  return entry?.gpuRtf !== undefined ? 0 : bytes;
 }
 
 /** Reads a kept entry; anything malformed is treated as none. */
@@ -55,7 +71,8 @@ export function parseEntry(raw: string | null | undefined): SpeedEntry | null {
     const e = JSON.parse(raw) as Partial<SpeedEntry>;
     if (e.v !== 1 || typeof e.model !== "string" || typeof e.runtime !== "string" || typeof e.gpu !== "boolean") return null;
     if ((e.backend !== "wasm" && e.backend !== "webgpu") || typeof e.rtf !== "number" || !(e.rtf > 0) || !Number.isFinite(e.rtf)) return null;
-    return { v: 1, model: e.model, runtime: e.runtime, gpu: e.gpu, backend: e.backend, rtf: e.rtf };
+    const gpuRtf = typeof e.gpuRtf === "number" && e.gpuRtf >= 0 && Number.isFinite(e.gpuRtf) ? { gpuRtf: e.gpuRtf } : {};
+    return { v: 1, model: e.model, runtime: e.runtime, gpu: e.gpu, backend: e.backend, rtf: e.rtf, ...gpuRtf };
   } catch {
     return null;
   }
@@ -63,14 +80,25 @@ export function parseEntry(raw: string | null | undefined): SpeedEntry | null {
 
 /** The kept choice, when it was measured with these pins and this browser's WebGPU as it is now; else null (measure again). */
 export function keptChoice(entry: SpeedEntry | null, pins: { model: string; runtime: string }, gpu: boolean): SpeedChoice | null {
-  if (!entry || entry.model !== pins.model || entry.runtime !== pins.runtime || entry.gpu !== gpu) return null;
-  if (entry.backend === "webgpu" && !gpu) return null;
-  return { backend: entry.backend, rtf: entry.rtf, trials: [], cached: true };
+  if (!keptMatches(entry, pins, gpu)) return null;
+  return { backend: entry!.backend, rtf: entry!.rtf, trials: [], cached: true };
 }
 
-/** The entry to keep for a choice just measured. */
-export function entryFor(choice: SpeedChoice, pins: { model: string; runtime: string }, gpu: boolean): SpeedEntry {
-  return { v: 1, model: pins.model, runtime: pins.runtime, gpu, backend: choice.backend, rtf: choice.rtf };
+/** The kept entry was measured with these pins and this browser's WebGPU as it is now. */
+export function keptMatches(entry: SpeedEntry | null, pins: { model: string; runtime: string }, gpu: boolean): boolean {
+  if (!entry || entry.model !== pins.model || entry.runtime !== pins.runtime || entry.gpu !== gpu) return false;
+  return entry.backend !== "webgpu" || gpu;
+}
+
+/** The entry to keep for a choice (its rtf may still be 0: the page keeps it once a line has measured it). */
+export function entryFor(choice: SpeedChoice, pins: { model: string; runtime: string }, gpu: boolean, gpuRtf?: number): SpeedEntry {
+  return { v: 1, model: pins.model, runtime: pins.runtime, gpu, backend: choice.backend, rtf: choice.rtf, ...(gpuRtf !== undefined ? { gpuRtf } : {}) };
+}
+
+/** The entry with the speed measured live from the lines made, where it is a measurement; null when there is nothing to keep yet. */
+export function measuredEntry(entry: SpeedEntry | null, backend: Backend, rtf: number): SpeedEntry | null {
+  if (!entry || entry.backend !== backend || !(rtf > 0) || !Number.isFinite(rtf)) return null;
+  return { ...entry, rtf };
 }
 
 /** The fastest engine that ran and sounds right; the processor when nothing else did. */

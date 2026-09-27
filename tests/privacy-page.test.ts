@@ -33,9 +33,11 @@ describe("web/privacy.html, claim by claim", () => {
     }
   });
 
-  it("what Dial keeps in the browser: two settings in local storage, the tab's request log in session storage, and nothing else", () => {
+  it("what Dial keeps in the browser: three settings in local storage, the tab's request log in session storage, and nothing else", () => {
     expect(text).toContain("The counts switch: one setting in local storage, whether to send daily counts, written only when you change it.");
-    expect(text).toContain("Besides the voice, saved works and page files described above, Dial keeps three small things, all on your device and never sent.");
+    expect(text).toContain("Besides the voice, saved works and page files described above, Dial keeps four small things, all on your device and never sent.");
+    // T7: this device's measured speed (speed/store.ts), written from the pacer as a work is made here.
+    expect(text).toContain("This device's speed: one setting in local storage, which engine (processor or graphics chip) made speech faster and how fast, written when a work is made on this device, so the speed test runs once.");
     // T5b: which encoding of the prepared recording plays here, remembered only once discovered by a failed try (recording/source.ts rememberPlaybackFormat).
     expect(text).toContain("Which encoding of Dial's prepared recording plays in this browser: one setting in local storage, written only once trying the usual one fails, so it is not tried again.");
     expect(text).toContain("This tab's request log: the path, size and time of each request Dial's pages and their voice helpers made in this tab, of each request the offline helper made for this tab, and, marked as shared, of what the offline helper fetched for itself for every Dial tab (and, for a count, its name, and whether a send was not delivered), kept in session storage so the Seal widget on the radio can show it; never any text or audio, and erased when the tab closes.");
@@ -58,9 +60,15 @@ describe("web/privacy.html, claim by claim", () => {
     expect(read("web/src/narrate.worker.ts")).toMatch(/watchWorkerRequests\(/);
     expect(read("web/src/request-recorder.ts")).toMatch(/recordEntries\(data\.entries\.filter\(isRawEntry\), data\.shared === true \? "shared" : "helper"\)/);
     const files = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
-    // localStorage is read and written in telemetry.ts (the counts switch) and recording/source.ts (T5b's remembered format) only, each under its own one key.
+    // localStorage is read and written in telemetry.ts (the counts switch), recording/source.ts (T5b's remembered format) and speed/store.ts (T7's measured speed) only, each under its own one key.
     const local = files.filter((f) => /\blocalStorage\b/.test(read(`web/src/${f}`)));
-    expect(local.slice().sort()).toEqual(["recording/source.ts", "telemetry.ts"]);
+    expect(local.slice().sort()).toEqual(["recording/source.ts", "speed/store.ts", "telemetry.ts"]);
+    const speedStore = read("web/src/speed/store.ts");
+    expect(speedStore).toContain('export const SPEED_KEY = "dial.speed";');
+    expect([...speedStore.matchAll(/\.setItem\(([^,]+),/g)].map((m) => m[1])).toEqual(["SPEED_KEY"]);
+    // Written only by the pacer, while a work is made on this device.
+    expect(files.filter((f) => f !== "speed/store.ts" && /\bkeepSpeed\b/.test(read(`web/src/${f}`)))).toEqual(["main.ts"]);
+    expect(read("web/src/main.ts")).toMatch(/keep: keepSpeed,/);
     const telemetry = read("web/src/telemetry.ts");
     expect(telemetry).toContain('export const COUNTS_KEY = "dial.counts";');
     expect([...telemetry.matchAll(/\.setItem\(([^,]+),/g)].map((m) => m[1])).toEqual(["COUNTS_KEY"]);
@@ -126,16 +134,24 @@ describe("web/privacy.html, claim by claim", () => {
     expect(read("web/src/seal-widget.ts")).toMatch(/const refuse = \(\) => \{\s*sw\.disabled = true;\s*note\.textContent = STORAGE_REFUSED;/);
   });
 
-  it("no speed test is offered until the radio's gauge (T7), so the page makes no claim about one; its engine still sends nothing", () => {
-    // The Seal page and its test are gone (design/spec.md 00); the gauge that replaces it is T7's, with its own claim.
-    expect(text).not.toMatch(/speed test/i);
-    const files = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
-    const starters = files.filter((f) => /type: "bench"/.test(read(`web/src/${f}`)) && f !== "narrate.worker.ts");
-    expect(starters).toEqual([]);
+  it("the speed test (T7) is measured in the tab and never sent; the graphics chip's voice downloads only at the listener's choice, from this site", () => {
+    expect(text).toContain("How fast your device makes speech is measured in your browser tab, from the lines it makes and, where you choose to test your graphics chip, from one short sentence. The speed test's results are shown on the radio and never sent, not even as a count.");
+    expect(text).toContain("Testing the graphics chip downloads a second copy of the voice from this site, its size shown before you choose; it is kept in cache storage like the first, and deleted again if the graphics chip does not make speech faster than the processor.");
     const worker = read("web/src/narrate.worker.ts");
-    const bench = worker.slice(worker.indexOf("async function bench("), worker.indexOf("ctx.onmessage"));
-    expect(bench).toMatch(/await loadVoice\(/);
-    for (const [f, src] of [["bench.ts", read("web/src/bench.ts")], ["narrate.worker.ts bench()", bench]]) expect(src, f).not.toMatch(/sendEvent|fetch\(|Storage\b|caches\.open|indexedDB/);
+    const test = worker.slice(worker.indexOf("async function hasGpu("), worker.indexOf("/** The last line this worker may make yet"));
+    // Paired: the timing code sends nothing and keeps nothing; the page keeps the result (speed/store.ts), never sends it.
+    for (const [f, src] of [["bench.ts", read("web/src/bench.ts")], ["speed/backend.ts", read("web/src/speed/backend.ts")], ["speed/plan.ts", read("web/src/speed/plan.ts")], ["speed/pacer.ts", read("web/src/speed/pacer.ts")], ["speed/gauge.ts", read("web/src/speed/gauge.ts")], ["narrate.worker.ts speed test", test]]) {
+      expect(src, f).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|sendBeacon|noteSend|Storage\b|indexedDB/);
+    }
+    // The graphics chip's model: fetched only by gpu-model.ts, only from this origin, only when askGpu runs (the listener's key).
+    const gpuModel = read("web/src/speed/gpu-model.ts");
+    expect([...gpuModel.matchAll(/fetch\(\s*([^,)]+)/g)].map((m) => m[1])).toEqual(['"/voice/manifest.json"']);
+    expect(gpuModel).toMatch(/stitchModel\(\{ repo: m\.repo, parts: gpu\.parts, sizes: m\.sizes, sha256: gpu\.sha256 \}/);
+    expect(read("web/src/main.ts")).toMatch(/speedGpu\.addEventListener\("click", \(\) => session\?\.pacer\?\.testGpu\(\)\);/);
+    expect(read("web/src/speed/pacer.ts")).toMatch(/testGpu\(\): void \{\s*if \(this\.gpuAsked \|\| !\(this\.gpuBytes > 0\)\) return;\s*this\.gpuAsked = true;\s*this\.h\.hideAsk\(\);\s*this\.h\.askGpu\(\);/);
+    // Never fetched by the voice loader, and dropped when it loses.
+    expect(read("web/src/voice.ts")).toMatch(/key === gpuModelKey\(\{ repo: manifest\.repo, gpu: manifest\.gpu \}\)\) return undefined;/);
+    expect(worker).toMatch(/if \(!tested\.gpuTts\) await dropGpuModel\(manifest\);/);
   });
 
   it("the narration is made on the device: the render worker only receives text and posts audio back, and the voice sits in cache storage", () => {

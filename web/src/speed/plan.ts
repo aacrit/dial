@@ -48,7 +48,8 @@ export function leadWait(lines: readonly PlanLine[], made: number, position: num
   let wait = 0;
   for (let i = made; i < lines.length; i++) {
     const line = lines[i]!;
-    makingDone += i === made ? Math.max(0, line.speech / rate - Math.max(0, spent)) : line.speech / rate;
+    // The line under way: what is left of it, and never less than a tenth (a line running late is late, not done).
+    makingDone += i === made ? Math.max(0.1 * (line.speech / rate), line.speech / rate - Math.max(0, spent)) : line.speech / rate;
     // Line i must be made by the time playback reaches its start (after the wait) ...
     const reached = Math.max(0, at - position);
     wait = Math.max(wait, makingDone - reached);

@@ -35,6 +35,15 @@ export const MODEL_FILES = {
   "tokenizer_config.json": "be1cb066d6ef6b074b3f15e6a6dd21ac88ff3cdaedf325f0aaed686c70f75d20",
   "onnx/model_quantized.onnx": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
 };
+// The same model at full precision, for the graphics chip only (T7,
+// web/src/speed/backend.ts): the q8 model runs on WebGPU but its quantized
+// operators fall back to the processor, so it is slower there than on the
+// processor alone; fp16 speaks wrongly on WebGPU. It is staged and pinned
+// like the rest, in its own parts, and downloaded only when a listener
+// chooses to test the graphics chip, with its size said first
+// (manifest.gpu.bytes). It is never part of Save for offline or the voice's
+// "about 115 MB".
+export const GPU_MODEL = { file: "onnx/model.onnx", sha256: "8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb" };
 // The voice files, each pinned: the two narrators (web/src/engine/cast.ts
 // NARRATORS, male then female), then every character voice the catalogue's
 // casts use, in order of first use. tests/speakers.test.ts recomputes the
@@ -153,6 +162,14 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
     }
   }
 
+  const gpuBuf = await cached(GPU_MODEL.file, GPU_MODEL.sha256);
+  const gpuParts = [];
+  for (let i = 0, n = 0; i < gpuBuf.length; i += PART_BYTES, n++) {
+    const name = `model.part${n}`;
+    writeFileSync(path.join(modelDir, "onnx", name), gpuBuf.subarray(i, i + PART_BYTES));
+    gpuParts.push(name);
+  }
+
   mkdirSync(path.join(voiceOut, "voices"), { recursive: true });
   for (const [id, pin] of Object.entries(VOICES)) {
     const buf = checkPin(`${id}.bin`, readFileSync(path.join(resolvePackageDir("kokoro-js"), "voices", `${id}.bin`)), pin);
@@ -175,10 +192,27 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
   const totalBytes = Object.values(sizes).reduce((a, b) => a + b, 0);
   writeFileSync(
     path.join(voiceOut, "manifest.json"),
-    JSON.stringify({ repo: REPO, revision: REVISION, model: "onnx/model_quantized.onnx", sha256: MODEL_FILES["onnx/model_quantized.onnx"], parts, files: modelFilePins(), voices: VOICES, runtime: ORT_WASM, runtimeSha256: ortPins[ORT_WASM], sizes, totalBytes }, null, 2) + "\n",
+    JSON.stringify(
+      {
+        repo: REPO,
+        revision: REVISION,
+        model: "onnx/model_quantized.onnx",
+        sha256: MODEL_FILES["onnx/model_quantized.onnx"],
+        parts,
+        gpu: { model: GPU_MODEL.file, sha256: GPU_MODEL.sha256, parts: gpuParts, bytes: gpuBuf.length },
+        files: modelFilePins(),
+        voices: VOICES,
+        runtime: ORT_WASM,
+        runtimeSha256: ortPins[ORT_WASM],
+        sizes,
+        totalBytes,
+      },
+      null,
+      2,
+    ) + "\n",
   );
 
-  console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts, voices ${Object.keys(VOICES).join(", ")}, onnxruntime-web`);
+  console.log(`fetch-voice: staged Kokoro-82M q8 in ${parts.length} parts (fp32 for the graphics chip in ${gpuParts.length}), voices ${Object.keys(VOICES).join(", ")}, onnxruntime-web`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

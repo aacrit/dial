@@ -4,38 +4,41 @@
 // audio out, plus this worker's own request record (address, time, size)
 // for the Seal's log; this worker has no other channel.
 //
-// Before the first line, the speed test (T7, speed/backend.ts) picks the
-// engine that makes the speech: it times one fixed sentence on the
-// processor and, where this browser offers WebGPU, on the graphics chip,
-// through the same pinned model and runtime (nothing more is downloaded).
-// Only timings come back to the page; nothing is sent anywhere. A choice
-// this device measured before (speed/store.ts, passed in by the page) skips
-// the test.
+// The engine (T7, speed/backend.ts): the processor (WASM with threads and
+// SIMD) by default, its speed measured from the lines it makes. Where this
+// browser offers WebGPU and the graphics chip's model is on this device
+// (downloaded only at the listener's choice), the speed test times one
+// fixed sentence on both engines, checks the graphics chip speaks it the
+// same, and the faster makes the rest. A choice this device measured before
+// (speed/store.ts, passed in by the page) is used without testing again.
+// Only timings come back to the page; nothing is sent anywhere.
 
 import type { KokoroTTS } from "kokoro-js";
-import { loadVoice, openVoice, type VoiceManifest } from "./voice";
+import { dropGpuModel, gpuModelHeld, loadVoice, openVoice, type VoiceManifest } from "./voice";
 import type { VoiceId } from "./engine/cast";
 import { BENCH_SENTENCE } from "./bench-sentence";
 import type { Cue } from "./engine/segment";
 import type { Need } from "./voice-cache";
 import type { RawEntry } from "./request-log";
 import { watchWorkerRequests } from "./worker-requests";
-import { entryFor, keptChoice, pickBackend, shapeOf, soundsRight, type Backend, type SpeedChoice, type SpeedEntry, type Trial } from "./speed/backend";
+import { entryFor, gpuOffer, keptChoice, keptMatches, pickBackend, shapeOf, soundsRight, type SpeedChoice, type SpeedEntry, type Trial } from "./speed/backend";
 
 /** voices[i] is cue i's cast voice. */
 /** from: the first line to make (the lines before it are Dial's recording's, which this browser could not decode). */
 /** kept: this device's earlier speed measurement (speed/store.ts), used when its pins still match. */
 /** allow: the last line the page lets this worker make yet (chapter-ahead within the memory cap, speed/plan.ts aheadLimit). */
-export type ToWorker = { type: "render"; cues: Cue[]; voices: VoiceId[]; from?: number; kept?: SpeedEntry | null } | { type: "allow"; upTo: number };
+/** gpu: the graphics chip's model is now on this device (the page downloaded it at the listener's choice, its size shown first): test it between two lines. */
+export type ToWorker = { type: "render"; cues: Cue[]; voices: VoiceId[]; from?: number; kept?: SpeedEntry | null } | { type: "allow"; upTo: number } | { type: "gpu" };
 export type FromWorker =
   /** total: the bytes this visit needs; need: nothing, only this work's voices, or the model and runtime too. */
   | { type: "loading"; loaded: number; total: number; need: Need; missingVoices: number }
-  /** The voice is loaded; the speed test is timing the fixed sentence on each engine. */
+  /** The speed test is timing the fixed sentence on each engine. */
   | { type: "testing" }
-  /** The engine chosen, and what to keep on this device (the page keeps it; a worker has no local storage). */
-  | { type: "speed"; choice: SpeedChoice; entry: SpeedEntry }
+  /** The engine in use and what to keep on this device (the page keeps it; a worker has no local storage); gpuOffer: the graphics chip's model to offer, in bytes, or 0. */
+  | { type: "speed"; choice: SpeedChoice; entry: SpeedEntry; gpuOffer: number }
   | { type: "ready"; kept: boolean }
-  | { type: "cue"; index: number; audio: Float32Array<ArrayBuffer>; sampleRate: number }
+  /** ms: how long this line took to make, timed here, so the page's measurement never counts its own busy moments. */
+  | { type: "cue"; index: number; audio: Float32Array<ArrayBuffer>; sampleRate: number; ms: number }
   | { type: "done" }
   | { type: "error"; message: string }
   /** This worker's requests, from its own Resource Timing record (worker-requests.ts). */
@@ -53,10 +56,10 @@ const flushRequests = watchWorkerRequests((entries) => ctx.postMessage({ type: "
 
 /** Whether this browser offers WebGPU to a worker, with an adapter behind it. */
 async function hasGpu(): Promise<boolean> {
-  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(o?: object): Promise<unknown> } }).gpu;
   if (!gpu) return false;
   try {
-    return !!(await gpu.requestAdapter());
+    return !!(await gpu.requestAdapter({ powerPreference: "high-performance" }));
   } catch {
     return false;
   }
@@ -66,8 +69,8 @@ async function hasGpu(): Promise<boolean> {
 const WARM_UP = "Ready.";
 
 /** Times the fixed sentence on one engine: its speed, and its speech's shape to compare. */
-async function timeSentence(tts: KokoroTTS, voice: KokoroVoiceId) {
-  await tts.generate(WARM_UP, { voice });
+async function timeSentence(tts: KokoroTTS, voice: KokoroVoiceId, warm: boolean) {
+  if (warm) await tts.generate(WARM_UP, { voice });
   const t1 = performance.now();
   const raw = await tts.generate(BENCH_SENTENCE, { voice });
   const ms = performance.now() - t1;
@@ -76,29 +79,29 @@ async function timeSentence(tts: KokoroTTS, voice: KokoroVoiceId) {
 }
 
 /**
- * The speed test: the processor first (the baseline, always there), then
- * the graphics chip where offered. The graphics chip counts only if its
- * speech matches the processor's (speed/backend.ts soundsRight).
+ * The speed test: the fixed sentence on the processor (the baseline), then
+ * on the graphics chip, which counts only if it speaks it the same
+ * (speed/backend.ts soundsRight). `cpuWarm`: the processor has already made
+ * a line, so it needs no warm-up.
  */
-async function speedTest(cpu: KokoroTTS, voice: KokoroVoiceId, manifest: VoiceManifest, gpu: boolean): Promise<{ choice: SpeedChoice; gpuTts: KokoroTTS | null }> {
-  const base = await timeSentence(cpu, voice);
+async function speedTest(cpu: KokoroTTS, voice: KokoroVoiceId, manifest: VoiceManifest, cpuWarm: boolean): Promise<{ choice: SpeedChoice; gpuTts: KokoroTTS | null; gpuRtf: number }> {
+  const base = await timeSentence(cpu, voice, !cpuWarm);
   const trials: Trial[] = [{ backend: "wasm", rtf: base.rtf, ok: base.shape.finite && base.shape.seconds > 0 }];
   let gpuTts: KokoroTTS | null = null;
-  if (gpu) {
-    try {
-      gpuTts = await openVoice(manifest, "webgpu");
-      const g = await timeSentence(gpuTts, voice);
-      trials.push({ backend: "webgpu", rtf: g.rtf, ok: soundsRight(g.shape, base.shape) });
-    } catch {
-      trials.push({ backend: "webgpu", rtf: 0, ok: false });
-    }
+  try {
+    gpuTts = await openVoice(manifest, "webgpu");
+    const g = await timeSentence(gpuTts, voice, true);
+    trials.push({ backend: "webgpu", rtf: g.rtf, ok: soundsRight(g.shape, base.shape) });
+  } catch {
+    trials.push({ backend: "webgpu", rtf: 0, ok: false });
   }
   const choice = pickBackend(trials);
+  const gpuTrial = trials[1]!;
   if (choice.backend !== "webgpu" && gpuTts) {
     await release(gpuTts);
     gpuTts = null;
   }
-  return { choice, gpuTts };
+  return { choice, gpuTts, gpuRtf: gpuTrial.ok ? gpuTrial.rtf : 0 };
 }
 
 /** Lets an engine's model go (its memory on the graphics chip too). */
@@ -113,12 +116,18 @@ async function release(tts: KokoroTTS): Promise<void> {
 /** The last line this worker may make yet, and the loop waiting for more. */
 let allowed = Infinity;
 let wake: (() => void) | null = null;
+/** The graphics chip's model arrived on this device (the page downloaded it at the listener's choice): test it between two lines. */
+let gpuArrived = false;
 
 ctx.onmessage = async (event) => {
   if (event.data.type === "allow") {
     allowed = event.data.upTo;
     wake?.();
     wake = null;
+    return;
+  }
+  if (event.data.type === "gpu") {
+    gpuArrived = true;
     return;
   }
   if (event.data.type !== "render") return;
@@ -128,49 +137,72 @@ ctx.onmessage = async (event) => {
     // Only the voices this work's cast uses are fetched and kept.
     const { tts, manifest, kept } = await loadVoice([...new Set(voices)], (loaded, total, need, missingVoices) => ctx.postMessage({ type: "loading", loaded, total, need, missingVoices }));
     flushRequests();
-    // The engine: this device's earlier measurement where its pins still match, else the speed test, in the voice of the first line to make.
     const gpu = await hasGpu();
     const pins = { model: manifest.sha256, runtime: manifest.runtimeSha256 };
-    let choice = keptChoice(event.data.kept ?? null, pins, gpu);
+    const prior = event.data.kept ?? null;
+    const entry = keptMatches(prior, pins, gpu) ? prior : null;
+    const held = gpu && (await gpuModelHeld(manifest));
+    const voiceAt = (i: number) => (voices[i] ?? voices[0]) as KokoroVoiceId;
+
+    // The engine: this device's earlier choice where it still holds, else the processor, measured from its first lines.
+    let choice: SpeedChoice = keptChoice(entry, pins, gpu) ?? { backend: "wasm", rtf: 0, trials: [], cached: false };
     let engine: KokoroTTS = tts;
-    if (choice?.backend === "webgpu") {
+    let gpuRtf = entry?.gpuRtf;
+    if (choice.backend === "webgpu") {
       try {
+        if (!held) throw new Error("the graphics chip's model is not on this device");
         engine = await openVoice(manifest, "webgpu");
       } catch {
-        choice = null;
+        choice = { backend: "wasm", rtf: 0, trials: [], cached: false };
+        gpuRtf = undefined;
       }
     }
-    if (!choice) {
+    // The model is here but this graphics chip was never tested: test it now, before the first line.
+    const test = async (cpuWarm: boolean, at: number) => {
       ctx.postMessage({ type: "testing" });
-      const tested = await speedTest(tts, (voices[from] ?? voices[0]) as KokoroVoiceId, manifest, gpu);
+      const tested = await speedTest(tts, voiceAt(at), manifest, cpuWarm);
       choice = tested.choice;
+      gpuRtf = tested.gpuRtf;
       engine = tested.gpuTts ?? tts;
-    }
-    ctx.postMessage({ type: "speed", choice, entry: entryFor(choice, pins, gpu) });
+      // Lost to the processor, or spoke wrongly: its model would only take space.
+      if (!tested.gpuTts) await dropGpuModel(manifest);
+      ctx.postMessage({ type: "speed", choice, entry: entryFor(choice, pins, gpu, gpuRtf), gpuOffer: 0 });
+    };
+    if (held && gpuRtf === undefined && choice.backend === "wasm") await test(false, from);
+    else ctx.postMessage({ type: "speed", choice, entry: entryFor(choice, pins, gpu, gpuRtf), gpuOffer: gpuOffer(gpu, manifest.gpu?.bytes, held, entry) });
     ctx.postMessage({ type: "ready", kept });
-    let backend: Backend = choice.backend;
+
+    let tested = held;
     for (let i = from; i < cues.length; i++) {
       // Only a voice the manifest pins, and so the loader has checked, is ever used.
       const voice = voices[i] as KokoroVoiceId | undefined;
       if (!voice || !Object.hasOwn(manifest.voices, voice)) throw new Error(`voice: no pinned voice for line ${i + 1}`);
       // Far enough ahead of the listener: wait until the page allows more.
       while (i > allowed) await new Promise<void>((resolve) => (wake = resolve));
+      // The graphics chip's model arrived at the listener's choice: test it between two lines.
+      if (gpuArrived && !tested) {
+        tested = true;
+        await test(i > from, i);
+      }
       let raw;
+      let t0 = performance.now();
       try {
         raw = await engine.generate(cues[i]!.spoken, { voice });
       } catch (err) {
         // The browser stopped the graphics chip (a lost device): the processor carries on from this line, and the page is told.
-        if (backend !== "webgpu") throw err;
+        if (engine === tts) throw err;
         await release(engine);
         engine = tts;
-        backend = "wasm";
-        const cpu: SpeedChoice = { backend, rtf: choice.trials.find((t) => t.backend === "wasm")?.rtf ?? 0, trials: [], cached: false };
-        // Kept as measured without the graphics chip, so the next visit tests again.
-        ctx.postMessage({ type: "speed", choice: cpu, entry: entryFor(cpu, pins, false) });
+        const cpu: SpeedChoice = { backend: "wasm", rtf: choice.trials.find((t) => t.backend === "wasm")?.rtf ?? 0, trials: [], cached: false };
+        choice = cpu;
+        // Kept as measured without the graphics chip, so the next visit starts on the processor and may test again.
+        ctx.postMessage({ type: "speed", choice: cpu, entry: entryFor(cpu, pins, false), gpuOffer: 0 });
+        t0 = performance.now();
         raw = await engine.generate(cues[i]!.spoken, { voice });
       }
+      const ms = performance.now() - t0;
       const audio = raw.audio as Float32Array<ArrayBuffer>;
-      ctx.postMessage({ type: "cue", index: i, audio, sampleRate: raw.sampling_rate }, [audio.buffer]);
+      ctx.postMessage({ type: "cue", index: i, audio, sampleRate: raw.sampling_rate, ms }, [audio.buffer]);
     }
     flushRequests();
     ctx.postMessage({ type: "done" });

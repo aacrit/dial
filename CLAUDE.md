@@ -35,8 +35,10 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
 - **Telemetry is aggregate counts only.** `/e` bumps a same-day, same-name
   counter in `event_counts`; there is no per-visit row, no anonymous id and
   no cookie. Every count goes through `web/src/telemetry.ts` sendEvent,
-  which sends nothing once the listener turns counts off on the Seal; that
-  switch is the only thing in local storage. No third-party analytics script (including
+  which sends nothing once the listener turns counts off on the Seal. Local
+  storage holds only that switch, the recording format that plays, and this
+  device's measured speed (T7), each one key, none ever sent
+  (`tests/privacy-page.test.ts`). No third-party analytics script (including
   Cloudflare Web Analytics) is added by default; adding one needs a charter
   amendment and a V3 check.
 - **Success event.** `contract.yaml`'s success_event is the product's core
@@ -68,7 +70,8 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
 1. **The book never leaves this tab.** No upload path exists. Every
    `fetch` in `web/src` names a same-origin path in `privacy-allowlist.json`
    (`tests/no-network.test.ts`); the CSP says `connect-src 'self'`. The voice
-   (Kokoro-82M q8), its WASM runtime and the texts are self-hosted, pinned
+   (Kokoro-82M q8, and fp32 for a graphics chip the listener chooses to
+   test), its WASM runtime and the texts are self-hosted, pinned
    by SHA-256 in `scripts/fetch-voice.mjs`, never in git, staged into
    `web/public/voice` and `web/public/ort` before every build.
    Dial's prepared recordings likewise: made once by

@@ -109,6 +109,34 @@ function stubOnAir() {
   set("scrub-note", "Only lines 1 to 40 of 118 are made so far.");
 }
 
+/**
+ * Made on this device and waiting (T7): the speed gauge on the glass with its
+ * widest figure, the countdown, and the ask past two minutes with all three
+ * keys and its longest words. A layout stub; no speech is made.
+ */
+function stubMadeHere() {
+  document.body.dataset.onAir = "true";
+  for (const id of ["ribbon-box", "pause", "readalong", "render-meter", "speed-gauge", "speed-rec", "speed-gpu", "speed-anyway"]) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = false;
+  }
+  const set = (sel, text) => {
+    const el = document.querySelector(sel);
+    if (el) el.textContent = text;
+  };
+  set("#tune-in", "On air");
+  set("#ra-who", "On air: The Allegory of the Cave");
+  set("#valve-label", "Starting in 21:53");
+  set("#speed-gauge .gv", "0.94× real time");
+  set("#speed-gauge .ge", "Graphics chip");
+  set("#broadcast-status", "This device makes speech at 0.94× real time on this device's processor (1.5× on its graphics chip), as measured on an earlier listen. Dial plans on 0.75× to be safe.");
+  set("#broadcast-progress", "Starting in 21:53 so it never pauses.");
+  set("#speed-q", "To play without a pause, this device would make the first 21:53 before starting. Dial's own recording can play now instead. Dial can also test this device's graphics chip, which may be faster. It needs its own copy of the voice, about 326 MB, downloaded once and kept on this device.");
+  set("#speed-gpu", "Test the graphics chip (about 326 MB)");
+  set("#t-el", "00:00");
+  set("#t-total", "about 20:12");
+}
+
 /** Dial's recording stopped mid-listen: Resume and the make-it-here link both under Tune in, with the error line. A layout stub. */
 function stubStopped() {
   for (const id of ["resume-line", "make-here", "retry"]) {
@@ -306,6 +334,17 @@ async function main() {
       await page.waitForTimeout(250);
       await check("on air", inView("radio"));
       if (await toPanel("work", "on air work")) await check("on air work", inView("work"));
+      // Made on this device (T7): the gauge, the countdown and the choice past two minutes.
+      await page.goto(`${origin}/play/cave`);
+      await page.waitForSelector('[data-device][data-state="ready"]', { timeout: 15_000 });
+      await page.evaluate(stubMadeHere);
+      await page.waitForTimeout(250);
+      await check("made here", inView("radio"));
+      // The choice past two minutes is a sheet over the radio, with all three keys and its longest words.
+      await page.evaluate(() => document.getElementById("speed-ask")?.showModal());
+      await page.waitForTimeout(250);
+      await check("speed choice", ["speed-ask"]);
+      await page.keyboard.press("Escape");
       // Dial's recording stopped: Resume and the make-it-here link together under Tune in.
       await page.goto(`${origin}/play/crito`);
       await page.waitForSelector('[data-device][data-state="ready"]', { timeout: 15_000 });

@@ -62,7 +62,9 @@ import { sendEvent } from "./telemetry";
 import { centreWithin, inViewWithin, mountPanels } from "./panels-ui";
 import { mountSealWidget } from "./seal-widget";
 import { mountGauge } from "./speed/gauge";
-import { Pacer } from "./speed/pacer";
+import { gpuButton } from "./speed/copy";
+import type { FromGpuDownload } from "./speed/gpu-download.worker";
+import { Pacer, type AskOptions } from "./speed/pacer";
 import { keepSpeed, readSpeed } from "./speed/store";
 
 /**
@@ -199,19 +201,34 @@ function setupRadio(): void {
   if (!scriptBox || !scriptNoteEl || !scriptPanel || !bpNote || !shortcutList || !canvas) return;
   // The speed gauge on the glass, and the choice past a two-minute wait (T7).
   const gaugeSlot = $("speed-gauge");
-  const speedAsk = $("speed-ask");
+  const speedAsk = document.getElementById("speed-ask");
   const speedQ = $("speed-q");
   const speedRec = $<HTMLButtonElement>("speed-rec");
   const speedAnyway = $<HTMLButtonElement>("speed-anyway");
-  if (!gaugeSlot || !speedAsk || !speedQ || !speedRec || !speedAnyway) return;
+  const speedGpu = $<HTMLButtonElement>("speed-gpu");
+  if (!gaugeSlot || !(speedAsk instanceof HTMLDialogElement) || !speedQ || !speedRec || !speedAnyway || !speedGpu) return;
   const gauge = mountGauge(gaugeSlot);
-  const hideSpeedAsk = () => {
-    if (speedAsk.hidden) return;
-    rescueFocus(speedRec, speedAnyway);
-    speedAsk.hidden = true;
+  // Closing it ("Wait here", Esc, the scrim) keeps the countdown; focus goes back to Pause.
+  const speedSheet = mountSheet(speedAsk, () => (pause.hidden ? null : pause));
+  const hideSpeedAsk = () => speedSheet.close();
+  /** The ask's words and keys (speed/pacer.ts AskOptions); Dial's recording is the default where there is one. */
+  const showSpeedAsk = (question: string, o: AskOptions) => {
+    speedQ.textContent = question;
+    const keys: [HTMLButtonElement, boolean][] = [
+      [speedRec, o.recording],
+      [speedGpu, o.gpuBytes > 0],
+      [speedAnyway, o.anyway],
+    ];
+    for (const [key, shown] of keys) key.hidden = !shown;
+    if (o.gpuBytes > 0) speedGpu.textContent = gpuButton(o.gpuBytes);
+    const first = keys.find(([, shown]) => shown)?.[0];
+    for (const [key] of keys) key.className = key === first ? "btn" : "btn quiet";
+    speedSheet.open(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    first?.focus();
   };
   speedRec.addEventListener("click", () => session?.pacer?.playRecording());
   speedAnyway.addEventListener("click", () => session?.pacer?.startAnyway());
+  speedGpu.addEventListener("click", () => session?.pacer?.testGpu());
   const ribbonSegs = ribbon.querySelector("g.segs")!;
   const ribbonNeedle = ribbon.querySelector("line.needle")!;
   const ribbonHead = ribbon.querySelector("line.renderhead")!;
@@ -743,18 +760,36 @@ function setupRadio(): void {
         },
         announce: (line) => mine() && announce(line),
         setValve: (share, label) => mine() && setValve(share, label),
-        showAsk: (question, hasRecording) => {
-          if (!mine()) return;
-          speedQ.textContent = question;
-          speedRec.hidden = !hasRecording;
-          speedAnyway.className = hasRecording ? "btn quiet" : "btn";
-          speedAsk.hidden = false;
-          // Dial's recording is the default where there is one.
-          (hasRecording ? speedRec : speedAnyway).focus();
-        },
+        showAsk: (question, options) => mine() && showSpeedAsk(question, options),
         hideAsk: hideSpeedAsk,
         repaint: () => mine() && paintProgress(),
         allow: (upTo) => worker.postMessage({ type: "allow", upTo } satisfies ToWorker),
+        // The page downloads the graphics chip's model while the worker keeps making lines, then the worker tests it.
+        askGpu: () => {
+          const dl = new Worker(new URL("./speed/gpu-download.worker.ts", import.meta.url), { type: "module" });
+          const end = () => {
+            dl.onmessage = null;
+            dl.terminate();
+          };
+          dl.onmessage = (event: MessageEvent<FromGpuDownload>) => {
+            const m = event.data;
+            // Its requests go to the Seal's log like the render worker's.
+            if (m.type === "requests") return recordEntries(m.entries);
+            if (m.type === "progress") return mine() && own.pacer?.gpuLoading(m.loaded, m.total);
+            end();
+            if (!mine()) return;
+            if (m.type === "done") worker.postMessage({ type: "gpu" } satisfies ToWorker);
+            // Not fetched, not matching its pin, or no room to keep it: the processor carries on.
+            else own.pacer?.gpuFailed();
+          };
+          dl.onerror = () => {
+            end();
+            if (mine()) own.pacer?.gpuFailed();
+          };
+          dl.postMessage("start");
+        },
+        // Kept on this device only, so the speed test runs once (speed/store.ts); never sent.
+        keep: keepSpeed,
         setPauseLabel: (paused) => {
           pause.textContent = paused ? "Resume" : "Pause";
         },
@@ -985,12 +1020,9 @@ function setupRadio(): void {
         paintProgress();
         own.pacer?.ready();
       } else if (msg.type === "testing") {
-        setValve(1, "Testing");
         own.pacer?.testing();
       } else if (msg.type === "speed") {
-        // Kept on this device only, so the test runs once (speed/store.ts); never sent.
-        keepSpeed(msg.entry);
-        own.pacer?.speed(msg.choice);
+        own.pacer?.speed(msg.choice, msg.entry, msg.gpuOffer);
       } else if (msg.type === "cue") {
         const cue = cues[msg.index]!;
         own.wav ??= new WavChunks(msg.sampleRate);
@@ -1002,7 +1034,7 @@ function setupRadio(): void {
         own.wav.add(msg.audio, cue.pauseAfterMs);
         const speech = msg.audio.length / msg.sampleRate;
         sched.add(msg.index, speech, cue.pauseAfterMs / 1000);
-        own.pacer?.cue(speech);
+        own.pacer?.cue(speech, msg.ms / 1000);
         own.seconds += speech + cue.pauseAfterMs / 1000;
         own.made = msg.index + 1;
         meter.value = own.made;

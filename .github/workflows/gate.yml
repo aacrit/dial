@@ -23,6 +23,11 @@ jobs:
         with:
           path: .cache/recordings
           key: recordings-${{ hashFiles('recordings.lock.json') }}
+      # The voice models (q8, and fp32 for the graphics chip), pinned in scripts/fetch-voice.mjs, are downloaded once per pin set (every byte is checked).
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/kokoro
+          key: kokoro-${{ hashFiles('scripts/fetch-voice.mjs') }}
       # Exactly the lockfile's versions, never a fresh resolve.
       - run: npm ci
       # The layout check (a gate step) drives Chromium through the panel map; CI never skips it.

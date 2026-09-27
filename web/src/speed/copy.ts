@@ -3,6 +3,7 @@
 // measured on this device; none is a claim Dial cannot back. No em dashes.
 
 import { speedLabel } from "../bench";
+import { aboutMegabytes } from "../download-size";
 import type { SpeedChoice } from "./backend";
 import { engineWords } from "./gauge";
 
@@ -26,7 +27,16 @@ export function countdownLine(wait: number): string {
 }
 
 /** Said while the speed test times its sentence. */
-export const TESTING_LINE = "Testing this device: one short sentence, about 3 s, to find how fast it makes speech.";
+export const TESTING_LINE = "Testing this device: one short sentence on its processor, then on its graphics chip, to find which makes speech faster.";
+
+/** Said when the voice is ready and this device's speed is not known yet: its first line measures it. */
+export const MEASURING_LINE = "Making the first line, which measures how fast this device makes speech.";
+
+/** The line under the status until the first line has measured the device. */
+export const MEASURING_SHORT = "Measuring how fast this device makes speech.";
+
+/** The line under the status while a short lead (MIN_LEAD_S or less) is made: no countdown, no figure. */
+export const SHORT_LEAD_LINE = "Starting in a moment, once the first lines are made.";
 
 /** Said once playback waits for the next line after all (the device slowed down), at a line boundary, never mid-word. */
 export const HOLD_LINE = "Making the next line…";
@@ -35,7 +45,7 @@ export const HOLD_LINE = "Making the next line…";
 export function planSentence(choice: SpeedChoice, measured: number, planned: number): string {
   const other = choice.trials.find((t) => t.backend !== choice.backend && t.ok && t.rtf > 0);
   const also = other ? ` (${speedLabel(other.rtf)} on ${other.backend === "webgpu" ? "its graphics chip" : "its processor"})` : "";
-  const when = choice.cached ? "measured here before" : "measured just now";
+  const when = choice.cached ? "as measured on an earlier listen" : choice.trials.length ? "measured just now" : "measured from its first line";
   return `This device makes speech at ${speedLabel(measured)} real time on ${engineWords(choice.backend)}${also}, ${when}. Dial plans on ${speedLabel(planned)} to be safe.`;
 }
 
@@ -43,6 +53,36 @@ export function planSentence(choice: SpeedChoice, measured: number, planned: num
 export function choiceQuestion(wait: number, hasRecording: boolean): string {
   const lead = `To play without a pause, this device would make the first ${countdownClock(wait)} before starting.`;
   return hasRecording ? `${lead} Dial's own recording can play now instead.` : `${lead} You can wait, or start now and let it pause when it needs to.`;
+}
+
+/** The graphics chip, offered while the processor makes the work: its model's size is the manifest's, said before anything downloads. */
+export function gpuOfferLine(bytes: number): string {
+  return `Dial can also test this device's graphics chip, which may be faster. It needs its own copy of the voice, ${aboutMegabytes(bytes)}, downloaded once and kept on this device.`;
+}
+
+export function gpuButton(bytes: number): string {
+  return `Test the graphics chip (${aboutMegabytes(bytes)})`;
+}
+
+/** Its model arriving; the processor keeps making the work meanwhile. */
+export function gpuLoadingLine(loaded: number, total: number): string {
+  const mb = (n: number) => (n / 1_000_000).toFixed(0);
+  return `Downloading the graphics chip's voice: ${mb(loaded)} of ${mb(total)} MB. The processor keeps making the work meanwhile.`;
+}
+
+/** The same, short, for the line under the status. */
+export function gpuProgress(loaded: number, total: number): string {
+  return `Graphics chip's voice: ${(loaded / 1_000_000).toFixed(0)} of ${(total / 1_000_000).toFixed(0)} MB.`;
+}
+
+export const GPU_FAILED_LINE = "The graphics chip's voice could not be downloaded or kept, so the processor carries on.";
+
+/** The ask's words: the wait past two minutes, the graphics chip's offer, or both. */
+export function askLine(o: { wait: number; choice: boolean; hasRecording: boolean; gpuBytes: number }): string {
+  const parts = [];
+  if (o.choice) parts.push(choiceQuestion(o.wait, o.hasRecording));
+  if (o.gpuBytes > 0) parts.push(gpuOfferLine(o.gpuBytes));
+  return parts.join(" ");
 }
 
 export const PLAY_RECORDING_NOW = "Play Dial's recording now";

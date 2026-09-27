@@ -114,13 +114,6 @@
               </div>
             </div>
 
-            <div class="switch-ask" id="speed-ask" role="group" aria-labelledby="speed-q" data-part hidden>
-              <p id="speed-q"></p>
-              <div class="switch-actions">
-                <button type="button" class="btn" id="speed-rec">Play Dial's recording now</button>
-                <button type="button" class="btn quiet" id="speed-anyway">Start anyway; it may pause</button>
-              </div>
-            </div>
 
             <div class="dev-ribbon" id="ribbon-box" data-part hidden>
               <svg class="ribbon" id="ribbon" viewBox="0 0 1000 30" preserveAspectRatio="none" role="slider" tabindex="0" aria-label="Position in the work. Drag to move, or use J and L." aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
@@ -271,6 +264,22 @@
           <button type="submit" class="btn">Send</button>
           <p id="feedback-status" role="status" aria-live="polite"></p>
         </form>
+      </div>
+    </dialog>
+
+    <!-- Before a work made on this device starts (T7): past a two-minute wait, the choice; with a graphics chip to test, its offer and size. A sheet, so no panel grows to hold it. -->
+    <dialog class="sheet small" id="speed-ask" aria-labelledby="speed-h">
+      <div class="sheet-in">
+        <div class="sheet-top">
+          <h2 id="speed-h">Before it starts</h2>
+          <button type="button" class="btn quiet" data-close>Wait here</button>
+        </div>
+        <p id="speed-q"></p>
+        <div class="switch-actions">
+          <button type="button" class="btn" id="speed-rec">Play Dial's recording now</button>
+          <button type="button" class="btn quiet" id="speed-gpu" hidden>Test the graphics chip</button>
+          <button type="button" class="btn quiet" id="speed-anyway">Start anyway; it may pause</button>
+        </div>
       </div>
     </dialog>
 

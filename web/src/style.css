@@ -1488,6 +1488,11 @@ dialog.sheet::backdrop {
   font-size: 1.35rem;
 }
 
+/* The choice before a work made here starts (T7): the words, then its keys. */
+#speed-q {
+  margin: 6px 0 16px;
+}
+
 .sheet-note {
   margin: 6px 0 14px;
   text-transform: none;
@@ -2298,6 +2303,21 @@ body.faceplate-page {
     height: 32px;
   }
 
+  /* The speed gauge (T7) at the valve's height, so the meters keep their width. */
+  .gauge-inst {
+    min-width: 48px;
+  }
+
+  .gauge-inst .gauge {
+    width: 52px;
+    height: 28px;
+  }
+
+  /* While the gauge shows, the Music meter's note gives way (it says only that there is no music). */
+  .instruments:has(.gauge-inst:not([hidden])) #m-music {
+    display: none;
+  }
+
   .station-line .by {
     display: none;
   }
@@ -2825,5 +2845,13 @@ body.faceplate-page {
   #back-10,
   #fwd-10 {
     display: none;
+  }
+}
+
+/* Narrow phones with the speed gauge on the glass (T7): the instruments' labels wrap under them instead of widening the row. */
+@media (max-width: 370px) {
+  .instruments:has(.gauge-inst:not([hidden])) .inst .il {
+    white-space: normal;
+    max-width: 5.5em;
   }
 }

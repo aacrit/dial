@@ -103,7 +103,7 @@ describe("the catalogue: three stations, every printed claim true", () => {
     const voices = WORKS.map((w) => metaHtml(w, 10, cast(segment(text(w.slug)))));
     expect(voices.map((m) => /<span>(\w+ voices?)<\/span>/.exec(m)?.[1])).toEqual(["One voice", "Two voices", "One voice"]);
     expect(bookplateHtml(WORKS[0]!, cast(segment(text("cave"))))).toContain("One voice, Michael, reads every part.");
-    expect(read("web/src/narrate.worker.ts")).toMatch(/tts\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
+    expect(read("web/src/narrate.worker.ts")).toMatch(/engine\.generate\(cues\[i\]!\.spoken, \{ voice \}\)/);
   });
 });
 

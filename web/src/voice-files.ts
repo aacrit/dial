@@ -190,7 +190,7 @@ export async function putPinnedFile(m: Partial<FilePins>, key: string, response:
  */
 export function pinnedModelCache(
   cache: PinnedStore,
-  m: Partial<FilePins> & { repo: string; model: string },
+  m: Partial<FilePins> & { repo: string; model: string; gpu?: GpuPin },
   count: (bytes: number) => void,
   keep: Keep,
   stitch: () => Promise<Response>,
@@ -200,6 +200,10 @@ export function pinnedModelCache(
     async match(request: string | Request): Promise<Response | undefined> {
       const key = keyOf(request);
       if (!key.startsWith(MODELS)) return undefined;
+      // The graphics chip's model (T7): only the copy kept under its own pin, never fetched or stitched here.
+      if (m.gpu && key === gpuModelKey({ repo: m.repo, gpu: m.gpu })) {
+        return (await heldGpuModel(cache, { repo: m.repo, gpu: m.gpu })) ?? failingResponse(new Error("voice: the graphics chip's model is not on this device"));
+      }
       if (key === `${MODELS}${m.repo}/${m.model}`) {
         try {
           const hit = await cache.match(key);
@@ -218,6 +222,26 @@ export function pinnedModelCache(
       if (key.startsWith(MODELS)) await putPinnedFile(m, key, response, keep);
     },
   };
+}
+
+/** The graphics chip's fp32 model in the manifest (scripts/fetch-voice.mjs GPU_MODEL). */
+export interface GpuPin {
+  model: string;
+  sha256: string;
+}
+
+/** Where the graphics chip's model is kept, under the key the voice runtime asks for it by. */
+export function gpuModelKey(m: { repo: string; gpu: { model: string } }): string {
+  return `${MODELS}${m.repo}/${m.gpu.model}`;
+}
+
+/** The header its kept copy carries: the pin its bytes were checked against before they were kept (speed/gpu-model.ts). */
+export const GPU_PIN_HEADER = "x-dial-sha256";
+
+/** The kept copy of the graphics chip's model, only while it was checked against this manifest's pin. */
+export async function heldGpuModel(cache: Pick<Cache, "match">, m: { repo: string; gpu: GpuPin }): Promise<Response | undefined> {
+  const hit = await cache.match(gpuModelKey(m));
+  return hit && hit.headers.get(GPU_PIN_HEADER) === m.gpu.sha256 ? hit : undefined;
 }
 
 export interface StitchManifest {
