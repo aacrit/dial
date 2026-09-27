@@ -228,7 +228,8 @@ function distance(cues) {
   const last = measure(window([...cues].reverse()).reverse());
   const all = measure(cues);
   return {
-    seconds: all.speech_seconds,
+    speech_seconds: all.speech_seconds,
+    seconds_as_played: r1(playedSeconds(cues)),
     words: all.words,
     wpm: all.wpm,
     wpm_as_played: all.wpm_as_played,
@@ -369,7 +370,7 @@ async function main() {
         loudness_dbfs: "RMS over non-silent frames of the trimmed speech (an active-speech level, not LUFS).",
         pause_to_speech: "inside the trimmed cues, silent runs of at least 150 ms over the remaining time.",
         distance:
-          "af_heart and the four male narrator candidates only: the Cave's paragraphs 0 to 14 (about 3 minutes) rendered continuously; first and last 30 s of speech (whole cues). Kokoro renders each cue independently, so drift here reflects the text more than the voice. The 10-minute render was skipped for time.",
+          "af_heart and the four male narrator candidates only: the Cave's paragraphs 0 to 14 rendered as one run, cue by cue (about 3 minutes as played); first and last 30 s of speech (whole cues). Kokoro renders each cue independently, so drift here reflects the text more than the voice. The 10-minute render was skipped for time.",
         hexgrad: `grade, target quality and training duration are copied from hexgrad's table and describe training data, not naturalness. Duration: ${DURATION_KEY}.`,
       },
       passages: Object.fromEntries(Object.entries(PASSAGES).map(([k, p]) => [k, { work: p.work, paragraphs: p.paragraphs, sha256: pins[k], words_in_text: M.countWords(texts[k]), words_spoken: segment(texts[k]).reduce((n, c) => n + M.countWords(c.spoken), 0) }])),
