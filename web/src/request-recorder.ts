@@ -132,7 +132,10 @@ export function recordRequests(onChange?: (log: StoredLog) => void): void {
       if (data?.type === REQUESTS_MESSAGE && Array.isArray(data.entries)) recordEntries(data.entries.filter(isRawEntry), data.shared === true ? "shared" : "helper");
     });
     helper.startMessages();
-    void helper.ready.then((reg) => reg.active?.postMessage({ type: REQUESTS_ASK, after: newestHelperRow(readLog()) }));
+    void helper.ready.then((reg) => {
+      const log = readLog();
+      reg.active?.postMessage({ type: REQUESTS_ASK, afterOwn: newestHelperRow(log, "helper"), afterShared: newestHelperRow(log, "shared") });
+    });
   }
   document.addEventListener("securitypolicyviolation", (e) => {
     const rec = blockedRecord(e.blockedURI, performance.timeOrigin + e.timeStamp, location.origin);

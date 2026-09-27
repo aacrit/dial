@@ -183,9 +183,9 @@ export function newHelperRows(log: StoredLog, add: readonly RequestRecord[]): Re
   return out;
 }
 
-/** The newest helper row's time in the log, or 0: a page asks the helper only for entries after it. */
-export function newestHelperRow(log: StoredLog): number {
-  return log.records.reduce((m, r) => (r.by ? Math.max(m, Math.round(r.t)) : m), 0);
+/** The newest helper row of one kind in the log, or 0: a page asks the helper only for entries after it, own and shared apart. */
+export function newestHelperRow(log: StoredLog, by: HelperBy): number {
+  return log.records.reduce((m, r) => (r.by === by ? Math.max(m, Math.round(r.t)) : m), 0);
 }
 
 /** At most this many records are kept; the oldest go first, and the Seal says how many. */

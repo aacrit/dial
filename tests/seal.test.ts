@@ -33,7 +33,7 @@ import {
   type RequestRecord,
 } from "../web/src/request-log";
 import { COUNTS_KEY, STORAGE_REFUSED, canKeepSetting, countsOn, sendEvent, setCounts, type SendDeps, type SettingStore } from "../web/src/telemetry";
-import { answerFor, claim, groupByClient, prune, remember, HELPER_MEMORY, type HelperEntry, type PendingFetch } from "../web/src/offline/attribution";
+import { answerFor, claim, groupByClient, ownerOf, prune, remember, settle, HELPER_MEMORY, SETTLED_GRACE_MS, UNSETTLED_MAX_MS, type HelperEntry, type PendingFetch } from "../web/src/offline/attribution";
 import { PLANNING_MARGIN, benchNeedLine, benchStopLine, cpuDetailsHtml, plannedSpeed, reportsHtml, speedLabel, speedOf, verdictHtml } from "../web/src/bench";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -428,7 +428,7 @@ describe("speed of this device: processor only, results never sent", () => {
 
   it("no send in the test's path: bench.ts, the render worker's bench() and seal.ts's setupBench post nothing and count nothing", () => {
     const worker = read("web/src/narrate.worker.ts");
-    const benchFn = worker.slice(worker.indexOf("async function bench()"), worker.indexOf("ctx.onmessage"));
+    const benchFn = worker.slice(worker.indexOf("async function bench("), worker.indexOf("ctx.onmessage"));
     const seal = read("web/src/seal.ts");
     const benchPath = seal.slice(seal.indexOf("function setupBench"), seal.indexOf("\nwatchReducedMotion();"));
     expect(benchPath.length).toBeGreaterThan(200);
@@ -437,6 +437,10 @@ describe("speed of this device: processor only, results never sent", () => {
     }
     // The worker only loads the voice and times one sentence; the voice's own requests are Law 1 downloads.
     expect(benchFn).toMatch(/await loadVoice\(\[voice\]/);
+    // The worker never loads the page's rendering code or the voice table: the Seal names the voice, and the sentence has its own module.
+    expect(worker).not.toMatch(/^import \{[^}]*\} from "\.\/(engine\/cast|bench|render)";$/m);
+    expect(worker).toContain('import { BENCH_SENTENCE } from "./bench-sentence";');
+    expect(read("web/src/seal.ts")).toContain('w.postMessage({ type: "bench", voice: NARRATORS.m } satisfies ToWorker);');
     // The speed test shares the render worker, so the speech runtime ships once.
     expect(read("web/src/seal.ts")).toContain('new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" })');
   });
@@ -504,13 +508,66 @@ describe("the offline helper's requests: each tab gets its own, once", () => {
     expect(claim(pending, e(`${ORIGIN}/works/cave.txt`, 1501))).toBe("tab-b");
     // The shell the helper keeps for itself was noted for no page.
     expect(claim(pending, e(`${ORIGIN}/assets/main.js`, 1100))).toBeNull();
-    // Too early for the note, or too late: not claimed.
+    // Before the note started: not claimed.
     expect(claim(pending, e(`${ORIGIN}/`, 1000))).toBeNull();
-    expect(claim(pending, e(`${ORIGIN}/`, 1200 + 20_000))).toBeNull();
-    expect(claim(pending, e(`${ORIGIN}/`, 1210))).toBe("new-page");
-    const old: PendingFetch[] = [{ url: "u", at: 0, clientId: "x" }, { url: "v", at: 9_000, clientId: "y" }];
-    prune(old, 15_000);
-    expect(old.map((p) => p.clientId)).toEqual(["y"]);
+    // A slow response is still claimed while its note lives, however long after the start.
+    expect(claim(pending, e(`${ORIGIN}/`, 1200 + 45_000))).toBe("new-page");
+  });
+
+  it("claims by the closest start, not the oldest note", () => {
+    const pending: PendingFetch[] = [
+      { url: "/voice/manifest.json", at: 1000, clientId: "tab-a" },
+      { url: "/voice/manifest.json", at: 5000, clientId: "tab-b" },
+    ];
+    expect(claim(pending, e("/voice/manifest.json", 5002))).toBe("tab-b");
+    expect(claim(pending, e("/voice/manifest.json", 5003))).toBe("tab-a");
+  });
+
+  it("a note is dropped a grace period after its response arrived, not by its start; one that never settles goes after the cap", () => {
+    const pending: PendingFetch[] = [
+      { url: "/big", at: 0, clientId: "a" },
+      { url: "/small", at: 0, clientId: "b" },
+      { url: "/lost", at: -100_000, clientId: "c" },
+    ];
+    settle(pending, "/big", "a", 200_000);
+    settle(pending, "/small", "b", 100);
+    settle(pending, "/other", "b", 100);
+    prune(pending, 200_000 + SETTLED_GRACE_MS - 1);
+    // /big started long ago but settled recently: kept. /small settled long ago: dropped. /lost never settled and passed the cap: dropped.
+    expect(pending.map((p) => p.url)).toEqual(["/big"]);
+    const lost: PendingFetch[] = [{ url: "/lost", at: 0, clientId: "c" }];
+    prune(lost, UNSETTLED_MAX_MS - 1);
+    expect(lost).toHaveLength(1);
+    prune(lost, UNSETTLED_MAX_MS + 1);
+    expect(lost).toHaveLength(0);
+  });
+
+  it("an entry claimed by a render worker goes to the page that started it: never dropped, never shared", () => {
+    const owners = new Map([["worker-1", "tab-a"]]);
+    expect(ownerOf(owners, "worker-1")).toBe("tab-a");
+    expect(ownerOf(owners, "tab-b")).toBe("tab-b");
+    const pending: PendingFetch[] = [
+      { url: "/voice/manifest.json", at: 100, clientId: "worker-1" },
+      { url: "/ort/ort-wasm-simd-threaded.jsep.mjs", at: 110, clientId: "worker-1" },
+    ];
+    const entries = [e("/voice/manifest.json", 101), e("/ort/ort-wasm-simd-threaded.jsep.mjs", 111)];
+    const claimed = entries.map((entry) => ({ entry, clientId: claim(pending, entry) }));
+    expect(claimed.map((c) => c.clientId)).toEqual(["worker-1", "worker-1"]);
+    const g = groupByClient(claimed, owners);
+    expect([...g.own.keys()]).toEqual(["tab-a"]);
+    expect(g.own.get("tab-a")!.map((x) => x.url)).toEqual(["/voice/manifest.json", "/ort/ort-wasm-simd-threaded.jsep.mjs"]);
+    expect(g.shared).toEqual([]);
+    // A page that asks later is answered with its worker's entries too.
+    expect(answerFor(claimed, "tab-a", 0, 0, owners).own).toHaveLength(2);
+    expect(answerFor(claimed, "tab-b", 0, 0, owners).own).toHaveLength(0);
+    expect(answerFor(claimed, "tab-a", 0, 0, owners).shared).toHaveLength(0);
+    // The helper notes the owner from the worker's script request, before routing.
+    const sw = read("web/src/sw.ts");
+    expect(sw).toMatch(/if \(request\.destination === "worker" && event\.resultingClientId && event\.clientId\) startedBy\(event\.resultingClientId, event\.clientId\);\s*const r = route\(/);
+    expect(sw).toContain("groupByClient(claimed, owners)");
+    expect(sw).toMatch(/answerFor\(memory, source\.id, time\(data\.afterOwn\), time\(data\.afterShared\), owners\)/);
+    // Every fetch the helper makes for a client settles its note when the response arrives.
+    expect([...sw.matchAll(/fetch\(request\)\.finally\(\(\) => settled\(request, client\)\)/g)]).toHaveLength(3);
   });
 
   it("each page is sent only its own entries; the shared go to every page, marked; a page that asks gets only what is newer", () => {
@@ -524,10 +581,14 @@ describe("the offline helper's requests: each tab gets its own, once", () => {
     expect(g.own.get("tab-a")!.map((x) => x.url)).toEqual(["/a", "/a2"]);
     expect(g.own.get("tab-b")!.map((x) => x.url)).toEqual(["/b"]);
     expect(g.shared.map((x) => x.url)).toEqual(["/shell.js"]);
-    const answer = answerFor(list, "tab-a", 10);
+    const answer = answerFor(list, "tab-a", 10, 0);
     expect(answer.own.map((x) => x.url)).toEqual(["/a2"]);
     expect(answer.shared.map((x) => x.url)).toEqual(["/shell.js"]);
-    expect(answerFor(list, "tab-c", 0).own).toEqual([]);
+    // Own and shared are asked for apart: shared rows already held are not sent again, own ones still are.
+    const apart = answerFor(list, "tab-a", 0, 12);
+    expect(apart.own.map((x) => x.url)).toEqual(["/a", "/a2"]);
+    expect(apart.shared).toEqual([]);
+    expect(answerFor(list, "tab-c", 0, 0).own).toEqual([]);
     const memory: HelperEntry[] = [];
     remember(memory, Array.from({ length: HELPER_MEMORY + 5 }, (_, i) => ({ entry: e(`/${i}`, i), clientId: null })));
     expect(memory).toHaveLength(HELPER_MEMORY);
@@ -542,8 +603,10 @@ describe("the offline helper's requests: each tab gets its own, once", () => {
     expect(newHelperRows(log, [row, row].map((r) => ({ ...r, t: 2000 })))).toHaveLength(1);
     const page: RequestRecord = { t: 1000, path: "/assets/a.js", own: true, dir: "fetched", bytes: 9 };
     expect(newHelperRows(log, [page])).toEqual([page]);
-    expect(newestHelperRow(log)).toBe(1000);
-    expect(newestHelperRow({ records: [page], dropped: 0 })).toBe(0);
+    expect(newestHelperRow(log, "shared")).toBe(1000);
+    expect(newestHelperRow(log, "helper")).toBe(0);
+    expect(newestHelperRow({ records: [page], dropped: 0 }, "shared")).toBe(0);
+    expect(read("web/src/request-recorder.ts")).toContain('afterOwn: newestHelperRow(log, "helper"), afterShared: newestHelperRow(log, "shared")');
   });
 
   it("the same helper batch through two pages of one tab gives one copy", async () => {

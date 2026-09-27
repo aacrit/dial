@@ -11,15 +11,16 @@
 
 import type { KokoroTTS } from "kokoro-js";
 import { loadVoice } from "./voice";
-import { NARRATORS, type VoiceId } from "./engine/cast";
-import { BENCH_SENTENCE } from "./bench";
+import type { VoiceId } from "./engine/cast";
+import { BENCH_SENTENCE } from "./bench-sentence";
 import type { Cue } from "./engine/segment";
 import type { Need } from "./voice-cache";
 import type { RawEntry } from "./request-log";
 import { watchWorkerRequests } from "./worker-requests";
 
 /** voices[i] is cue i's cast voice. */
-export type ToWorker = { type: "render"; cues: Cue[]; voices: VoiceId[] } | { type: "bench" };
+/** bench: the Seal's speed test, in the voice it names (the narrator), so this worker never loads the voice table. */
+export type ToWorker = { type: "render"; cues: Cue[]; voices: VoiceId[] } | { type: "bench"; voice: VoiceId };
 export type FromWorker =
   /** total: the bytes this visit needs; need: nothing, only this work's voices, or the model and runtime too. */
   | { type: "loading"; loaded: number; total: number; need: Need; missingVoices: number }
@@ -50,8 +51,7 @@ const ctx = self as unknown as {
 
 const flushRequests = watchWorkerRequests((entries) => ctx.postMessage({ type: "requests", entries }));
 
-async function bench(): Promise<void> {
-  const voice = NARRATORS.m;
+async function bench(voice: KokoroVoiceId): Promise<void> {
   const { tts } = await loadVoice([voice], (loaded, total, need, missingVoices) => ctx.postMessage({ type: "loading", loaded, total, need, missingVoices }));
   flushRequests();
   ctx.postMessage({ type: "timing" });
@@ -65,7 +65,7 @@ async function bench(): Promise<void> {
 ctx.onmessage = async (event) => {
   if (event.data.type === "bench") {
     try {
-      await bench();
+      await bench(event.data.voice as KokoroVoiceId);
     } catch (err) {
       flushRequests();
       ctx.postMessage({ type: "error", message: err instanceof Error ? `${err.name}: ${err.message}` : String(err) });

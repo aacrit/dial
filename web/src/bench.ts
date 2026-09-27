@@ -10,8 +10,8 @@ import { aboutMegabytes, isStatableTotal } from "./download-size";
 import { esc } from "./render";
 import type { Need } from "./voice-cache";
 
-/** The fixed sentence the test speaks: short, plain, about 3 s of speech. */
-export const BENCH_SENTENCE = "The lamp was lit, and the voice began to read the first page aloud.";
+/** The fixed sentence the test speaks (bench-sentence.ts). */
+export { BENCH_SENTENCE } from "./bench-sentence";
 
 /** Dial plans on this share of the measured speed: devices slow down as they warm up. */
 export const PLANNING_MARGIN = 0.8;

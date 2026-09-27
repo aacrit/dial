@@ -9,7 +9,7 @@
 
 import { CAST_ENGINE_VERSION } from "./engine/cast-version";
 import { REQUESTS_ASK, REQUESTS_MESSAGE, watchWorkerRequests } from "./worker-requests";
-import { answerFor, claim, groupByClient, prune, remember, type HelperEntry, type PendingFetch } from "./offline/attribution";
+import { answerFor, claim, groupByClient, prune, remember, settle, type HelperEntry, type PendingFetch } from "./offline/attribution";
 import type { RawEntry } from "./request-log";
 import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
 
@@ -117,13 +117,13 @@ async function fromShell(request: Request, client: string): Promise<Response> {
   const hit = await cache.match(request, { ignoreSearch: true });
   if (hit) return hit;
   forPage(request, client);
-  return fetch(request);
+  return fetch(request).finally(() => settled(request, client));
 }
 
 async function page(request: Request, client: string): Promise<Response> {
   try {
     forPage(request, client);
-    return await fetch(request);
+    return await fetch(request).finally(() => settled(request, client));
   } catch {
     const cache = await caches.open(SHELL);
     const hit = await cache.match(shellKey(new URL(request.url).pathname));
@@ -144,7 +144,7 @@ async function saved(request: Request, client: string): Promise<Response> {
   const cache = await caches.open(SAVED_CACHE);
   try {
     forPage(request, client);
-    const res = await fetch(request);
+    const res = await fetch(request).finally(() => settled(request, client));
     // Refresh a saved copy (a new release's manifest), keeping its headers
     // (a work's recorded voices); never save what the listener did not.
     const had = res.ok ? await cache.match(key) : undefined;
@@ -164,6 +164,8 @@ async function saved(request: Request, client: string): Promise<Response> {
 
 sw.addEventListener("fetch", (event) => {
   const request = event.request;
+  // A render worker is a client of its own: note which page started it, so its requests reach that page's log.
+  if (request.destination === "worker" && event.resultingClientId && event.clientId) startedBy(event.resultingClientId, event.clientId);
   const r = route(new URL(request.url), request.method, sw.location.origin, request.mode);
   if (r === "ignore") return;
   // The page this request is for, so the Seal's log lists it in that tab only.
@@ -173,8 +175,9 @@ sw.addEventListener("fetch", (event) => {
 
 // ---- The Seal's log: this helper's requests, told to the tab they were for ----
 // The helper's Resource Timing record is its own; no page can read it. Each
-// request it makes for a page is noted with that page's client id just
-// before the fetch (forPage), and its entry goes to that page only. What it
+// request it makes for a client is noted with that client's id just before
+// the fetch (forPage), and its entry goes to that client's page only: a
+// render worker's requests go to the page that started it (owners). What it
 // fetches for itself (the shell it keeps for every tab) goes to every Dial
 // page, marked as the helper's shared download (offline/attribution.ts).
 // Only address, time and sizes are posted (worker-requests.ts).
@@ -191,17 +194,31 @@ const clients = sw.clients as unknown as Clients;
 
 const pending: PendingFetch[] = [];
 const memory: HelperEntry[] = [];
+/** Worker client id to the page that started it. */
+const owners = new Map<string, string>();
+
+const now = () => performance.timeOrigin + performance.now();
+
+function startedBy(worker: string, page: string): void {
+  owners.set(worker, page);
+  // Workers come and go; the oldest are forgotten first.
+  if (owners.size > 200) owners.delete(owners.keys().next().value!);
+}
 
 function forPage(request: Request, client: string): void {
-  const now = performance.timeOrigin + performance.now();
-  prune(pending, now);
-  if (client) pending.push({ url: request.url, at: now, clientId: client });
+  prune(pending, now());
+  if (client) pending.push({ url: request.url, at: now(), clientId: client });
+}
+
+/** The response arrived: the note is kept a grace period longer, while the page reads the body. */
+function settled(request: Request, client: string): void {
+  if (client) settle(pending, request.url, client, now());
 }
 
 const tell = (entries: RawEntry[]) => {
   const claimed = entries.map((entry) => ({ entry, clientId: claim(pending, entry) }));
   remember(memory, claimed);
-  const { own, shared } = groupByClient(claimed);
+  const { own, shared } = groupByClient(claimed, owners);
   for (const [id, list] of own) void clients.get(id).then((c) => c?.postMessage({ type: REQUESTS_MESSAGE, entries: list, shared: false }));
   if (shared.length) {
     void clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
@@ -212,15 +229,16 @@ const tell = (entries: RawEntry[]) => {
 
 watchWorkerRequests(tell);
 
-// A page that opens asks for what it is owed: its own entries and the
-// shared ones, newer than the newest helper row its tab's log already holds.
+// A page that opens asks for what it is owed: its own and its workers'
+// entries, and the shared ones, each newer than the newest row of that kind
+// its tab's log already holds.
 sw.addEventListener("message", (event) => {
-  const data = event.data as { type?: string; after?: unknown } | null;
+  const data = event.data as { type?: string; afterOwn?: unknown; afterShared?: unknown } | null;
   if (data?.type !== REQUESTS_ASK) return;
   const source = (event as unknown as { source: Client | null }).source;
   if (!source) return;
-  const after = typeof data.after === "number" && Number.isFinite(data.after) ? data.after : 0;
-  const { own, shared } = answerFor(memory, source.id, after);
+  const time = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const { own, shared } = answerFor(memory, source.id, time(data.afterOwn), time(data.afterShared), owners);
   if (own.length) source.postMessage({ type: REQUESTS_MESSAGE, entries: own, shared: false });
   if (shared.length) source.postMessage({ type: REQUESTS_MESSAGE, entries: shared, shared: true });
 });

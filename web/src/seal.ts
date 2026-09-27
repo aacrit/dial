@@ -218,7 +218,7 @@ function setupBench(): void {
       status.textContent = benchStopLine(event.message || "");
       void checkNeed();
     };
-    w.postMessage({ type: "bench" } satisfies ToWorker);
+    w.postMessage({ type: "bench", voice: NARRATORS.m } satisfies ToWorker);
   });
 }
 

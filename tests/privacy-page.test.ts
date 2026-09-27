@@ -116,7 +116,7 @@ describe("web/privacy.html, claim by claim", () => {
   it("the speed test keeps no results and sends nothing; it keeps the voice as the radio does", () => {
     expect(text).toContain("The speed test on the Seal keeps no results and sends nothing: its results stay on the screen, and are gone when you leave the page. If the voice is not on this device yet, the test downloads it and keeps it, as the radio does.");
     const worker = read("web/src/narrate.worker.ts");
-    const bench = worker.slice(worker.indexOf("async function bench()"), worker.indexOf("ctx.onmessage"));
+    const bench = worker.slice(worker.indexOf("async function bench("), worker.indexOf("ctx.onmessage"));
     expect(bench).toMatch(/await loadVoice\(/);
     for (const [f, src] of [["bench.ts", read("web/src/bench.ts")], ["narrate.worker.ts bench()", bench]]) expect(src, f).not.toMatch(/sendEvent|fetch\(|Storage\b|caches\.open|indexedDB/);
   });
