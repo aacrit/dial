@@ -67,7 +67,7 @@ describe("the download is built from 16-bit chunks, never a whole-work Float32 c
     for (const release of ["s.worker.onmessage = null", "s.worker.onerror = null", "s.audio.onstatechange = null", "s.wav = null"]) {
       expect(offAir).toContain(release);
     }
-    expect(main).toMatch(/msg\.type === "done"\) \{\s*worker\.onmessage = null;\s*worker\.onerror = null;/);
+    expect(main).toMatch(/msg\.type === "done"\) \{\s*worker!\.onmessage = null;\s*worker!\.onerror = null;/);
   });
 });
 
@@ -115,7 +115,8 @@ describe("the live region announces state changes only", () => {
     expect(cue).not.toContain("announce(");
     const follow = block(main, "const follow = () => {", 4)!;
     expect([...follow.matchAll(/announce\(/g)].length).toBe(1);
-    expect(follow).toMatch(/if \(own\.line < 0 && audio\.state === "running"\) announce\(onAirLine/);
+    // Said once, when a line has really begun (after a handover, the line is cued before its audio exists).
+    expect(follow).toMatch(/if \(!own\.onAirSaid && sched\.begun && audio\.state === "running"\) \{\s*own\.onAirSaid = true;\s*announce\(rec \? preparedOnAirLine\(work\.translator\) : onAirLine/);
   });
 
   it("the progress line names the work, the heard line and how far it is made, and says Paused when paused", () => {
@@ -152,7 +153,7 @@ describe("tuning away while a work is on air", () => {
     expect(switchQuestion("the Meditations", "Crito")).toBe("Stop the Meditations and tune in to Crito? The Meditations' recording so far will be lost.");
     expect(main).not.toMatch(/\bconfirm\(/);
     expect(main).toMatch(
-      /if \(s\?\.live && s\.work !== work && !s\.renderDone\) \{\s*pending = work;\s*askQ\.textContent = switchQuestion\(s\.work\.called, work\.called\);\s*ask\.hidden = false;/,
+      /if \(s\?\.live && s\.work !== work && s\.kind === "made" && !s\.renderDone\) \{\s*pending = \{ work, kind \};\s*askQ\.textContent = switchQuestion\(s\.work\.called, work\.called\);\s*ask\.hidden = false;/,
     );
   });
 

@@ -20,7 +20,8 @@ import { watchWorkerRequests } from "./worker-requests";
 
 /** voices[i] is cue i's cast voice. */
 /** bench: the Seal's speed test, in the voice it names (the narrator), so this worker never loads the voice table. */
-export type ToWorker = { type: "render"; cues: Cue[]; voices: VoiceId[] } | { type: "bench"; voice: VoiceId };
+/** from: the first line to make (the lines before it are Dial's recording's, which this browser could not decode). */
+export type ToWorker = { type: "render"; cues: Cue[]; voices: VoiceId[]; from?: number } | { type: "bench"; voice: VoiceId };
 export type FromWorker =
   /** total: the bytes this visit needs; need: nothing, only this work's voices, or the model and runtime too. */
   | { type: "loading"; loaded: number; total: number; need: Need; missingVoices: number }
@@ -75,11 +76,12 @@ ctx.onmessage = async (event) => {
   if (event.data.type !== "render") return;
   try {
     const { cues, voices } = event.data;
+    const from = Math.max(0, Math.min(cues.length, event.data.from ?? 0));
     // Only the voices this work's cast uses are fetched and kept.
     const { tts, manifest, kept } = await loadVoice([...new Set(voices)], (loaded, total, need, missingVoices) => ctx.postMessage({ type: "loading", loaded, total, need, missingVoices }));
     flushRequests();
     ctx.postMessage({ type: "ready", kept });
-    for (let i = 0; i < cues.length; i++) {
+    for (let i = from; i < cues.length; i++) {
       // Only a voice the manifest pins, and so the loader has checked, is ever used.
       const voice = voices[i] as KokoroVoiceId | undefined;
       if (!voice || !Object.hasOwn(manifest.voices, voice)) throw new Error(`voice: no pinned voice for line ${i + 1}`);

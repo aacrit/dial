@@ -3,7 +3,7 @@
 // requests, and its voice worker's, are recorded for the Seal's log
 // (request-recorder.ts): paths and sizes only, never text or audio.
 import { WORKS, aboutMinutes, countWords, type Work } from "./catalogue";
-import { firstOpen, lampLit, wavName } from "./broadcast-state";
+import { addHeard, countsAsListen, firstOpen, heardStep, lampLit, wavName, type HeardSpans, type ListenKind } from "./broadcast-state";
 import { capture, mountRadio } from "./device/radio";
 import { detectPerfTier, type NavigatorLike } from "./device/perf-tier";
 import { motion, watchReducedMotion } from "./device/reduced-motion";
@@ -22,6 +22,9 @@ import { bookplateHeading, bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml, 
 import { pageTitle, parseRoute, playPath } from "./route";
 import {
   CAST_FAILED,
+  PLAYS_AT_ONCE,
+  RECORDING_UNPLAYABLE,
+  makeItHere,
   STATIONS_SERVER,
   clock,
   firstLineLine,
@@ -31,8 +34,14 @@ import {
   notMadeYet,
   onAirLine,
   pausedLine,
+  preparedDoneLine,
+  preparedSkippedLine,
+  preparedOnAirLine,
+  preparedTuningLine,
   progressLine,
+  recordingStopLine,
   renderedLine,
+  resumeAtLine,
   scriptNote,
   stationsUnreached,
   stopLine,
@@ -41,7 +50,9 @@ import {
 } from "./status-copy";
 import type { FromWorker, ToWorker } from "./narrate.worker";
 import { WORK_NOT_ON_DEVICE } from "./offline/plan";
-import { registerOfflineHelper } from "./offline/store";
+import { registerOfflineHelper, type RecordingSave } from "./offline/store";
+import { BUILT_RECORDINGS, canPlayRecordings, isDecodeError, openRecording, playableRecordings, type Recording } from "./recording/source";
+import { RECORDING_RATE } from "./recording/timing";
 import { mountOffline } from "./offline/ui";
 import { noteSend, noteSendFailed, recordEntries, recordRequests } from "./request-recorder";
 import { sendEvent } from "./telemetry";
@@ -72,15 +83,34 @@ const LOOKAHEAD_S = 4;
 /** With the tab hidden or the phone locked, timers slow down: everything this far ahead goes on the audio clock at once. */
 const HIDDEN_LOOKAHEAD_S = 120;
 
-/** One broadcast: a work being made on this device and played as it is made. */
+/** One broadcast: Dial's prepared recording played, or a work made on this device and played as it is made. */
 interface Session {
   work: Work;
+  /** Where its lines come from: Dial's prepared recording, or made on this device. */
+  kind: ListenKind;
+  /** chapter_rendered has been sent for this listen (broadcast-state.ts countsAsListen). */
+  counted: boolean;
+  /** Seconds of the work heard in this listen (played, never seeked over), and the place and clock they were last read at. */
+  heard: number;
+  /** Per line, the stretches heard (CoS decision C: each stretch of a line counts once). */
+  spans: HeardSpans;
+  /** Made here from this line on (the recording's earlier lines were seeded without audio); 0 when made whole or played from the recording. */
+  madeFrom: number;
+  lastPos: number;
+  lastClock: number;
+  /** The on-air line has been said: once, when the first line of this broadcast actually begins. */
+  onAirSaid: boolean;
+  /** Reads what was heard since the last reading, and counts the listen once it reaches 80%. */
+  tally: () => void;
+  /** A seek is moving playback: a seek past the end ends the broadcast, but is not a listen reaching its end. */
+  seeking: boolean;
   cues: Cue[];
   audio: AudioContext;
   gain: GainNode;
   /** The one analyser on this broadcast's context: the wave, the meters and the eye read it, in this tab only. */
   analyser: AnalyserNode;
-  worker: Worker;
+  /** The render worker; none for a prepared recording. */
+  worker: Worker | null;
   frame: number;
   /** Schedules the next lines as the listener nears them. */
   feeder: number;
@@ -110,6 +140,8 @@ function setupRadio(): void {
   const tune = $<HTMLButtonElement>("tune-in");
   const pause = $<HTMLButtonElement>("pause");
   const avail = $("tune-avail");
+  const makeHere = $<HTMLButtonElement>("make-here");
+  const resumeLine = $<HTMLButtonElement>("resume-line");
   const status = $("broadcast-status");
   const progress = $("broadcast-progress");
   const meter = $<HTMLProgressElement>("render-meter");
@@ -131,7 +163,7 @@ function setupRadio(): void {
   const meta = $("st-meta");
   const bookplate = $("bookplate");
   if (!device || !tune || !pause || !avail || !status || !progress || !meter || !download || !readAlong || !raLines || !raWho) return;
-  if (!note || !retry || !ask || !askQ || !askYes || !askNo || !valveLabel) return;
+  if (!note || !retry || !ask || !askQ || !askYes || !askNo || !valveLabel || !makeHere || !resumeLine) return;
   if (!eyebrow || !title || !credit || !sentence || !meta || !bookplate) return;
   // The Broadcast's own parts: the strip, the transport keys, the sheets.
   const ribbonBox = $("ribbon-box");
@@ -163,6 +195,15 @@ function setupRadio(): void {
   let voiceKept = true;
   let session: Session | null = null;
   let downloadUrl: string | null = null;
+  /** Each work's opened prepared recording (this build's, compiled in, and only where this browser can play them). */
+  const prepared = new Map<string, Recording>();
+  /** Whether this browser plays Dial's recordings: false where it lacks Opus in WebM, or once it failed to decode a part. */
+  let recordingsPlayable = canPlayRecordings();
+  /** The Bookplate's facts about a work's prepared recording, where it plays. */
+  const recordingFacts = (w: Work) => {
+    const entry = prepared.has(w.slug) ? BUILT_RECORDINGS.works[w.slug] : undefined;
+    return entry ? { made: entry.made, cast: entry.cast } : undefined;
+  };
   const route = parseRoute(location.pathname, WORKS);
   let room: "repertory" | "broadcast" = route.room;
 
@@ -183,7 +224,7 @@ function setupRadio(): void {
     credit.textContent = w.credit;
     sentence.textContent = w.sentence;
     meta.innerHTML = metaHtml(w, text ? countWords(text.source) : undefined, text?.cast ?? undefined);
-    bookplate.innerHTML = bookplateHtml(w, text?.cast ?? undefined);
+    bookplate.innerHTML = bookplateHtml(w, text?.cast ?? undefined, recordingFacts(w));
     device.dataset.realm = w.slug;
     paintAvail();
     paintTuneIn();
@@ -193,13 +234,21 @@ function setupRadio(): void {
 
   /** The line under Tune in: a station whose voices could not be cast says so, and only that station. */
   const paintAvail = () => {
-    const text = texts.get(WORKS[radio.tuned()]!.slug);
+    const w = WORKS[radio.tuned()]!;
+    const text = texts.get(w.slug);
+    const hasRecording = !!text?.cast && prepared.has(w.slug);
     // Offline, a work whose text is not on this device cannot play, and says so.
     if (!text && offline?.isOffline()) avail.textContent = WORK_NOT_ON_DEVICE;
-    else avail.textContent = text && !text.cast ? CAST_FAILED : madeHere(voiceKept);
+    else avail.textContent = text && !text.cast ? CAST_FAILED : hasRecording ? PLAYS_AT_ONCE : madeHere(voiceKept);
+    // Making it here stays a small secondary link, and only where the recording plays at once.
+    const hideMake = !hasRecording || (!!session?.live && session.work === w && session.kind === "made");
+    if (hideMake) rescueFocus(makeHere);
+    makeHere.hidden = hideMake;
+    makeHere.textContent = makeItHere(voiceKept);
   };
 
-  const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone };
+  // Nothing is made while Dial's prepared recording plays, so its lamp follows playback alone.
+  const lampState = () => session && { live: session.live, playing: session.audio.state === "running", renderDone: session.renderDone || session.kind === "prepared" };
 
   /** Tune in on the work on air reads "On air" while it is live, "Paused" when paused with every line made. */
   const paintTuneIn = () => {
@@ -241,6 +290,7 @@ function setupRadio(): void {
       total: s.cues.length,
       paused: s.audio.state === "suspended",
       renderDone: s.renderDone,
+      prepared: s.kind === "prepared",
     });
   };
 
@@ -327,9 +377,11 @@ function setupRadio(): void {
       s.sched.dispose();
       cancelAnimationFrame(s.frame);
       clearInterval(s.feeder);
-      s.worker.onmessage = null;
-      s.worker.onerror = null;
-      s.worker.terminate();
+      if (s.worker) {
+        s.worker.onmessage = null;
+        s.worker.onerror = null;
+        s.worker.terminate();
+      }
       s.audio.onstatechange = null;
       void s.audio.close();
       s.wav = null;
@@ -367,8 +419,9 @@ function setupRadio(): void {
       updatePosition(s);
       paintProgress();
       if (s.audio.state === "suspended") {
-        announce(pausedLine(s.work.title, positionOf(s), !s.renderDone));
-      } else announce(s.renderDone ? renderedLine(s.work.title, s.cues.length, s.seconds, s.kept) : onAirLine(s.work.title, s.kept));
+        announce(pausedLine(s.work.title, positionOf(s), s.kind === "made" && !s.renderDone));
+      } else if (s.kind === "prepared") announce(preparedOnAirLine(s.work.translator));
+      else announce(s.renderDone ? renderedLine(s.work.title, s.cues.length, s.seconds, s.kept, s.madeFrom) : onAirLine(s.work.title, s.kept));
     };
     if (s.audio.state === "running") {
       pause.textContent = "Resume";
@@ -436,12 +489,15 @@ function setupRadio(): void {
     tuned: () => WORKS[radio.tuned()]!,
     textOf: (slug) => {
       const t = texts.get(slug);
-      return t?.cast ? { source: t.source, voices: t.cast.voices } : undefined;
+      if (!t?.cast) return undefined;
+      const rec = prepared.get(slug);
+      const recording: RecordingSave | undefined = rec ? { slug, index: rec.index, indexBytes: rec.indexFile.bytes, indexSha256: rec.indexFile.sha256 } : undefined;
+      return { source: t.source, voices: t.cast.voices, recording };
     },
   });
 
   // ---- asking before a broadcast still being made is stopped ---------------
-  let pending: Work | null = null;
+  let pending: { work: Work; kind: ListenKind } | null = null;
   const hideAsk = () => {
     if (ask.hidden) return;
     pending = null;
@@ -452,32 +508,53 @@ function setupRadio(): void {
   askYes.addEventListener("click", () => {
     const next = pending;
     hideAsk();
-    if (next) start(next);
+    if (next) start(next.work, next.kind);
   });
 
-  tune.addEventListener("click", () => {
+  /** Tune in (Dial's recording where the work has one) or Make it on this device. */
+  const tuneIn = (kind: ListenKind) => {
     const work = WORKS[radio.tuned()]!;
     if (!texts.get(work.slug)?.cast) return;
     const s = session;
-    if (s?.live && s.work !== work && !s.renderDone) {
-      pending = work;
+    // Only a broadcast still being made loses anything by switching.
+    if (s?.live && s.work !== work && s.kind === "made" && !s.renderDone) {
+      pending = { work, kind };
       askQ.textContent = switchQuestion(s.work.called, work.called);
       ask.hidden = false;
       askNo.focus();
       return;
     }
-    start(work);
-  });
+    start(work, kind);
+  };
+  tune.addEventListener("click", () => tuneIn(prepared.has(WORKS[radio.tuned()]!.slug) ? "prepared" : "made"));
+  makeHere.addEventListener("click", () => tuneIn("made"));
 
-  // ---- Tune in: make the chosen work on this device and play it as it is made
-  const start = (work: Work) => {
+  // ---- Tune in: play the work, from Dial's prepared recording where it has
+  // one ("prepared"), or made on this device and played as it is made
+  // ("made"). Both feed the one scheduler: each line's 16-bit samples at
+  // 24 kHz, then its silence from the pause table.
+  /**
+   * fromLine: start at this line. For Dial's recording, a seek there (Resume at
+   * line N). For a work made here, the lines before it are the recording's
+   * (their lengths, no samples) and only the rest is made: the recording
+   * could not be decoded in this browser. heard and counted carry a listen
+   * on across such a restart; reason is said first.
+   */
+  const start = (work: Work, kind: ListenKind, opts: { fromLine?: number; lengths?: { speech: number; pause: number }[]; heard?: number; spans?: HeardSpans; counted?: boolean; reason?: string } = {}) => {
     const text = texts.get(work.slug)!;
     const cast = text.cast;
     if (!cast) return;
+    const rec = kind === "prepared" ? (prepared.get(work.slug) ?? null) : null;
+    if (kind === "prepared" && !rec) return;
     // work_opened counts Tune in on a work, once per work per page load (founder, 2026-09-26).
     if (firstOpen(opened, work.slug)) sendEvent("work_opened");
     if (session?.live) offAir();
     // The previous finished file stays downloadable until this one is made.
+    rescueFocus(resumeLine);
+    resumeLine.hidden = true;
+    // Made here from a later line (the recording could not be decoded): the lines before it are the recording's.
+    const seeded = !rec && opts.fromLine && opts.lengths ? opts.lengths.slice(0, opts.fromLine) : [];
+    const lead = opts.reason ? `${opts.reason} ` : "";
 
     const audio = new AudioContext();
     const gain = audio.createGain();
@@ -489,12 +566,25 @@ function setupRadio(): void {
     analyser.fftSize = 2048;
     analyser.connect(gain);
     gain.connect(audio.destination);
-    const worker = new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
+    const worker = rec ? null : new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });
     const cues = text.cues;
-    let sampleRate = 24_000;
+    let sampleRate = rec ? RECORDING_RATE : 24_000;
 
-    /** A made line's samples: from the lines kept so far, or, once the file is made, read back from it. */
+    /**
+     * A line's samples: from Dial's prepared recording (fetched and decoded as
+     * playback nears it), or a made line from the lines kept so far, or, once
+     * the file is made, read back from it.
+     */
     const linePcm = (i: number): Int16Array | Promise<Int16Array> => {
+      if (rec) {
+        return rec.samples(i).catch((err: unknown) => {
+          // This browser cannot decode it: the listen carries on, made on this device from the line on air.
+          if (isDecodeError(err)) makeHereInstead();
+          // A part that did not arrive, even on a second try: stop, and offer to carry on from the line on air.
+          else stopped(recordingStopLine(err instanceof Error ? `${err.name}: ${err.message}` : String(err)), Math.max(0, own.line));
+          return new Int16Array(0);
+        });
+      }
       if (own.wav) return own.wav.chunks[2 * i] ?? new Int16Array(0);
       if (!own.file) return new Int16Array(0);
       const from = 44 + own.offsets[i]! * 2;
@@ -533,6 +623,16 @@ function setupRadio(): void {
 
     const own: Session = {
       work,
+      kind: rec ? "prepared" : "made",
+      counted: opts.counted ?? false,
+      heard: opts.heard ?? 0,
+      spans: opts.spans ?? new Map(),
+      madeFrom: seeded.length,
+      lastPos: 0,
+      lastClock: audio.currentTime,
+      onAirSaid: false,
+      tally: () => undefined,
+      seeking: false,
       cues,
       audio,
       gain,
@@ -559,6 +659,36 @@ function setupRadio(): void {
     const lines = readLines(cues);
     let warmingStated = false;
 
+    /**
+     * Adds what was heard since the last reading (broadcast-state.ts
+     * heardStep: played, never seeked over), and sends chapter_rendered once
+     * this listen has heard 80% of the work. Read every frame, every feeder
+     * tick (a hidden tab has no frames), at the end, and around every seek.
+     */
+    own.tally = () => {
+      const pos = positionOf(own);
+      const clockNow = audio.currentTime;
+      // Played, not seeked over (heardStep), and each stretch of a line once; the seeded, silent lines never (addHeard).
+      if (heardStep(own.lastPos, pos, clockNow - own.lastClock) > 0) own.heard += addHeard(own.spans, sched.at, sched.lengths, own.lastPos, pos, own.madeFrom);
+      own.lastPos = pos;
+      own.lastClock = clockNow;
+      if (countsAsListen(own.heard, own.strip.total, own.counted)) {
+        own.counted = true;
+        reportCoreSuccess();
+      }
+    };
+
+    /** This browser cannot decode Dial's recording: every work is made on the device from now on, and this one carries on from the line on air. */
+    const makeHereInstead = () => {
+      if (session !== own || !own.live || !rec) return;
+      own.tally();
+      const at = Math.max(0, own.line);
+      recordingsPlayable = false;
+      prepared.clear();
+      const lengths = Array.from({ length: at }, (_, j) => rec.line(j));
+      start(work, "made", { fromLine: at, lengths, heard: own.heard, spans: own.spans, counted: own.counted, reason: RECORDING_UNPLAYABLE });
+    };
+
     raWho.textContent = `On air: ${work.title}`;
     setMediaSession(work, {
       // Play resumes only a paused broadcast; pause pauses only a playing one.
@@ -577,20 +707,21 @@ function setupRadio(): void {
     });
     // The size and the meter's max arrive with the manifest (its totalBytes);
     // until then the meter is indeterminate and the line states no size.
-    meter.hidden = false;
+    meter.hidden = !!rec;
     meter.removeAttribute("value");
     pause.hidden = false;
     pause.textContent = "Pause";
     pause.focus();
-    setValve(0.08, "Voice");
-    radio.setReady(0);
+    setValve(rec ? 1 : 0.08, rec ? "Recording" : "Voice");
+    radio.setReady(rec ? 1 : 0);
     air.analyser = analyser;
     air.redraw();
     audio.onstatechange = setLamp;
     setLamp();
     paintTuneIn();
     paintTransport();
-    announce("Warming the voice.");
+    paintAvail();
+    announce(rec ? preparedTuningLine(work.title) : `${lead}Warming the voice.`);
     paintProgress();
     // Tune in goes on air in the Broadcast: its address, with no reload, so nothing stops.
     setRoom("broadcast", room === "broadcast" ? "replace" : "push");
@@ -600,12 +731,17 @@ function setupRadio(): void {
     // raised (see visibilitychange below), so playback does not wait on it.
     own.feeder = window.setInterval(() => {
       if (audio.state === "running") void sched.feed();
+      own.tally();
     }, 250);
 
     const follow = () => {
       const current = sched.current();
+      // On air once a line has really begun: after a handover the line is cued before its audio is made.
+      if (!own.onAirSaid && sched.begun && audio.state === "running") {
+        own.onAirSaid = true;
+        announce(rec ? preparedOnAirLine(work.translator) : onAirLine(work.title, own.kept));
+      }
       if (current !== own.line && current >= 0) {
-        if (own.line < 0 && audio.state === "running") announce(onAirLine(work.title, own.kept));
         own.line = current;
         raLines.innerHTML = readAlongHtml(lines, current);
         readAlong.hidden = false;
@@ -620,6 +756,7 @@ function setupRadio(): void {
       air.silent = sched.inSilence();
       air.register = registerOf(cues[Math.max(0, current)]);
       paintPlayhead();
+      own.tally();
       own.frame = requestAnimationFrame(follow);
     };
     own.frame = requestAnimationFrame(follow);
@@ -627,8 +764,10 @@ function setupRadio(): void {
     // Playback ended (the scheduler says so once): the broadcast goes off air.
     const ended = () => {
       if (session === own && own.live) {
+        // The last of what was heard counts before the broadcast goes off air.
+        own.tally();
         offAir();
-        announce(renderedLine(work.title, cues.length, own.seconds, own.kept));
+        announce(rec ? (own.seeking ? preparedSkippedLine(work.title) : preparedDoneLine(work.title, own.seconds)) : renderedLine(work.title, cues.length, own.seconds, own.kept, own.madeFrom));
         // A completed listen: where the browser allows, offer to install Dial.
         offline?.listened();
       }
@@ -636,14 +775,64 @@ function setupRadio(): void {
 
     // A failure ends the broadcast: no meter left running, no lamp left lit,
     // and the status says what happened in plain words, with the fix.
-    const stopped = (message: string) => {
+    const stopped = (line: string, resumeAt?: number) => {
       if (session !== own) return;
+      own.tally();
+      const heard = own.heard;
+      const spans = own.spans;
+      const counted = own.counted;
       offAir();
       meter.hidden = true;
-      announce(stopLine(message), true);
+      announce(line, true);
+      // Dial's recording stopped: carry on from the line on air, as the same listen.
+      if (rec && resumeAt !== undefined) {
+        resumeLine.textContent = resumeAtLine(resumeAt + 1);
+        resumeLine.onclick = () => start(work, "prepared", { fromLine: resumeAt, heard, spans, counted });
+        resumeLine.hidden = false;
+        resumeLine.focus();
+      }
     };
 
-    worker.onmessage = (event: MessageEvent<FromWorker>) => {
+    if (rec) {
+      // Dial's prepared recording: every line is already made, so all of them
+      // go to the scheduler at once (the strip, the script and seeking cover
+      // the whole work); their samples are fetched as playback nears them.
+      own.ready = true;
+      for (let i = 0; i < rec.lineCount; i++) {
+        const l = rec.line(i);
+        sched.add(i, l.speech, l.pause, false);
+        own.seconds += l.speech + l.pause;
+      }
+      own.made = rec.lineCount;
+      own.renderDone = true;
+      measureStrip(own);
+      setLamp();
+      paintProgress();
+      paintTransport();
+      paintRibbon();
+      // Resume at line N: the schedule starts there, before anything is fed, so no earlier part is fetched (a seek, so nothing is counted as heard for it).
+      if (opts.fromLine) sched.seek(sched.at[opts.fromLine]!);
+      sched.renderFinished();
+      own.lastPos = positionOf(own);
+      return;
+    }
+
+    if (seeded.length) {
+      // The recording's lines before the one on air are known by their lengths; this device makes the rest.
+      own.wav = new WavChunks(RECORDING_RATE);
+      seeded.forEach((l, j) => {
+        own.offsets[j] = own.wav!.dataBytes / 2;
+        own.counts[j] = 0;
+        own.wav!.add(new Float32Array(0), 0);
+        own.seconds += l.speech + l.pause;
+      });
+      sched.seed(seeded);
+      own.made = seeded.length;
+      own.lastPos = positionOf(own);
+      measureStrip(own);
+    }
+
+    worker!.onmessage = (event: MessageEvent<FromWorker>) => {
       // The worker's own requests go to the Seal's log, whatever the broadcast is doing.
       if (event.data.type === "requests") return recordEntries(event.data.entries);
       if (session !== own || !own.live) return;
@@ -651,7 +840,7 @@ function setupRadio(): void {
       if (msg.type === "loading") {
         if (!warmingStated) {
           warmingStated = true;
-          announce(warmingLine(msg.total, msg.need, work.called, msg.missingVoices));
+          announce(`${lead}${warmingLine(msg.total, msg.need, work.called, msg.missingVoices)}`);
         }
         // Only a usable total sizes the meter and the valve; otherwise they stay as they are.
         if (isStatableTotal(msg.total)) {
@@ -691,13 +880,15 @@ function setupRadio(): void {
         paintTransport();
         paintRibbon();
       } else if (msg.type === "done") {
-        worker.onmessage = null;
-        worker.onerror = null;
-        worker.terminate();
+        worker!.onmessage = null;
+        worker!.onerror = null;
+        worker!.terminate();
         own.renderDone = true;
         // One object URL at a time: the previous file's is released first.
         if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-        downloadUrl = own.wav ? URL.createObjectURL((own.file = new Blob(own.wav.parts(), { type: "audio/wav" }))) : null;
+        own.file = own.wav ? new Blob(own.wav.parts(), { type: "audio/wav" }) : null;
+        // Made here from a later line, the file lacks the recording's lines before it: it is kept for seeking, never offered as the work.
+        downloadUrl = own.file && !seeded.length ? URL.createObjectURL(own.file) : null;
         own.wav = null;
         if (downloadUrl) {
           download.href = downloadUrl;
@@ -712,21 +903,20 @@ function setupRadio(): void {
         setLamp();
         paintProgress();
         paintRibbon();
-        announce(renderedLine(work.title, cues.length, own.seconds, own.kept));
-        reportCoreSuccess();
+        announce(renderedLine(work.title, cues.length, own.seconds, own.kept, own.madeFrom));
         measureStrip(own);
         // Every line is made: the broadcast ends once the last one has been heard.
         sched.renderFinished();
       } else {
-        stopped(msg.message);
+        stopped(stopLine(msg.message));
       }
     };
     // A worker that fails to start or throws outside its own handler.
-    worker.onerror = (event) => {
+    worker!.onerror = (event) => {
       event.preventDefault();
-      stopped(event.message || "");
+      stopped(stopLine(event.message || ""));
     };
-    worker.postMessage({ type: "render", cues, voices: cast.voices } satisfies ToWorker);
+    worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length } satisfies ToWorker);
   };
 
   // ---- scrubbing: the strip, J/K/L, [ ], and a line chosen in the script ----
@@ -739,8 +929,19 @@ function setupRadio(): void {
 
   /** Seeks within what is made. Past it (while lines are still being made) the note says so; past the end of a finished work the broadcast ends. */
   const seekAndSay = (s: Session, t: number) => {
-    const target = s.sched.seek(t);
+    // What was heard up to here counts; the jump itself never does.
+    s.tally();
+    // A seek past the end of a finished work ends the broadcast at once (the scheduler's complete); it is not a finished listen.
+    s.seeking = true;
+    let target: ReturnType<typeof s.sched.seek>;
+    try {
+      target = s.sched.seek(t);
+    } finally {
+      s.seeking = false;
+    }
     if (!target || target.finished) return;
+    s.lastPos = s.sched.at[target.index]! + target.offset;
+    s.lastClock = s.audio.currentTime;
     scrubNote.textContent = target.beyond && s.made < s.cues.length ? notMadeYet(s.made, s.cues.length) : "";
     lastShown = -1;
     updatePosition(s, s.sched.at[target.index]! + target.offset);
@@ -818,7 +1019,7 @@ function setupRadio(): void {
   const bookplateSheet = mountSheet($<HTMLDialogElement>("bookplate-sheet")!, fallbackFocus, () => {
     const w = WORKS[radio.tuned()]!;
     bpNote.textContent = bookplateHeading(w);
-    bpSheetDl.innerHTML = bookplateHtml(w, texts.get(w.slug)?.cast ?? undefined);
+    bpSheetDl.innerHTML = bookplateHtml(w, texts.get(w.slug)?.cast ?? undefined, recordingFacts(w));
   });
   const shortcutSheet = mountSheet($<HTMLDialogElement>("shortcuts")!, fallbackFocus, () => {
     shortcutList.innerHTML = shortcutsHtml(SHORTCUTS);
@@ -965,8 +1166,9 @@ function setupRadio(): void {
           });
         }),
       ),
-    ).then((results) => {
+    ).then(async (results) => {
       for (const r of results) if (r.status === "fulfilled") texts.set(r.value[0], r.value[1]);
+      await openPrepared();
       const failed = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
       if (results.every((r) => r.status === "rejected") && failed) {
         device.dataset.state = "error";
@@ -984,6 +1186,30 @@ function setupRadio(): void {
     });
   };
   retry.addEventListener("click", load);
+
+  /**
+   * Opens each work's prepared recording, from the list compiled into this
+   * page (where this browser can play them): its index, checked against its
+   * pin and against the lines this page computes from the text and its cast.
+   * A work whose recording cannot be opened, or does not match, is made on
+   * the device instead.
+   */
+  const openPrepared = async () => {
+    const works = playableRecordings(BUILT_RECORDINGS, recordingsPlayable);
+    await Promise.all(
+      WORKS.map(async (w) => {
+        const entry = works[w.slug];
+        const text = texts.get(w.slug);
+        if (!entry || !text?.cast || prepared.has(w.slug)) return;
+        try {
+          const opened = await openRecording(w.slug, entry, text.cues, text.cast.voices);
+          if (opened.recording) prepared.set(w.slug, opened.recording);
+        } catch {
+          // Its index could not be fetched (offline, not saved): made on the device.
+        }
+      }),
+    );
+  };
 
   showStation();
   paintTransport();

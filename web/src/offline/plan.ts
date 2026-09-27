@@ -49,8 +49,12 @@ export function unionVoices(old: readonly string[] | null, today: readonly strin
   return workVoices([...(old ?? []), ...today]);
 }
 
-/** A recorded voice list ("am_fenrir,am_puck"), or null when there is no usable record. */
+/** The voice record of a saved work that plays Dial's prepared recording: it needs no voice. */
+export const NO_VOICES = "none";
+
+/** A recorded voice list ("am_fenrir,am_puck"; "none" for a prepared recording), or null when there is no usable record. */
 export function parseVoices(header: string | null): string[] | null {
+  if (header === NO_VOICES) return [];
   if (!header) return null;
   const ids = header.split(",").map((v) => v.trim());
   return ids.every((v) => /^[a-z]{2}_[a-z]+$/.test(v)) ? ids : null;
@@ -90,15 +94,80 @@ export function savePlan(
   return { textBytes, voiceBytes: n.bytes + extras, need: n.need, textSaved };
 }
 
-/** Everything saving would download: the plan's text (unless kept) and voice bytes. */
-export function planTotal(p: SavePlan): number {
-  return (p.textSaved ? 0 : p.textBytes) + p.voiceBytes;
+// ---- A work with a prepared recording ---------------------------------------
+// It saves the recording Dial made in advance (its parts and timing index),
+// its text (the read-along and the check that the recording is of these
+// words) and the voice manifest (small; offline it gives the page the voice
+// pins its offline key is made of; the recordings' pins are compiled into
+// the page). No voice: the 115 MB model is not downloaded for it. A file
+// counts as kept only when its kept bytes hash to its pin in this build.
+
+/** One file a saved recording keeps, by the path it is served at, with the SHA-256 its kept bytes must have. */
+export interface PinnedFile {
+  path: string;
+  bytes: number;
+  sha256: string;
 }
 
-/** Saved means every piece is on this device: the text, the voice files the work needs, and the app's own files. */
-export function isSaved(p: SavePlan, shellKept: boolean): boolean {
+export interface KeptFile extends PinnedFile {
+  /** Kept on this device, and its kept bytes hash to `sha256`. */
+  kept: boolean;
+}
+
+export interface RecordingPlan {
+  kind: "recording";
+  textBytes: number;
+  textSaved: boolean;
+  files: KeptFile[];
+}
+
+/**
+ * The files a saved recording keeps, with their true sizes and pins: its
+ * parts (from the index), the index (its compiled pin) and the voice
+ * manifest (as fetched now: a saved copy of an older one is not kept).
+ */
+export function recordingFiles(
+  slug: string,
+  parts: readonly { file: string; bytes: number; sha256: string }[],
+  index: { bytes: number; sha256: string },
+  voiceManifest: { bytes: number; sha256: string },
+): PinnedFile[] {
+  return [
+    ...parts.map((p) => ({ path: `/recordings/${slug}/${p.file}`, bytes: p.bytes, sha256: p.sha256 })),
+    { path: `/recordings/${slug}/index.json`, bytes: index.bytes, sha256: index.sha256 },
+    { path: "/voice/manifest.json", bytes: voiceManifest.bytes, sha256: voiceManifest.sha256 },
+  ];
+}
+
+/** The saved cache's keys (paths) for one work's prepared recording: its parts and index, never the shared lists. */
+export function recordingKeysOf(paths: readonly string[], slug: string): string[] {
+  return paths.filter((p) => p.startsWith(`/recordings/${slug}/`) && /^\/recordings\/[a-z0-9-]+\/(index\.json|part\d+\.webm)$/.test(p));
+}
+
+export type AnyPlan = SavePlan | RecordingPlan;
+
+const isRecording = (p: AnyPlan): p is RecordingPlan => "kind" in p && p.kind === "recording";
+
+/** Everything saving would download: the text (unless kept), and the voice bytes or the recording's files not yet kept. */
+export function planTotal(p: AnyPlan): number {
+  const text = p.textSaved ? 0 : p.textBytes;
+  if (isRecording(p)) return text + p.files.filter((f) => !f.kept).reduce((n, f) => n + f.bytes, 0);
+  return text + p.voiceBytes;
+}
+
+/** Saved means every piece is on this device: the text, the voice files or the recording the work needs, and the app's own files. */
+export function isSaved(p: AnyPlan, shellKept: boolean): boolean {
+  if (isRecording(p)) return p.textSaved && p.files.every((f) => f.kept) && shellKept;
   return p.textSaved && p.voiceBytes === 0 && shellKept;
 }
+
+/** The bytes a saved recording occupies: its text and every file it keeps. */
+export function recordingOnDevice(p: RecordingPlan): number {
+  return p.files.reduce((n, f) => n + f.bytes, p.textBytes);
+}
+
+/** Megabytes to one place, or kilobytes below a tenth of a megabyte. */
+const size = (bytes: number) => (bytes < 100_000 ? kilobytes(bytes) : `${mb1(bytes)} MB`);
 
 /** "29 kB": whole kilobytes (decimal), never below 1. */
 export function kilobytes(bytes: number): string {
@@ -116,7 +185,12 @@ export function mb1(bytes: number): string {
  * - Only this work's voices missing: "... plus this work's voice (about 1 MB). The rest of the voice is already on this device."
  * - The whole voice held: "29 kB of text. The voice is already on this device."
  */
-export function sizeLine(p: SavePlan): string {
+export function sizeLine(p: AnyPlan): string {
+  if (isRecording(p)) {
+    const total = planTotal(p);
+    const recording = p.files.some((f) => !f.kept && f.path.endsWith(".webm"));
+    return recording ? `${size(total)}: the recording Dial made in advance, and its text. No voice download.` : `${size(total)}: the rest of what the recording needs offline. No voice download.`;
+  }
   const text = `${kilobytes(p.textBytes)} of text`;
   if (p.voiceBytes === 0) return `${text}. The voice is already on this device.`;
   if (p.need === "all") return `${text}, plus the voice, once (${aboutMegabytes(p.voiceBytes)}).`;
@@ -140,6 +214,12 @@ export function savedLine(onDeviceBytes: number, persisted: boolean): string {
   return persisted ? base : `${base} This browser may clear it if the device runs short of space.`;
 }
 
+/** Under "Saved for offline" for a work saved with its prepared recording. */
+export function recordingSavedLine(onDeviceBytes: number, persisted: boolean): string {
+  const base = `Plays in Dial with no connection. ${mb1(onDeviceBytes)} MB on this device: the recording Dial made in advance, with no voice download.`;
+  return persisted ? base : `${base} This browser may clear it if the device runs short of space.`;
+}
+
 /** The bytes a saved work occupies: its text, the whole voice model and runtime, its voices, and the offline extras. */
 export function onDeviceBytes(m: SizedManifest, voices: readonly string[], textBytes: number, extras: readonly { path: string; bytes: number }[]): number {
   const nothingHeld: Held = { model: false, modelFiles: new Set(), runtime: false, voices: new Set() };
@@ -158,7 +238,7 @@ export const SAVED_OLDER_LINE = "Close every Dial tab, then reopen it with a con
  * "older" when every piece is here but the helper is an older Dial's, which
  * would play a different voice or cast offline; otherwise not saved.
  */
-export function savedState(p: SavePlan, shell: { ok: boolean; key: string | null }, dataKey: string | null): "saved" | "older" | "no" {
+export function savedState(p: AnyPlan, shell: { ok: boolean; key: string | null }, dataKey: string | null): "saved" | "older" | "no" {
   if (!isSaved(p, shell.ok)) return "no";
   return dataKey !== null && shell.key === dataKey ? "saved" : "older";
 }

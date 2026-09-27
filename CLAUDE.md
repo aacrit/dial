@@ -61,6 +61,11 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
    (Kokoro-82M q8), its WASM runtime and the texts are self-hosted, pinned
    by SHA-256 in `scripts/fetch-voice.mjs`, never in git, staged into
    `web/public/voice` and `web/public/ort` before every build.
+   Dial's prepared recordings likewise: made once by
+   `scripts/render-recordings.mjs` (the tab's own pipeline), published as
+   release assets, pinned in `recordings.lock.json`, checked and staged by
+   `scripts/fetch-recordings.mjs`; the page plays one only when every
+   line's hash matches the text and cast it computes itself.
 2. **The words are the author's.** Every cue's `text` is a byte-exact slice
    of its source and the cues rebuild it exactly (`tests/verbatim.test.ts`).
    `spoken` may differ only by whitespace, and by leaving out the speaker

@@ -59,7 +59,12 @@ export function pausedLine(title: string, atSeconds: number, stillMaking: boolea
  * finished work is sent (chapter_rendered), but the words and the audio
  * never leave the device.
  */
-export function renderedLine(title: string, total: number, seconds: number, kept: boolean): string {
+export function renderedLine(title: string, total: number, seconds: number, kept: boolean, madeFrom = 0): string {
+  // Made here from a later line (Dial's recording could not be decoded): only those lines were made on this device.
+  if (madeFrom > 0) {
+    const rest = total - madeFrom === 1 ? "the last line" : `the last ${total - madeFrom} lines`;
+    return withKept(`Made on this device from line ${madeFrom + 1}: ${rest} of ${title}. The words and the audio never left this device.`, kept);
+  }
   return withKept(`Made on this device: all ${total} lines of ${title}, ${clock(seconds)}. The words and the audio never left this device.`, kept);
 }
 
@@ -76,17 +81,75 @@ export interface Progress {
   renderDone: boolean;
 }
 
-/** "On air: Crito, line 21 of 252. Made up to line 40." */
-export function progressLine(p: Progress): string {
+/** "On air: Crito, line 21 of 252. Made up to line 40."; for Dial's prepared recording, only where the listener is. */
+export function progressLine(p: Progress & { prepared?: boolean }): string {
   const where = `${p.paused ? "Paused" : "On air"}: ${p.title}, line ${Math.max(1, p.heard)} of ${p.total}.`;
+  if (p.prepared) return where;
   return p.renderDone ? `${where} All lines made.` : `${where} Made up to line ${p.made}.`;
+}
+
+// ---- Dial's prepared recording ---------------------------------------------
+// Played from files Dial made in advance and this site serves: nothing is
+// made on the device, and the words and the audio are never sent. The one
+// count, chapter_rendered, is sent once 80% of the work has been heard.
+
+/** Under Tune in, for a work whose prepared recording this page can play. */
+export const PLAYS_AT_ONCE = "Plays at once: Dial made this recording in advance.";
+
+/** The small secondary link beside it: today's render, made on the device. Once the voice could not be kept, it says it downloads each time. */
+export function makeItHere(voiceKept: boolean): string {
+  return voiceKept ? "Or make it on this device (the voice downloads once)" : "Or make it on this device (the voice downloads each time)";
+}
+
+/** Said when a part of Dial's recording cannot be decoded here, as the listen carries on made on the device from the line on air. */
+export const RECORDING_UNPLAYABLE = "This browser can't play Dial's recording, so it's being made on this device.";
+
+/** The button offered when Dial's recording stopped (a part did not arrive, twice): carry on from the line on air. */
+export function resumeAtLine(line: number): string {
+  return `Resume at line ${line}`;
+}
+
+/** "Jowett's": the translator's surname, possessive. */
+function translatorsWords(translator: string): string {
+  const surname = translator.split(" ").at(-1) ?? translator;
+  return surname.endsWith("s") ? `${surname}'` : `${surname}'s`;
+}
+
+/** A prepared recording that stopped, in plain words with the fix. */
+export function recordingStopLine(raw: string): string {
+  if (/: \d{3}$/.test(raw)) return "Dial could not send its recording. Try again later, or make it on this device.";
+  if (/Failed to fetch|NetworkError|Load failed|network/i.test(raw)) return STOP_OFFLINE;
+  if (/pin/i.test(raw)) return "Dial's recording arrived damaged. Press Tune in to try again.";
+  if (/EncodingError|decode|Decoding/i.test(raw)) return "This browser could not play Dial's recording. Make it on this device instead.";
+  return "Dial's recording stopped unexpectedly. Press Tune in to try again.";
+}
+
+/** Between Tune in and the first line: the first part is on its way. */
+export function preparedTuningLine(title: string): string {
+  return `Tuning in to Dial's recording of ${title}.`;
+}
+
+/** The first line is playing. */
+export function preparedOnAirLine(translator: string): string {
+  return `Playing a recording Dial made in advance from ${translatorsWords(translator)} words. Nothing is made while you listen, and the words and the audio never leave this device.`;
+}
+
+/** A skip went past the end: the broadcast is over, but nothing was heard to the end. */
+export function preparedSkippedLine(title: string): string {
+  return `Skipped to the end of Dial's recording of ${title}.`;
+}
+
+/** The listen reached the end. */
+export function preparedDoneLine(title: string, seconds: number): string {
+  return `Played Dial's recording of ${title} to the end, ${clock(seconds)}.`;
 }
 
 // ---- Before Tune in, and the works themselves ------------------------------
 
 /**
- * Where the audio will come from. No work has a recording Dial made in
- * advance yet. The keeping clause is dropped once the voice could not be kept.
+ * Where the audio will come from, for a work made on the device (a work
+ * whose prepared recording plays says PLAYS_AT_ONCE instead). The keeping
+ * clause is dropped once the voice could not be kept.
  */
 export function madeHere(voiceKept: boolean): string {
   return voiceKept

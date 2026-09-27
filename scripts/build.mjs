@@ -8,7 +8,8 @@
 // CSP meta into every page and writes dist/_headers (scripts/lib/csp.mjs).
 // Then it makes the installable app's files (scripts/lib/pwa.mjs: the app
 // manifest's token colours and the icons) and, last, the offline helper
-// dist/sw.js (web/src/sw.ts), stamped with the tag and the shell's paths.
+// dist/sw.js (web/src/sw.ts), stamped with the tag, the shell's paths and
+// the pins of the voice and the prepared recordings.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
@@ -17,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { runBin } from "./lib/run-bin.mjs";
 import { cspViolations, headersFile, injectCsp } from "./lib/csp.mjs";
 import { stage as stageVoice } from "./fetch-voice.mjs";
+import { stage as stageRecordings, stagedRecordingPins } from "./fetch-recordings.mjs";
 import { iconFiles, nightTokens, stampTokens } from "./lib/pwa.mjs";
 import { shellPaths } from "./lib/shell.mjs";
 
@@ -61,14 +63,14 @@ function distFiles() {
  * (a service worker's URL is its identity), with this build's tag and shell
  * list compiled in. A new build is a new script, so browsers install it.
  */
-async function buildServiceWorker(tag, shell, pins) {
+async function buildServiceWorker(tag, shell, pins, recordings) {
   const { build } = await import("vite");
   await build({
     configFile: false,
     root: webDir,
     logLevel: "warn",
     publicDir: false,
-    define: { __BUILD_TAG__: JSON.stringify(tag), __SHELL__: JSON.stringify(shell), __VOICE_PINS__: JSON.stringify(pins) },
+    define: { __BUILD_TAG__: JSON.stringify(tag), __SHELL__: JSON.stringify(shell), __VOICE_PINS__: JSON.stringify(pins), __RECORDING_PINS__: JSON.stringify(recordings) },
     build: {
       outDir: distDir,
       emptyOutDir: false,
@@ -83,6 +85,9 @@ async function main() {
   // The voice and the WASM runtime land in web/public/ first (Law 1: the
   // page loads them from this origin only).
   await stageVoice();
+  // The prepared recordings too, each checked against recordings.lock.json;
+  // a pinned recording that cannot be had fails the build.
+  await stageRecordings();
 
   const result = runBin("vite", "vite", ["build"], { cwd: webDir });
   if (result.error || result.status !== 0) {
@@ -126,7 +131,7 @@ async function main() {
 
   // The offline helper, last, so its shell list is the finished build's.
   const shell = shellPaths(distFiles());
-  await buildServiceWorker(tag, shell, readVoicePins());
+  await buildServiceWorker(tag, shell, readVoicePins(), stagedRecordingPins());
   // The shell's list, for the contract (every path must answer 200). Not part of the shell itself.
   writeFileSync(path.join(distDir, "offline-shell.json"), JSON.stringify(shell) + "\n");
 

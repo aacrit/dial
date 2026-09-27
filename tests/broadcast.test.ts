@@ -171,7 +171,8 @@ describe("the scrub maths: time to line, and seeks only into what is made", () =
   });
 
   it("the page seeks through the scheduler only, whose stop suppresses the end, and reads made lines from the kept lines or the finished file", () => {
-    expect(main).toMatch(/const target = s\.sched\.seek\(t\);/);
+    // T5: the seek is marked around the call, so a skip past the end is not a finished listen (tests/recordings.test.ts).
+    expect(main).toMatch(/target = s\.sched\.seek\(t\);/);
     expect(main).toMatch(/stop: \(node\) => \{\s*node\.onended = null;\s*node\.stop\(\);/);
     expect(main).toMatch(/if \(own\.wav\) return own\.wav\.chunks\[2 \* i\]/);
     expect(main).toMatch(/own\.file\s*\.slice\(from, from \+ own\.counts\[i\]! \* 2\)\s*\.arrayBuffer\(\)/);

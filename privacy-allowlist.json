@@ -1,5 +1,5 @@
 {
   "_comment": "Law 1: the only requests the page and its worker may make. Every fetch() in web/src must name one of these same-origin paths (tests/no-network.test.ts). Sends carry counts or feedback text only; everything else is a download of this site's own files.",
   "sends": ["/e", "/feedback"],
-  "downloads": ["/works/", "/voice/", "/ort/"]
+  "downloads": ["/works/", "/voice/", "/ort/", "/recordings/"]
 }

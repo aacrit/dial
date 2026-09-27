@@ -59,3 +59,18 @@ Result: Crito is Socrates `am_fenrir`, Crito `am_puck` (both C+; with no narrati
 
 ## 2026-09-27: No-scroll panels, and the Seal becomes a widget (G2 amendment)
 The founder asked for a retro, no-scroll interface: every room is made of full-screen panels of fitted widgets, switched by a band-selector plate, with no sideways scrolling at any size. The Seal is too technical for a page of its own. It becomes a radio widget (a magic eye, one plain sentence, the counts switch, and "Show every request" collapsed), /seal is removed, and the speed test moves to T7's gauge. Signed off in chat, with three answers: on a phone the script fills its panel when tapped; rooms are switched in the top bar; large screens use one panel when it fits.
+
+## 2026-09-27: A listen counts when 80% of the work is heard (CoS decision A)
+Chief of Staff decision, delegated by the founder, from the T5 review. `chapter_rendered` is sent once per listen when the listener has heard at least 80% of the work's running time, on either path (Dial's prepared recording, or made on this device), counted as seconds of audio played and never as audio seeked over. It no longer fires when the last line is made, nor when a listen reaches the end by a skip. A listen carried on across a restart (Resume at line N, or a recording made on the device after a decode failure) keeps what it had heard and counts once. The privacy page, the Seal's switch and design/spec.md say so ("a work heard for at least 80% of its length"); `web/src/broadcast-state.ts` `heardStep` and `countsAsListen` hold the rule. The kill criterion's `chapter_rendered` count now reads as listens.
+
+## 2026-09-27: A recording this browser cannot decode is made on the device instead (CoS decision B)
+Chief of Staff decision, delegated by the founder, from the T5 review. When a part of Dial's prepared recording fails to decode (an EncodingError, as older iOS Safari may give for Opus in WebM), the listen carries on made on this device from the line on air, with no dead end, and says why: "This browser can't play Dial's recording, so it's being made on this device." The lines before it keep the recording's lengths, so the strip and the script still line up; the file made from that line on is kept for seeking and is not offered as the work's download. For the rest of the visit every work is made on the device. A remuxed, Safari-friendly set of recordings is a follow-up (T5b), not built now.
+
+## 2026-09-27: Heard means distinct line time (CoS decision C)
+Chief of Staff decision, delegated by the founder, from the T5 re-review. What a listen has heard is kept per line: each stretch of a line counts once, the first time it is played, so a replay adds nothing (`web/src/broadcast-state.ts` `addHeard`, with `heardStep` still refusing seeks and pauses). The recording's lines seeded without their audio when a work is made on the device after a decode failure never count. The four-fifths threshold of decision A applies to this total.
+
+## 2026-09-27: One wording, "four fifths" (CoS decision D)
+The privacy page and the Seal both say a listen is "a work heard for at least four fifths of its length"; neither says 80%. The code's `HEARD_SHARE` stays 0.8, and the paired tests hold both pages to the wording.
+
+## 2026-09-27: The kill threshold stays at 300 (CoS decision E)
+`chapter_rendered` now counts listens heard to four fifths (decision A), not renders completed. The threshold stays at 300 until the first G4 recalibrates it. CHARTER.md's kill criteria carry one line saying what the count means, and contract.yaml's comment on the event says the same.

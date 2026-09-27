@@ -15,7 +15,7 @@ const FORBIDDEN_PATTERNS = [
   /(^|\/)node_modules\//,
   /\.tsbuildinfo$/,
   /(^|\/)cloudflare-env\.d\.ts$/,
-  /\.(png|jpe?g|gif|webp|mp4|mov|mp3|wav|zip|sqlite3?|db)$/i,
+  /\.(png|jpe?g|gif|webp|mp4|mov|mp3|wav|webm|opus|ogg|m4a|zip|sqlite3?|db)$/i,
 ];
 
 export function checkFiles(files, statFn = statSync) {

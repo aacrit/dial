@@ -12,8 +12,10 @@
 //   English Wikipedia articles "Benjamin Jowett" (died 1 October 1893; The
 //   Dialogues of Plato published 1871) and "George Long (scholar)" (died
 //   10 August 1879; his Meditations first published 1862).
-// - No work has a recording Dial made in advance yet (prepared recordings
-//   come with T5), so every one is made on the listener's device.
+// - Whether a work has a recording Dial made in advance is not typed here:
+//   it is what the build staged from recordings.lock.json
+//   (/recordings/manifest.json), and the page plays it only when its lines
+//   match the text and cast exactly (recording/source.ts).
 
 import type { CastSheet } from "./engine/cast";
 import type { Cue } from "./engine/segment";
@@ -54,8 +56,6 @@ export interface Work {
     publishedAs: "Published" | "First published";
     translatorDied: number;
   };
-  /** False until a recording Dial made in advance exists (T5). */
-  preparedRecording: boolean;
   /** A volunteer human reading of the same translation, where one is known. */
   librivox?: string;
   /**
@@ -87,7 +87,6 @@ export const WORKS: readonly Work[] = [
       notPerformed: "Jowett's introduction and the rest of the Republic are not performed.",
     },
     pd: { published: 1871, publishedAs: "First published", translatorDied: 1893 },
-    preparedRecording: false,
     librivox: "https://librivox.org/platos_republic/",
   },
   {
@@ -110,7 +109,6 @@ export const WORKS: readonly Work[] = [
       notPerformed: "Jowett's introduction is not performed.",
     },
     pd: { published: 1871, publishedAs: "First published", translatorDied: 1893 },
-    preparedRecording: false,
     // Gutenberg eBook 1657, line 167: "PERSONS OF THE DIALOGUE:  Socrates, Crito."
     cast: { narrator: "m", speakers: { SOCRATES: "m", CRITO: "m" } },
   },
@@ -134,7 +132,6 @@ export const WORKS: readonly Work[] = [
       notPerformed: "Long's footnotes and his + marks for a doubtful reading are not performed; the words he supplied in brackets are.",
     },
     pd: { published: 1862, publishedAs: "First published", translatorDied: 1879 },
-    preparedRecording: false,
   },
 ];
 

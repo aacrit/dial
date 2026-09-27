@@ -64,8 +64,33 @@ export function castSheetSentence(sheet?: CastSheet): string {
   return `The curator's cast sheet, from the edition's list of persons, asks only for voice sex${sheet.accent ? " and accent" : ""}: ${asks.join("; ")}. `;
 }
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** "27 September 2026" from "2026-09-27"; anything else is shown as given. */
+export function madeOn(date: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  return m && month ? `${Number(m[3])} ${month} ${m[1]}` : date;
+}
+
+/** Dial's prepared recording of a work, as the Bookplate states it. */
+export interface RecordingFacts {
+  /** The day it was made, YYYY-MM-DD. */
+  made: string;
+  /** The cast engine version it was made with. */
+  cast: string;
+}
+
+/** The Voice row's sentence about Dial's prepared recording. */
+export function recordingSentence(work: Pick<Work, "translator">, rec: RecordingFacts): string {
+  return (
+    `Dial's recording was made in advance with Kokoro-82M, an open speech model, on ${num(madeOn(rec.made))}, engine version ${num(rec.cast)}, ` +
+    `by the same fixed rules your device uses when you make it there. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, verbatim, exactly as printed.`
+  );
+}
+
 /** The Bookplate: station, source, public-domain basis, voice, direction, and a human reading where one is known. */
-export function bookplateHtml(work: Work, cast?: Cast): string {
+export function bookplateHtml(work: Work, cast?: Cast, recording?: RecordingFacts): string {
   const s = work.source;
   const rows: [string, string][] = [
     ["Station", `${num(`514 · ${work.station}`)} on the dial`],
@@ -84,7 +109,9 @@ export function bookplateHtml(work: Work, cast?: Cast): string {
   }
   rows.push([
     "Voice",
-    `${castSentence(cast)}${castSheetSentence(work.cast)}The speech is made by Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, exactly as printed.`,
+    recording
+      ? `${castSentence(cast)}${castSheetSentence(work.cast)}${recordingSentence(work, recording)}`
+      : `${castSentence(cast)}${castSheetSentence(work.cast)}The speech is made by Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, exactly as printed.`,
   ]);
   rows.push(["Direction", "Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone."]);
   if (work.librivox) {

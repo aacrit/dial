@@ -82,20 +82,25 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("the counts switch: off means no count at all, feedback still goes; each count is named for what it counts", () => {
-    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no work fully made on this device. A feedback message you choose to send still goes, because you sent it.");
+    expect(text).toContain("When it is off, this site sends no counts at all: no page view, no work tuned in and no listen (a work heard for at least four fifths of its length, made on this device or Dial's recording). A feedback message you choose to send still goes, because you sent it.");
     expect(text).not.toMatch(/finished listen/);
+    expect(text).toContain("Once you have heard four fifths of a work, one listen is counted");
+    // One wording on both pages (CoS decision D), paired with HEARD_SHARE = 0.8.
+    expect(text).not.toMatch(/80%/);
     const seal = read("web/seal.html").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-    expect(seal).toContain("Totals per day of page views, works tuned in, and works fully made on this device, and nothing more.");
-    // Paired with the code: the three counts the page sends, and chapter_rendered only once every line is made.
+    expect(seal).toContain("Totals per day of page views, works tuned in, and listens (a work heard for at least four fifths of its length, made on this device or Dial's recording), and nothing more.");
+    // Paired with the code: the three counts the page sends, and chapter_rendered once per listen, when 80% is heard on either path (broadcast-state.ts countsAsListen; tests/recordings.test.ts).
     const sent = new Set<string>();
     for (const f of (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((x) => x.endsWith(".ts"))) {
       for (const m of read(`web/src/${f}`).matchAll(/sendEvent\("([a-z_]+)"\)/g)) sent.add(m[1]!);
     }
     expect([...sent].sort()).toEqual(["chapter_rendered", "page_view", "work_opened"]);
     const main0 = read("web/src/main.ts");
-    const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("ended();\n      } else {"));
-    expect(done).toContain("reportCoreSuccess();");
+    const done = main0.slice(main0.indexOf('} else if (msg.type === "done") {'), main0.indexOf("sched.renderFinished();\n      } else {"));
+    // Not at "all made": only a listen that has heard 80% counts (CoS decision A).
+    expect(done).not.toMatch(/reportCoreSuccess|count\(/);
     expect([...main0.matchAll(/reportCoreSuccess\(\);/g)]).toHaveLength(1);
+    expect(main0).toMatch(/if \(countsAsListen\(own\.heard, own\.strip\.total, own\.counted\)\) \{\s*own\.counted = true;\s*reportCoreSuccess\(\);/);
     // Paired with tests/seal.test.ts, which runs sendEvent with the switch off; the feedback form does not consult it.
     const main = read("web/src/main.ts");
     const feedback = main.slice(main.indexOf("function setupFeedback"));
@@ -146,6 +151,32 @@ describe("web/privacy.html, claim by claim", () => {
     expect(JSON.parse(read("privacy-allowlist.json")).sends).toEqual(["/e", "/feedback"]);
   });
 
+  // T5: Dial's prepared recordings.
+  it("a prepared recording is downloaded from this site as it plays, and kept only if the work is saved", () => {
+    expect(text).toContain("A work with a recording Dial made in advance plays that recording. It is downloaded from this site, a part at a time as you listen, and Dial keeps it in its own storage only if you save the work for offline.");
+    // Downloads only, from this origin: the allowlist names /recordings/, and sends stay the counts and feedback.
+    const allow = JSON.parse(read("privacy-allowlist.json"));
+    expect(allow.downloads).toContain("/recordings/");
+    expect(allow.sends).toEqual(["/e", "/feedback"]);
+    // Playing never stores: the source keeps decoded parts in memory only.
+    const source = read("web/src/recording/source.ts");
+    expect(source).not.toMatch(/caches\.|cache\.put|localStorage|indexedDB/);
+    expect(source).toMatch(/fetch\(`\/recordings\/\$\{slug\}\/\$\{file\}`\)/);
+    // Only Save for offline puts recording files in cache storage, and the offline helper only refreshes what is already there.
+    const store = read("web/src/offline/store.ts");
+    expect(store).toMatch(/export async function saveRecording[\s\S]*await put\(saved, f\.path, new Response\(buf/);
+    expect(read("web/src/sw.ts")).toContain("const had = res.ok ? await cache.match(key) : undefined;");
+  });
+
+  it("nothing is made while a prepared recording plays; one listen is counted once 80% is heard", async () => {
+    expect(text).toContain("Nothing is made on your device while it plays, and the words and the audio are never sent anywhere. Once you have heard four fifths of a work, one listen is counted");
+    const main = read("web/src/main.ts");
+    // No render worker for a prepared recording.
+    expect(main).toContain('const worker = rec ? null : new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" });');
+    const { HEARD_SHARE } = await import("../web/src/broadcast-state");
+    expect(HEARD_SHARE).toBe(0.8);
+  });
+
   it("the shell (about 3 MB) is kept for every visitor, and the model and runtime stay after the last Remove", () => {
     expect(text).toContain("The offline helper also keeps this site's page files (about 3 MB: the pages, scripts, styles, fonts and icons) in cache storage for every visitor");
     expect(text).toContain("The voice model and its runtime stay after the last Remove");
@@ -167,7 +198,7 @@ describe("web/privacy.html, claim by claim", () => {
   });
 
   it("Remove deletes the work's text and any voice no other saved work uses; the model stays", async () => {
-    expect(text).toContain("Remove deletes that work's text and any voice no other saved work uses. The voice model stays, because every work uses it");
+    expect(text).toContain("Remove deletes that work's text, its saved recording, and any voice no other saved work uses. The voice model stays, because every work uses it");
     const { voicesToRemove } = await import("../web/src/offline/plan");
     const saved = new Map([["cave", ["bm_george"]], ["crito", ["bm_george", "bm_fable"]]]);
     expect(voicesToRemove("crito", saved, saved)).toEqual(["bm_fable"]);

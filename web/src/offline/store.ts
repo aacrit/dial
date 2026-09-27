@@ -13,6 +13,11 @@
 //   reads when there is no connection;
 // - the app shell, which the offline helper keeps (web/src/sw.ts).
 //
+// A work with a prepared recording saves that instead of the voice: its
+// parts and timing index (each checked against its pin) and the voice
+// manifest, in the saved cache; its text records no
+// voices ("none"). Remove deletes its text and its recording's files.
+//
 // Each saved text records its work's voices (VOICES_HEADER), as cast when
 // it was saved. Remove deletes the work's text and each of its recorded
 // voices no other saved work records (plan.ts voicesToRemove); if any saved
@@ -21,7 +26,8 @@
 import type { VoiceManifest } from "../voice";
 import { runtimeCacheKey, runtimeCacheName, voiceCacheName, type Held } from "../voice-cache";
 import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "../voice-files";
-import { offlineExtras, parseVoices, savePlan, unionVoices, voicesToRemove, type SavePlan } from "./plan";
+import { NO_VOICES, offlineExtras, recordingKeysOf, parseVoices, recordingFiles, savePlan, unionVoices, voicesToRemove, type PinnedFile, type RecordingPlan, type SavePlan } from "./plan";
+import type { RecordingIndex } from "../recording/timing";
 import { SAVED_CACHE } from "./routes";
 
 
@@ -293,6 +299,78 @@ export async function saveWork(man: Manifest, slug: string, text: string, voices
   count(textBytes);
 }
 
+// ---- A work with a prepared recording ---------------------------------------
+
+/** What saving a prepared recording needs. */
+export interface RecordingSave {
+  slug: string;
+  index: RecordingIndex;
+  /** The index file's size as served, and its pin compiled into this page. */
+  indexBytes: number;
+  indexSha256: string;
+}
+
+async function filesOf(man: Manifest, r: RecordingSave): Promise<PinnedFile[]> {
+  return recordingFiles(r.slug, r.index.parts, { bytes: r.indexBytes, sha256: r.indexSha256 }, { bytes: man.bytes, sha256: await sha256Hex(new TextEncoder().encode(man.text).buffer) });
+}
+
+/** path@pin for every file already read back and found to hash to its pin, this visit. A changed pin is a new key, so it is read again. */
+const verified = new Set<string>();
+
+/** Whether `f` is kept and its kept bytes hash to its pin (read once per path and pin). A copy that does not match is not kept. */
+export async function keptAsPinned(cache: Cache, f: PinnedFile): Promise<boolean> {
+  const hit = await cache.match(f.path);
+  if (!hit) return false;
+  const key = `${f.path}@${f.sha256}`;
+  if (verified.has(key)) return true;
+  const ok = (await sha256Hex(await hit.arrayBuffer())) === f.sha256;
+  if (ok) verified.add(key);
+  return ok;
+}
+
+export async function recordingPlanFor(man: Manifest, r: RecordingSave, textBytes: number): Promise<RecordingPlan> {
+  const saved = await caches.open(SAVED_CACHE);
+  const files = [];
+  for (const f of await filesOf(man, r)) files.push({ ...f, kept: await keptAsPinned(saved, f) });
+  return { kind: "recording", textBytes, textSaved: !!(await saved.match(workKey(r.slug))), files };
+}
+
+/**
+ * Saves a work's prepared recording for offline: the app's own files first,
+ * then every file not kept as pinned (a missing one, or one kept from
+ * another release, is fetched again and checked against its pin), then the
+ * text last, so a cancelled or failed save never leaves a work marked saved.
+ */
+export async function saveRecording(man: Manifest, r: RecordingSave, text: string, signal: AbortSignal, onProgress: (loaded: number) => void): Promise<void> {
+  let loaded = 0;
+  const count = (n: number) => {
+    loaded += n;
+    onProgress(loaded);
+  };
+  if (!(await ensureShell())) throw new Error("ShellError: the app's own files could not be kept");
+  signal.throwIfAborted();
+  const saved = await caches.open(SAVED_CACHE);
+  for (const f of await filesOf(man, r)) {
+    signal.throwIfAborted();
+    if (await keptAsPinned(saved, f)) continue;
+    if (f.path === MANIFEST_KEY) {
+      count(f.bytes);
+      await put(saved, MANIFEST_KEY, new Response(man.text, { headers: { "content-type": "application/json" } }));
+      continue;
+    }
+    const res = await fetch(`/recordings/${f.path.slice("/recordings/".length)}`, { signal });
+    if (!res.ok) throw new Error(`recording file: ${res.status}`);
+    const buf = await readCounted(res, count);
+    if ((await sha256Hex(buf)) !== f.sha256) throw new Error("recording: a file did not match its pin");
+    await put(saved, f.path, new Response(buf, { headers: { "content-type": res.headers.get("content-type") ?? "application/octet-stream" } }));
+    verified.add(`${f.path}@${f.sha256}`);
+  }
+  signal.throwIfAborted();
+  const textBytes = new TextEncoder().encode(text).byteLength;
+  await put(saved, workKey(r.slug), new Response(text, { headers: { "content-type": "text/plain; charset=utf-8", [VOICES_HEADER]: NO_VOICES } }));
+  count(textBytes);
+}
+
 /** Every saved work's recorded voices, by slug; null where a text carries no usable record. */
 export async function savedVoiceRecords(): Promise<Map<string, readonly string[] | null>> {
   const cache = await caches.open(SAVED_CACHE);
@@ -325,7 +403,7 @@ export async function coverVoiceRecord(slug: string, voices: readonly string[]):
 }
 
 /**
- * Removes a saved work: its text, and each of its recorded voices that no
+ * Removes a saved work: its text, its prepared recording's files, and each of its recorded voices that no
  * other saved work records or uses in today's cast (`todayCasts`, for every
  * other saved work whose text this page holds), so never a voice another
  * saved work needs. The voice model and runtime stay: every work, saved or
@@ -335,6 +413,8 @@ export async function removeWork(m: VoiceManifest, slug: string, todayCasts: Rea
   const records = await savedVoiceRecords();
   const cache = await caches.open(SAVED_CACHE);
   await cache.delete(workKey(slug));
+  // Its prepared recording, if it was saved with one; the shared lists stay.
+  for (const key of recordingKeysOf((await cache.keys()).map((r) => new URL(r.url).pathname), slug)) await cache.delete(key);
   const kv = await caches.open(KOKORO_VOICES_CACHE);
   for (const id of voicesToRemove(slug, records, todayCasts)) await kv.delete(hfVoiceKey(m.repo, id));
 }
