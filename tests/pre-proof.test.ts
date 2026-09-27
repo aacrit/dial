@@ -23,7 +23,7 @@ import {
 import { bookplateHtml, directionSentence } from "../web/src/render";
 import { METER_MAKING, METER_WARMING } from "../web/src/status-copy";
 import { retryDelayMs, sendEvent, setCounts, type SendDeps } from "../web/src/telemetry";
-import { partPath, readInto, stitchModel } from "../web/src/voice-files";
+import { cachedPinnedFile, fetchPinnedFile, modelFilePin, partPath, readInto, stitchModel } from "../web/src/voice-files";
 import { MAX_FEEDBACK_TEXT_BYTES } from "../worker/src/config";
 import { handleFeedback, type Env } from "../worker/src/index";
 import { createMockAssets, createMockD1 } from "./helpers/mock-d1";
@@ -260,5 +260,86 @@ describe("the model is stitched in one buffer, not three copies (pre-Proof audit
     const stitch = src.slice(src.indexOf("export async function stitchModel"));
     expect(stitch).toContain("const whole = new Uint8Array(total);");
     expect(stitch).not.toMatch(/buffers\.push|blob\.arrayBuffer\(\)|readCounted/);
+  });
+});
+
+describe("the tokenizer and config are pinned like the model (T11, L4)", () => {
+  const sha = (b: Uint8Array | Buffer) => createHash("sha256").update(b).digest("hex");
+  const repo = "onnx-community/Kokoro-82M-v1.0-ONNX";
+  const key = `/voice/models/${repo}/tokenizer.json`;
+  const good = new TextEncoder().encode('{"model":"kokoro"}');
+  const pins = { files: { [key]: sha(good) } };
+  const serve = (body: Uint8Array) => {
+    const f = vi.fn(async (url: string) => (url === key ? new Response(body) : new Response(null, { status: 404 })));
+    vi.stubGlobal("fetch", f);
+    return f;
+  };
+  /** A one-entry Cache Storage stand-in. */
+  const fakeCache = (body?: Uint8Array) => {
+    let held = body;
+    return {
+      match: vi.fn(async (k: string) => (k === key && held ? new Response(held) : undefined)),
+      delete: vi.fn(async () => {
+        const had = !!held;
+        held = undefined;
+        return had;
+      }),
+      get held() {
+        return held;
+      },
+    };
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("the voice manifest pins tokenizer.json, tokenizer_config.json and config.json by served path, with fetch-voice's own pins", async () => {
+    const { MODEL_FILES, REPO, STAGED_DIRS, modelFilePins } = await import("../scripts/fetch-voice.mjs");
+    const want = modelFilePins();
+    expect(Object.keys(want).sort()).toEqual(["config.json", "tokenizer.json", "tokenizer_config.json"].map((f) => `/voice/models/${REPO}/${f}`));
+    for (const [p, pin] of Object.entries(want)) expect(pin).toBe(MODEL_FILES[p.slice(`/voice/models/${REPO}/`.length)]);
+    const manifest = JSON.parse(readFileSync(path.join(STAGED_DIRS.voice, "manifest.json"), "utf8")) as { files: Record<string, string> };
+    expect(manifest.files).toEqual(want);
+    // The staged bytes are the pinned ones.
+    for (const [p, pin] of Object.entries(manifest.files)) {
+      expect(sha(readFileSync(path.join(STAGED_DIRS.voice, p.slice("/voice/".length)))), p).toBe(pin);
+    }
+  });
+
+  it("on fetch: a file that matches its pin is used, one that does not is refused, and an unpinned one is never fetched", async () => {
+    serve(good);
+    let counted = 0;
+    const buf = await fetchPinnedFile(pins, key, (n) => (counted += n));
+    expect(Buffer.from(buf).equals(Buffer.from(good))).toBe(true);
+    expect(counted).toBe(good.byteLength);
+    serve(new TextEncoder().encode('{"model":"swapped"}'));
+    await expect(fetchPinnedFile(pins, key, () => undefined)).rejects.toThrow(/did not match its pin/);
+    const f = serve(good);
+    await expect(fetchPinnedFile({ files: {} }, key, () => undefined)).rejects.toThrow(/is not pinned/);
+    await expect(fetchPinnedFile({}, key, () => undefined)).rejects.toThrow(/is not pinned/);
+    expect(f).not.toHaveBeenCalled();
+    expect(modelFilePin({ files: { [key]: "x" } }, "/voice/models/other.json")).toBeUndefined();
+  });
+
+  it("on read: a cached copy is used only while it matches its pin, else it is deleted and fetched again", async () => {
+    const ok = fakeCache(good);
+    expect(Buffer.from((await cachedPinnedFile(ok, pins, key))!).equals(Buffer.from(good))).toBe(true);
+    expect(ok.delete).not.toHaveBeenCalled();
+    const bad = fakeCache(new TextEncoder().encode("tampered"));
+    expect(await cachedPinnedFile(bad, pins, key)).toBeUndefined();
+    expect(bad.delete).toHaveBeenCalledWith(key);
+    expect(bad.held).toBeUndefined();
+    const unpinned = fakeCache(good);
+    expect(await cachedPinnedFile(unpinned, { files: {} }, key)).toBeUndefined();
+    expect(unpinned.delete).toHaveBeenCalled();
+    expect(await cachedPinnedFile(fakeCache(), pins, key)).toBeUndefined();
+  });
+
+  it("the loader and Save for offline both go through the pinned helpers, never a bare fetch of a model file", () => {
+    const voice = read("web/src/voice.ts");
+    expect(voice).toContain("const held = await cachedPinnedFile(cache, manifest, key);");
+    expect(voice).toContain("new Response(await fetchPinnedFile(manifest, key, count))");
+    expect(voice).not.toMatch(/fetch\(`\/voice\/models\//);
+    const store = read("web/src/offline/store.ts");
+    expect(store).toContain("await put(cache, p, new Response(await fetchPinnedFile(m, p, count, signal)));");
+    expect(store).not.toMatch(/fetch\(`\/voice\/models\//);
   });
 });

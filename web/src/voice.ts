@@ -12,10 +12,10 @@
 
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
-import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel, unpinnedVoiceKeys } from "./voice-files";
+import { KOKORO_VOICES_CACHE, MODELS, cachedPinnedFile, fetchPinnedFile, hfVoiceKey, modelFilePin, sha256Hex, stitchModel, unpinnedVoiceKeys, type FilePins } from "./voice-files";
 import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
-export interface VoiceManifest extends VoicePins, SizedManifest {
+export interface VoiceManifest extends VoicePins, SizedManifest, FilePins {
   sha256: string;
   /** Every staged voice file (the narrators and the catalogue's cast voices), by id, with its SHA-256 pin. */
   voices: Record<string, string>;
@@ -117,19 +117,21 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
     async match(request: string | Request): Promise<Response | undefined> {
       const key = typeof request === "string" ? request : request.url;
       if (!key.startsWith("/voice/")) return undefined;
-      const hit = await cache.match(key);
-      if (hit) return hit;
       if (key.endsWith(manifest.model)) {
+        const hit = await cache.match(key);
+        if (hit) return hit;
         const stitched = await stitchModel(manifest, count);
         await hold(cache, key, stitched.clone());
         return stitched;
       }
-      // Tokenizer and config: fetched here so their bytes are counted too.
-      if (!key.startsWith(MODELS)) return undefined;
-      const res = await fetch(`/voice/models/${key.slice(MODELS.length)}`);
-      if (!res.ok) return undefined;
-      const buf = await readCounted(res, count);
-      const file = new Response(buf, { headers: res.headers });
+      // Tokenizer and config: checked against their pins (the manifest's
+      // files) on every read from the cache and on fetch, like the voices
+      // (T11). Fetched here so their bytes are counted too. A file the
+      // manifest does not pin is not staged, so there is nothing to serve.
+      if (!key.startsWith(MODELS) || !modelFilePin(manifest, key)) return undefined;
+      const held = await cachedPinnedFile(cache, manifest, key);
+      if (held) return new Response(held);
+      const file = new Response(await fetchPinnedFile(manifest, key, count));
       await hold(cache, key, file.clone());
       return file;
     },

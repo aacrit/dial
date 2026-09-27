@@ -20,7 +20,7 @@ Aggregate counts in D1 (`/e`'s `event_counts`), plus payment-provider orders if 
 - Counts are rate limited per network; large shared networks may undercount; a spike of counts at the daily ceiling is treated as suspect (see "Reading the counts" below: a day whose count equals the ceiling is the signal).
 - 2027-02-28: 0 Studio orders (Polar dashboard) → the Studio is dropped and the Repertory stays free.
 
-Reading the counts: every count is capped by its daily ceiling, and a browser-sent one can be inflated by anyone who posts to `/e`. So the G4 packet shows each count's day-level spikes (days at or near a ceiling, or far above the usual day) next to the totals, and a total carried by a spike is read as suspect, not as progress.
+Reading the counts: every count is capped by its daily ceiling, and a browser-sent one can be inflated by anyone who posts to `/e`. So the G4 packet shows each count's day-level spikes (days at or near a ceiling, or far above the usual day) next to the totals, and a total carried by a spike is read as suspect, not as progress. G4 treats a day where chapter_rendered exceeds work_opened, or where any client event hits its ceiling, as suspect. (Every listen starts with Tune in, which sends `work_opened` once per work per page load, so an honest day has at least as many `work_opened` as `chapter_rendered`. The Worker cannot tell one poster from many: the rate limit slows a single network, it does not stop one from inflating a count; see docs/DECISIONS.md, decision N.)
 
 ## Not in v1
 

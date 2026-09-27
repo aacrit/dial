@@ -62,6 +62,48 @@ export async function readCounted(res: Response, count: (bytes: number) => void)
   return out.buffer;
 }
 
+/** The manifest's pins for the model's other files (tokenizer, config), by served path (scripts/fetch-voice.mjs modelFilePins). */
+export interface FilePins {
+  files: Record<string, string>;
+}
+
+/** A model file's pin by its served path; undefined when the manifest pins none, and then the file is never used. */
+export function modelFilePin(m: Partial<FilePins>, key: string): string | undefined {
+  return m.files && typeof m.files === "object" && Object.hasOwn(m.files, key) ? m.files[key] : undefined;
+}
+
+/**
+ * Fetches one of the model's other files (tokenizer, config) from this
+ * origin, counting bytes as they arrive, and checks it against its pin
+ * before it is used or kept (T11, L4). A file the manifest does not pin is
+ * never fetched.
+ */
+export async function fetchPinnedFile(m: Partial<FilePins>, key: string, count: (bytes: number) => void, signal?: AbortSignal): Promise<ArrayBuffer> {
+  const pin = modelFilePin(m, key);
+  if (!pin || !key.startsWith(MODELS)) throw new Error(`voice: ${key} is not pinned`);
+  const res = await fetch(`/voice/models/${key.slice(MODELS.length)}`, { signal });
+  if (!res.ok) throw new Error(`voice file ${key}: ${res.status}`);
+  const buf = await readCounted(res, count);
+  if ((await sha256Hex(buf)) !== pin) throw new Error("voice: a model file did not match its pin");
+  return buf;
+}
+
+/**
+ * A model file (tokenizer, config) from the cache, only if its bytes still
+ * match their pin; a copy that does not (or one the manifest does not pin)
+ * is deleted, so it is fetched again. Checked on every read, as the voices are.
+ */
+export async function cachedPinnedFile(cache: Pick<Cache, "match" | "delete">, m: Partial<FilePins>, key: string): Promise<ArrayBuffer | undefined> {
+  const hit = await (await cache.match(key))?.arrayBuffer();
+  if (!hit) return undefined;
+  const pin = modelFilePin(m, key);
+  if (!pin || (await sha256Hex(hit)) !== pin) {
+    await cache.delete(key);
+    return undefined;
+  }
+  return hit;
+}
+
 export interface StitchManifest {
   repo: string;
   parts: string[];

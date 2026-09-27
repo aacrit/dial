@@ -53,7 +53,14 @@ See `CHARTER.md` for its surfaces and kill dates, and `contract.yaml` for what
 - **Design:** `design/tokens.css` is the only file that may define a color.
   Ink & Momentum grammar is law; see the plugin's `ink-and-momentum` skill.
 - **Production deploys** only via the plugin's `/release` skill, only from a
-  release/* tag. This repo has no deploy workflow.
+  release/* tag. This repo has no deploy workflow. The production Worker has
+  no preview URLs (`preview_urls: false`); a path no file matches gets the
+  static `web/404.html`, never the Worker.
+- **Previews** (`/ship`) deploy the separate Worker `dial-preview`
+  (`npm run build && npx wrangler deploy --env preview`), served at
+  `https://dial-preview.aacrit.workers.dev` with its own D1 (`dial-preview`)
+  and rate-limit namespaces (7311 to 7313). A preview never touches
+  production's D1 or counters (`tests/hardening.test.ts`).
 
 ## Dial's three laws
 
@@ -100,7 +107,9 @@ edition, the passage performed and the PD basis.
 
 1. No merge to `main` without a green `gate` job (`.github/workflows/gate.yml`).
 2. Every ticket maps to a `CHARTER.md` row (see the plugin's `/ship` skill).
-3. Secrets are never tracked; see `.githooks/pre-commit`.
+3. Secrets are never tracked: the repo's own secret-pattern scan
+   (`scripts/secret-patterns.mjs`, run by `.githooks/pre-commit`, the pre-push
+   hook and `npm run scan-history`), not gitleaks.
 4. Reports go to a gitignored reports directory or the Board page, never the repo root.
 5. `/e` accepts only the event names `contract.yaml` lists under events.allowed.
 

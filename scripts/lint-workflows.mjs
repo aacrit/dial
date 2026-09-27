@@ -27,6 +27,23 @@ export function checkWorkflowText(filename, text) {
   return violations;
 }
 
+/**
+ * Every action a workflow uses is pinned to a full commit SHA, with the
+ * version it is named beside it (T11, L2): a moved tag can never change
+ * what runs. Local actions (./path) need no pin.
+ */
+export function checkPinnedActions(filename, text) {
+  const violations = [];
+  text.split("\n").forEach((line, i) => {
+    const m = /^\s*-?\s*uses:\s*(\S+)(.*)$/.exec(line);
+    if (!m || m[1].startsWith("./")) return;
+    if (!/@[0-9a-f]{40}$/.test(m[1]) || !/^\s+#\s*v\d/.test(m[2])) {
+      violations.push(`${filename}:${i + 1}: action not pinned to a full commit SHA with a "# vX.Y.Z" comment - "${line.trim()}"`);
+    }
+  });
+  return violations;
+}
+
 export function checkGateJobPresent(text) {
   return /^\s*jobs:\s*$/m.test(text) && /^\s{2}gate:\s*$/m.test(text);
 }
@@ -75,6 +92,7 @@ function main() {
   for (const file of workflowFiles) {
     const text = readFileSync(file, "utf8");
     violations.push(...checkWorkflowText(path.relative(repoRoot, file), text));
+    violations.push(...checkPinnedActions(path.relative(repoRoot, file), text));
     if (path.basename(file) === "gate.yml" && checkGateJobPresent(text)) {
       sawGateJob = true;
     }
@@ -101,4 +119,4 @@ function main() {
   console.log(`lint-workflows: ${workflowFiles.length} workflow(s) and test files OK`);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

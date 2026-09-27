@@ -19,6 +19,18 @@ npm run contract -- --url http://localhost:8787   # served-page contract, local
 Against localhost, contract checks marked `requires: deployed` (the rate-limit
 burst) report SKIP; they must PASS against the preview before a release.
 
+## Preview
+
+Previews run on a separate Worker, `dial-preview`, with its own D1 database
+(`dial-preview`) and its own rate-limit namespaces, so unreviewed code never
+writes to production's data. The production Worker has no preview URLs.
+
+```sh
+npx wrangler d1 migrations apply dial-preview --remote --env preview   # when a migration is added
+npm run build && npx wrangler deploy --env preview
+npm run contract -- --url https://dial-preview.aacrit.workers.dev   # every check, bursts included
+```
+
 ## Deploy
 
 There is no deploy workflow in this repo. Production deploys run locally

@@ -66,6 +66,13 @@ describe("each work has its own address, /play/<work>, as a real page", () => {
     const shell = JSON.parse(readFileSync(dist("offline-shell.json"), "utf8")) as string[];
     for (const w of WORKS) expect(shell).toContain(playPath(w.slug));
     expect(shellPaths(["index.html", "play/crito.html"])).toEqual(["/", "/play/crito"]);
+    // The not-found page is served only as a 404 (T11), never kept as a page of the shell.
+    expect(shellPaths(["404.html", "index.html"])).toEqual(["/"]);
+    expect(shell).not.toContain("/404");
+    const notFound = readFileSync(dist("404.html"), "utf8");
+    expect(notFound).toContain('http-equiv="Content-Security-Policy"');
+    expect(notFound).not.toContain("__BUILD__");
+    expect(notFound).not.toMatch(/<script/i);
     const origin = "https://dial.voidvision.org";
     expect(swRoute(new URL("/play/crito", origin), "GET", origin)).toBe("page");
     expect(swRoute(new URL("/play/crito", origin), "GET", origin, "navigate")).toBe("page");
@@ -98,8 +105,9 @@ describe("each work has its own address, /play/<work>, as a real page", () => {
     expect(main).toMatch(/addEventListener\("popstate", \(\) => \{[\s\S]*?setRoom\(r\.room, "none"\);/);
     // Nothing navigates the page itself: no location assignment, so the audio never stops.
     expect(main).not.toMatch(/location\.(href|pathname)\s*=|location\.assign|location\.replace/);
-    // not_found_handling stays "none" (the pages are real files).
-    expect(read("wrangler.jsonc")).toContain('"not_found_handling": "none"');
+    // The pages are real files; only a path no file matches gets the 404 page (T11).
+    expect(read("wrangler.jsonc")).toContain('"not_found_handling": "404-page"');
+    expect(read("wrangler.jsonc")).not.toMatch(/"not_found_handling": "single-page-application"/);
   });
 });
 
