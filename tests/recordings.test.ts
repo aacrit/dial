@@ -484,6 +484,7 @@ describe("the words after the handover are true", () => {
     const from = renderedLine("The Cave", 118, 1143, true, 30);
     expect(from).toBe("Made on this device from line 31: the last 88 lines of The Cave. The words and the audio never left this device.");
     expect(from).not.toMatch(/all 118/);
+    expect(renderedLine("The Cave", 118, 1143, true, 117)).toContain("from line 118: the last line of The Cave.");
     const main = read("web/src/main.ts");
     // Every place the page says it, it passes how the work was made.
     expect(main.match(/renderedLine\(/g)).toHaveLength(3);
