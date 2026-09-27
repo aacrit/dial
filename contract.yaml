@@ -125,9 +125,9 @@ checks:
     path: /voice/voices/am_fenrir.bin
     expect: 200
 
-  - name: the voice bm_fable is served
+  - name: the voice am_puck is served
     type: status
-    path: /voice/voices/bm_fable.bin
+    path: /voice/voices/am_puck.bin
     expect: 200
 
   - name: the voice's first model part is served

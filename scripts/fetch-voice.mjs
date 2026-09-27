@@ -47,7 +47,7 @@ export const VOICES = {
   am_michael: "1d1f21dd8da39c30705cd4c75d039d265e9bc4a2a93ed09bc9e1b1225eb95ba1",
   af_heart: "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b",
   am_fenrir: "c27989f741f7ee34d273a39d8a595cc0837d35f5ced9a29b7cc162614616df43",
-  bm_fable: "f889083196807b4adb15e9204252165f503b8d33d3982e681c52443c49d798f1",
+  am_puck: "fcf73c989033e9233e0b98713eca600c8c74dcc1614b37009d5450ff4a2274a0",
 };
 // onnxruntime-web's runtime, pinned like the model: a changed byte fails the
 // build. The .wasm's pin also goes into manifest.json (runtimeSha256), where
@@ -156,7 +156,7 @@ export async function stage({ ortPins = ORT_FILES } = {}) {
   // so its "about N MB" and its meter are computed, never guessed. A first
   // visit downloads the model, tokenizer and config, the runtime's .wasm and
   // .mjs, and the voices that work's cast uses (the Cave and the Meditations:
-  // Michael; Crito: Fenrir and Fable); a later work adds only its new voices.
+  // Michael; Crito: Fenrir and Puck); a later work adds only its new voices.
   const sizes = stagedSizes();
   const totalBytes = Object.values(sizes).reduce((a, b) => a + b, 0);
   writeFileSync(

@@ -44,7 +44,7 @@ export function metaHtml(work: Work, words?: number, cast?: Pick<Cast, "voices">
 
 /**
  * The Voice row's first sentence, from the cast: "Socrates: Fenrir. Crito:
- * Fable." for a work whose speakers are labelled, "One voice, Michael, reads
+ * Puck." for a work whose speakers are labelled, "One voice, Michael, reads
  * every part." for one without labels. Nothing until the text is read.
  */
 export function castSentence(cast?: Pick<Cast, "narrator" | "parts" | "narrated">): string {
@@ -53,16 +53,17 @@ export function castSentence(cast?: Pick<Cast, "narrator" | "parts" | "narrated"
   if (cast.parts.length === 0) return `One voice, ${narrator}, reads every part. `;
   const lines = cast.parts.map((p) => `${esc(speakerName(p.speaker))}: ${VOICE_NAMES[p.voice]}.`);
   if (cast.narrated) lines.unshift(`The narration: ${narrator}.`);
-  return `${lines.join(" ")} Voices are cast from their measured quality and contrast, never from the speakers' names. `;
+  return `${lines.join(" ")} Voices are cast in one accent, by their measured quality and contrast, never from the speakers' names. `;
 }
 
 const SEX_WORDS = { m: "male", f: "female" } as const;
+const ACCENT_WORDS = { us: "American", uk: "British" } as const;
 
 /** The curator's cast sheet, as the Bookplate shows it: "... asks only for voice sex: narrator male; Socrates male; Crito male." */
 export function castSheetSentence(sheet?: CastSheet): string {
   if (!sheet) return "";
-  const asks = [`narrator ${SEX_WORDS[sheet.narrator]}`, ...Object.entries(sheet.speakers ?? {}).map(([speaker, sex]) => `${esc(speakerName(speaker))} ${SEX_WORDS[sex]}`)];
-  return `The curator's cast sheet, from the edition's list of persons, asks only for voice sex: ${asks.join("; ")}. `;
+  const asks = [...(sheet.accent ? [`accent ${ACCENT_WORDS[sheet.accent]}`] : []), `narrator ${SEX_WORDS[sheet.narrator]}`, ...Object.entries(sheet.speakers ?? {}).map(([speaker, sex]) => `${esc(speakerName(speaker))} ${SEX_WORDS[sex]}`)];
+  return `The curator's cast sheet, from the edition's list of persons, asks only for voice sex${sheet.accent ? " and accent" : ""}: ${asks.join("; ")}. `;
 }
 
 /** The Bookplate: station, source, public-domain basis, voice, direction, and a human reading where one is known. */

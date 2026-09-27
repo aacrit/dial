@@ -12,29 +12,44 @@
 // text always gets the same cast, and a renamed speaker in the same place
 // gets the same voice. The one outside input is a Repertory work's cast
 // sheet, which the curator writes from the edition's list of persons and
-// which declares only voice sex; the engine honours it and never parses
-// names. Voices are never sped up or slowed down: pace is chosen here, by
-// which voice is cast, and nowhere else. Pure and deterministic, integer
-// maths only once the table is read.
+// which declares only voice sex (and, optionally, the work's accent family);
+// the engine honours it and never parses names. Voices are never sped up or
+// slowed down: pace is chosen here, by which voice is cast, and nowhere
+// else. Pure and deterministic, integer maths only once the table is read.
 //
 // The algorithm (castVoices):
-// 1. The pool: every English voice in the table except the two narrators,
-//    graded C- or better (hexgrad's grade), whose natural pace as played is
-//    150 to 215 wpm, and of the sex the sheet declares for the speaker. D+
-//    voices join only when a declared sex would otherwise have none.
-// 2. Speakers are ranked by word share (ties: first appearance). Each takes
+// 1. One accent per work (founder, 2026-09-27): every character voice shares
+//    the accent family of the sheet's `accent`, else the narrator's (both
+//    narrators are US). A mixed-accent cast sounds like a mixed production,
+//    not like one company performing one text.
+// 2. The pool: every English voice in the table except the two narrators,
+//    graded C or better (hexgrad's grade), whose natural pace as played is
+//    150 to 215 wpm, of the work's accent and of the sex the sheet declares
+//    for the speaker. If that accent has no such voice, the other accent is
+//    used for that speaker only, and the reason records it. D+ voices join
+//    only when a declared sex has no voice at C or better in either accent.
+// 3. Speakers are ranked by word share (ties: first appearance). Each takes
 //    the unused pool voice with the highest score:
-//      quality(grade) x share
-//      + sum over speakers already cast: alternation x contrast(voice, theirs)
-//      + contrast(voice, narrator) x NARRATOR_WEIGHT.
-//    alternation counts direct turn exchanges between two speakers;
-//    contrast is a per-mille distance over accent, pitch, timbre and pace.
-// 3. The pair that alternates most must differ by MIN_F0_CENTS of pitch or
-//    by accent; if no voice can, the best is taken and the reason says so.
-// 4. When the fitting voices run out, a speaker shares a voice with speakers
+//      quality(grade) x share                                 (0 to 12000)
+//      + sum over speakers already cast:
+//          alternation x contrast(voice, theirs) / 1000        (0 to 1000)
+//      + contrast(voice, narrator) x NARRATOR_WEIGHT / 1000    (0 to 250)
+//    share is the speaker's words per mille of all spoken words; alternation
+//    is the pair's direct turn exchanges per mille of all exchanges in the
+//    work; contrast is a per-mille distance over pitch, brightness and pace.
+// 4. The pair that alternates most must differ by MIN_F0_CENTS of pitch or
+//    MIN_CENTROID_HZ of brightness; if no voice can, the best is taken and
+//    the reason says so.
+// 5. When the fitting voices run out, a speaker shares a voice with speakers
 //    it never directly alternates with (greedy colouring of the alternation
 //    graph, in rank order). Minor parts (under 2% of the words) are the
 //    expected sharers. Sharing never reaches below the grade filter.
+
+/**
+ * The casting rules' version. Bump it whenever a change here can change
+ * any work's voices: offline copies of a rendered work are keyed to it.
+ */
+export const CAST_ENGINE_VERSION = "2";
 
 import { voices as MEASURED } from "../../../design/voices.json";
 import type { Cue } from "./segment";
@@ -111,8 +126,8 @@ export const VOICE_NAMES: Readonly<Record<string, string>> = Object.fromEntries(
 
 /** hexgrad's grades, worst to best; quality(grade) is the index. */
 export const GRADES = ["F", "F+", "D-", "D", "D+", "C-", "C", "C+", "B-", "B", "B+", "A-", "A", "A+"] as const;
-/** The lowest grade a character is cast from: the C band. hexgrad's D voices glitch on long sentences. */
-export const MIN_GRADE = "C-";
+/** The lowest grade a character is cast from (founder, 2026-09-27: C- is out). hexgrad's lower grades glitch on long sentences. */
+export const MIN_GRADE = "C";
 /** The fallback grade, used only when a declared sex has no voice at MIN_GRADE or better. */
 export const FALLBACK_GRADE = "D+";
 /**
@@ -125,26 +140,33 @@ export const PACE_BAND = [1500, 2150] as const;
 export const MINOR_PERMILLE = 20;
 
 /**
- * contrast() weights, out of CONTRAST_WEIGHT_SUM. Pitch leads: it is the cue
- * listeners use most to tell two voices apart in quick exchange. Accent is
- * categorical and heard at once, so it is next. Timbre (spectral centroid)
- * separates voices of the same pitch less reliably. Pace counts least: the
+ * contrast() weights, out of CONTRAST_WEIGHT_SUM. Accent is not a dimension:
+ * a work has one accent. Pitch leads: it is the cue listeners use most to
+ * tell two voices apart in quick exchange. Brightness (spectral centroid)
+ * separates voices of the same pitch, less reliably. Pace counts least: the
  * band already keeps it narrow, and a pace jump between alternating
  * speakers reads as unevenness more than as character.
  */
-export const CONTRAST_WEIGHTS = { f0: 4, accent: 3, centroid: 2, pace: 1 } as const;
-const CONTRAST_WEIGHT_SUM = CONTRAST_WEIGHTS.f0 + CONTRAST_WEIGHTS.accent + CONTRAST_WEIGHTS.centroid + CONTRAST_WEIGHTS.pace;
+export const CONTRAST_WEIGHTS = { f0: 5, centroid: 3, pace: 2 } as const;
+const CONTRAST_WEIGHT_SUM = CONTRAST_WEIGHTS.f0 + CONTRAST_WEIGHTS.centroid + CONTRAST_WEIGHTS.pace;
 /** Each difference is saturated at a span: past an octave of pitch, 800 Hz of centroid or 40 wpm, voices are simply different. */
 export const CONTRAST_SPANS = { f0Cents: 1200, centroidHz: 800, wpm10: 400 } as const;
 /**
- * The weight of a voice's contrast with the narrator, in the same units as
- * one turn exchange: characters should not sound like the house narrator,
- * whom the listener hears across the whole catalogue, but in a narrated work
- * the exchanges with other speakers matter more.
+ * The weights balance quality against contrast. quality x share moves by
+ * `share` points per grade step; the contrast term is at most 1000, reached
+ * only by a pair that makes every exchange in the work at full contrast.
+ * In Crito (Crito's share 209 per mille) a C+ voice leads a D voice by
+ * 4 x 209 = 836 points, so the D voice wins only if it is more than 836
+ * per mille further from Socrates than the C+ voice: quality decides unless
+ * the better voice's contrast is very poor. The narrator's contrast counts
+ * a quarter as much (NARRATOR_WEIGHT per mille): characters should not
+ * sound like the house narrator, but other speakers matter more.
  */
-export const NARRATOR_WEIGHT = 1;
-/** The most-alternating pair must differ by at least this much pitch (two semitones) or by accent. */
+export const NARRATOR_WEIGHT = 250;
+/** The most-alternating pair must differ by at least this much pitch (two semitones)... */
 export const MIN_F0_CENTS = 200;
+/** ...or by at least this much brightness. */
+export const MIN_CENTROID_HZ = 300;
 
 const gradeOf = (g: string) => GRADES.indexOf(g as (typeof GRADES)[number]);
 
@@ -152,7 +174,6 @@ const gradeOf = (g: string) => GRADES.indexOf(g as (typeof GRADES)[number]);
 export function contrast(a: Voice<string>, b: Voice<string>): number {
   const part = (d: number, span: number) => Math.floor((Math.min(Math.abs(d), span) * 1000) / span);
   const sum =
-    CONTRAST_WEIGHTS.accent * (a.accent === b.accent ? 0 : 1000) +
     CONTRAST_WEIGHTS.f0 * part(a.f0Cents - b.f0Cents, CONTRAST_SPANS.f0Cents) +
     CONTRAST_WEIGHTS.centroid * part(a.centroidHz - b.centroidHz, CONTRAST_SPANS.centroidHz) +
     CONTRAST_WEIGHTS.pace * part(a.wpm10 - b.wpm10, CONTRAST_SPANS.wpm10);
@@ -161,7 +182,7 @@ export function contrast(a: Voice<string>, b: Voice<string>): number {
 
 /** Whether two voices are far enough apart for the most-alternating pair. */
 export function distinct(a: Voice<string>, b: Voice<string>): boolean {
-  return a.accent !== b.accent || Math.abs(a.f0Cents - b.f0Cents) >= MIN_F0_CENTS;
+  return Math.abs(a.f0Cents - b.f0Cents) >= MIN_F0_CENTS || Math.abs(a.centroidHz - b.centroidHz) >= MIN_CENTROID_HZ;
 }
 
 const inPace = (v: Voice<string>) => v.wpm10 >= PACE_BAND[0] && v.wpm10 <= PACE_BAND[1];
@@ -172,8 +193,13 @@ const inPace = (v: Voice<string>) => v.wpm10 >= PACE_BAND[0] && v.wpm10 <= PACE_
  */
 export interface CastSheet {
   narrator: VoiceSex;
+  /** The work's accent family; the narrator's when absent. */
+  accent?: Accent;
   speakers?: Readonly<Record<string, VoiceSex>>;
 }
+
+/** Kokoro's two English accent families. */
+export type Accent = "us" | "uk";
 
 /** A speaker as the engine found it: the label, and how many words the speaker speaks. */
 export interface SpeakerStats {
@@ -188,15 +214,19 @@ export interface CastReason {
   /** The speaker's share of all spoken words, per mille. */
   share: number;
   qualityPart: number;
-  /** Sum over speakers already cast of alternation x contrast. */
+  /** Sum over speakers already cast of alternation (per mille of exchanges) x contrast / 1000. */
   contrastPart: number;
+  /** The voice's accent family. */
+  accent: string;
+  /** Set when the work's accent had no fitting voice for this speaker, so the other accent was used. */
+  accentFallback?: true;
   narratorPart: number;
   score: number;
   /** Under MINOR_PERMILLE of the words. */
   minor: boolean;
   /** Speakers cast earlier who hold the same voice (sharing, rule 4). */
   sharedWith: string[];
-  /** Set on the later member of the most-alternating pair: whether MIN_F0_CENTS or accent separates them. */
+  /** Set on the later member of the most-alternating pair: whether MIN_F0_CENTS or MIN_CENTROID_HZ separates them. */
   contrastRule?: "met" | "unmet";
   /** Set when no fitting voice was free of speakers this one alternates with. */
   clash?: boolean;
@@ -245,19 +275,30 @@ export function castVoices<Id extends string>(
   turns: readonly string[] = [],
 ): Map<string, Casting<Id>> {
   const narrator = TABLE.find((v) => v.id === narratorVoice(sheet))!;
+  const accent = sheet?.accent ?? narrator.accent;
   const declared = sheet?.speakers ?? {};
   const candidates = palette.filter((v) => !NARRATOR_IDS.includes(v.id) && inPace(v));
   const graded = (min: string) => candidates.filter((v) => gradeOf(v.grade) >= gradeOf(min));
   const main = graded(MIN_GRADE);
   const fallback = graded(FALLBACK_GRADE);
-  const poolFor = (sex: VoiceSex | undefined) => {
-    if (sex === undefined) return main;
-    const own = main.filter((v) => v.sex === sex);
-    return own.length > 0 ? own : fallback.filter((v) => v.sex === sex);
+  /** The speaker's pool: the work's accent first, then the other accent, then (declared sex only) D+ in the same order. */
+  const poolFor = (sex: VoiceSex | undefined): { pool: Voice<Id>[]; accentFallback: boolean } => {
+    const tiers = sex === undefined ? [main] : [main, fallback];
+    for (const tier of tiers) {
+      const fit = tier.filter((v) => sex === undefined || v.sex === sex);
+      const own = fit.filter((v) => v.accent === accent);
+      if (own.length > 0) return { pool: own, accentFallback: false };
+      if (fit.length > 0) return { pool: fit, accentFallback: true };
+    }
+    return { pool: [], accentFallback: false };
   };
 
   const alt = alternations(turns);
-  const altOf = (a: string, b: string) => alt.get(pairKey(a, b)) ?? 0;
+  const exchanges = [...alt.values()].reduce((a, b) => a + b, 0);
+  const altOf = (a: string, b: string) => {
+    const n = alt.get(pairKey(a, b)) ?? 0;
+    return exchanges === 0 ? 0 : Math.floor((n * 1000) / exchanges);
+  };
   const total = speakers.reduce((n, s) => n + s.words, 0);
   const shareOf = (s: SpeakerStats) => (total === 0 ? 0 : Math.floor((s.words * 1000) / total));
 
@@ -281,7 +322,7 @@ export function castVoices<Id extends string>(
   const holders = new Map<Id, string[]>();
   for (const s of ranked) {
     const sex = Object.hasOwn(declared, s.speaker) ? declared[s.speaker] : undefined;
-    const pool = poolFor(sex);
+    const { pool, accentFallback } = poolFor(sex);
     if (pool.length === 0) throw new Error(`cast: no character voice in the palette for ${s.speaker}${sex ? ` (declared ${sex})` : ""}`);
     const share = shareOf(s);
 
@@ -290,11 +331,11 @@ export function castVoices<Id extends string>(
       let contrastPart = 0;
       for (const [other, c] of out) {
         const n = altOf(s.speaker, other);
-        if (n > 0) contrastPart += n * contrast(v, palette.find((p) => p.id === c.voice)!);
+        if (n > 0) contrastPart += Math.floor((n * contrast(v, palette.find((p) => p.id === c.voice)!)) / 1000);
       }
-      const narratorPart = contrast(v, narrator) * NARRATOR_WEIGHT;
+      const narratorPart = Math.floor((contrast(v, narrator) * NARRATOR_WEIGHT) / 1000);
       const qualityPart = quality * share;
-      return { quality, share, qualityPart, contrastPart, narratorPart, score: qualityPart + contrastPart + narratorPart, minor: share < MINOR_PERMILLE, sharedWith: [] };
+      return { quality, share, qualityPart, contrastPart, narratorPart, score: qualityPart + contrastPart + narratorPart, accent: v.accent, minor: share < MINOR_PERMILLE, sharedWith: [] };
     };
 
     const free = pool.filter((v) => !holders.has(v.id));
@@ -322,6 +363,7 @@ export function castVoices<Id extends string>(
       }
     }
     const reason: CastReason = { ...bestReason!, sharedWith: [...(holders.get(best!.id) ?? [])] };
+    if (accentFallback) reason.accentFallback = true;
     if (contrastRule) reason.contrastRule = contrastRule;
     if (clash) reason.clash = true;
     out.set(s.speaker, { voice: best!.id, reason });

@@ -120,21 +120,21 @@ describe("casting without content", () => {
     expect(["am_michael", "af_heart", "am_fenrir", "bm_fable", "bm_george"].map((v) => VOICE_NAMES[v])).toEqual(["Michael", "Heart", "Fenrir", "Fable", "George"]);
   });
 
-  it("Crito: the sheet asks for a male narrator; Socrates is Fenrir, Crito is Fable, neither a narrator voice", () => {
+  it("Crito: the sheet asks for a male narrator; Socrates is Fenrir, Crito is Puck, neither a narrator voice", () => {
     expect(sheet).toEqual({ narrator: "m", speakers: { SOCRATES: "m", CRITO: "m" } });
     const c = cast(cues, sheet);
     expect(c.narrator).toBe("am_michael");
     expect(c.parts.map((p) => [p.speaker, p.voice])).toEqual([
       ["SOCRATES", "am_fenrir"],
-      ["CRITO", "bm_fable"],
+      ["CRITO", "am_puck"],
     ]);
     expect(c.narrated).toBe(false);
     expect(c.voices.length).toBe(cues.length);
     // The first two turns are in different voices.
     const second = cues.findIndex((q) => q.speaker === "CRITO");
     expect(c.voices[0]).toBe("am_fenrir");
-    expect(c.voices[second]).toBe("bm_fable");
-    cues.forEach((q, i) => expect(c.voices[i]).toBe(q.speaker === "SOCRATES" ? "am_fenrir" : "bm_fable"));
+    expect(c.voices[second]).toBe("am_puck");
+    cues.forEach((q, i) => expect(c.voices[i]).toBe(q.speaker === "SOCRATES" ? "am_fenrir" : "am_puck"));
     expect(c.voices).not.toContain("am_michael");
     expect(voiceCount(c)).toBe(2);
   });
@@ -205,7 +205,7 @@ describe("the page tells the truth about the cast", () => {
 
   it("Crito's Bookplate states the cast, and no longer promises voices to come", () => {
     const html = bookplateHtml(WORKS[1]!, casts.crito);
-    expect(html).toContain("Socrates: Fenrir. Crito: Fable.");
+    expect(html).toContain("Socrates: Fenrir. Crito: Puck.");
     expect(html).toContain("The speech is made by Kokoro-82M");
     expect(html).not.toMatch(/read aloud|until each part/);
   });
@@ -303,7 +303,8 @@ describe("castVoices and the curator's cast sheet", () => {
     // No sheet ever carries anything but voice sex.
     for (const w of WORKS) {
       if (!w.cast) continue;
-      expect(Object.keys(w.cast).sort()).toEqual(["narrator", "speakers"]);
+      for (const k of Object.keys(w.cast)) expect(["accent", "narrator", "speakers"]).toContain(k);
+      if (w.cast.accent) expect(["us", "uk"]).toContain(w.cast.accent);
       for (const v of [w.cast.narrator, ...Object.values(w.cast.speakers ?? {})]) expect(["m", "f"]).toContain(v);
     }
     expect(WORKS[0]!.cast).toBeUndefined();
@@ -322,6 +323,8 @@ describe("castVoices and the curator's cast sheet", () => {
     const withSheet = bookplateHtml(WORKS[1]!, cast(cues, WORKS[1]!.cast));
     expect(withSheet).toContain("The curator's cast sheet, from the edition's list of persons, asks only for voice sex: narrator male; Socrates male; Crito male.");
     expect(bookplateHtml(WORKS[0]!)).not.toContain("cast sheet");
+    const uk = bookplateHtml({ ...WORKS[1]!, cast: { ...WORKS[1]!.cast!, accent: "uk" } }, cast(cues, { ...WORKS[1]!.cast!, accent: "uk" }));
+    expect(uk).toContain("asks only for voice sex and accent: accent British; narrator male; Socrates male; Crito male.");
   });
 });
 
@@ -416,9 +419,9 @@ describe("T2b review: the size shown is what actually downloads", () => {
   it("a cache holding everything except Crito's new voices: only those voices are counted and named", () => {
     const m = manifest();
     const crito = [...new Set(cast(cues, WORKS[1]!.cast).voices)];
-    expect(crito).toEqual(["am_fenrir", "bm_fable"]);
+    expect(crito).toEqual(["am_fenrir", "am_puck"]);
     const got = neededBytes(m, crito, everything(m, ["am_michael"]));
-    expect(got).toEqual({ bytes: voiceSize(m, "am_fenrir") + voiceSize(m, "bm_fable"), need: "voices", missingVoices: 2 });
+    expect(got).toEqual({ bytes: voiceSize(m, "am_fenrir") + voiceSize(m, "am_puck"), need: "voices", missingVoices: 2 });
     expect(warmingLine(got.bytes, got.need, "Crito", got.missingVoices)).toBe("Adding the voices for Crito (about 1 MB) to this device.");
     expect(warmingLine(voiceSize(m, "am_michael"), "voices", "the Cave", 1)).toBe("Adding the voice for the Cave (about 1 MB) to this device.");
   });
