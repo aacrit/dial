@@ -1113,6 +1113,21 @@ progress::-moz-progress-bar {
   fill: var(--color-glass-ink-muted);
 }
 
+/* The speed gauge on the radio's glass (T7): the dial, the measured speed, the engine. */
+.gauge-inst {
+  gap: 1px;
+  min-width: 64px;
+}
+
+.gauge-inst .gauge {
+  width: 64px;
+  height: 34px;
+}
+
+.gauge-inst .gv {
+  color: var(--color-glass-ink);
+}
+
 /* ---- Cards, forms, the privacy page ------------------------------------- */
 
 .page {
@@ -2550,6 +2565,16 @@ body.faceplate-page {
 
   .inst {
     min-width: 32px;
+  }
+
+  /* The gauge keeps its figure: the one label that is a measurement. */
+  .gauge-inst .gauge {
+    width: 48px;
+    height: 26px;
+  }
+
+  .gauge-inst .gv {
+    display: block;
   }
 
   .readalong {

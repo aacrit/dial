@@ -13,6 +13,7 @@
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
 import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, pinnedModelCache, preparePinnedFiles, sha256Hex, stitchModel, unpinnedVoiceKeys, type FilePins } from "./voice-files";
+import type { Backend } from "./speed/backend";
 import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
 export interface VoiceManifest extends VoicePins, SizedManifest, FilePins {
@@ -139,6 +140,8 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
     }
     wasm.wasmBinary = binary;
   }
+  const gpuFlags = env.backends.onnx.webgpu as { powerPreference?: string } | undefined;
+  if (gpuFlags) gpuFlags.powerPreference = "high-performance";
 
   for (const id of cast) {
     const pin = manifest.voices[id]!;
@@ -158,9 +161,19 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
     if (!(await voices.match(voiceKey(id)))) throw new Error("QuotaExceededError: there is no room to keep the voice on this device");
   }
 
-  const tts = await KokoroTTS.from_pretrained(manifest.repo, { dtype: "q8", device: "wasm" });
+  const tts = await openVoice(manifest, "wasm");
   // The runtime's .mjs is imported by the runtime itself while the model
   // loads; once the voice is ready, every byte in the total is in place.
   onProgress(total, total, need, missingVoices);
   return { tts, manifest, kept };
+}
+
+/**
+ * The same pinned model on one of this device's engines (speed/backend.ts):
+ * the processor, or the graphics chip through the same runtime. Called after
+ * loadVoice, so every file comes from this tab's checked cache; the graphics
+ * chip downloads nothing more.
+ */
+export function openVoice(manifest: Pick<VoiceManifest, "repo">, backend: Backend): Promise<KokoroTTS> {
+  return KokoroTTS.from_pretrained(manifest.repo, { dtype: backend === "webgpu" ? "fp32" : "q8", device: backend });
 }

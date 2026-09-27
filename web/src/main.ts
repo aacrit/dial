@@ -24,18 +24,16 @@ import { SCRUB_REST, estimateLine, lineStep, nearestLineStart, runningTime, scru
 import { bookplateHeading, bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml, readLines, ribbonSvg, scriptHtml, shortcutsHtml } from "./render";
 import { pageTitle, parseRoute, playPath } from "./route";
 import {
-  CAST_FAILED,
   METER_MAKING,
   METER_WARMING,
-  PLAYS_AT_ONCE,
   RECORDING_UNPLAYABLE,
+  availLine,
   makeItHere,
   STATIONS_SERVER,
   clock,
   firstLineLine,
   lineNotMadeYet,
   loadingNote,
-  madeHere,
   notMadeYet,
   onAirLine,
   pausedLine,
@@ -63,6 +61,9 @@ import { noteSend, noteSendFailed, recordEntries, recordRequests } from "./reque
 import { sendEvent } from "./telemetry";
 import { centreWithin, inViewWithin, mountPanels } from "./panels-ui";
 import { mountSealWidget } from "./seal-widget";
+import { mountGauge } from "./speed/gauge";
+import { Pacer } from "./speed/pacer";
+import { keepSpeed, readSpeed } from "./speed/store";
 
 /**
  * Call this exactly where the product's core action completes (the export
@@ -118,6 +119,8 @@ interface Session {
   analyser: AnalyserNode;
   /** The render worker; none for a prepared recording. */
   worker: Worker | null;
+  /** Made on this device: the no-stall plan, the countdown and the speed gauge (speed/pacer.ts); none for a prepared recording. */
+  pacer: Pacer | null;
   /** The frame loop's pending frame; 0 while it sleeps (paused, nothing moves). */
   frame: number;
   /** Restarts the frame loop if it sleeps: on resume, and after a seek. */
@@ -194,6 +197,21 @@ function setupRadio(): void {
   const canvas = device.querySelector<HTMLCanvasElement>("canvas.dw-wave");
   if (!ribbonBox || !ribbon || !timeEl || !timeTotal || !scrubNote || !linePrev || !lineNext || !back10 || !fwd10) return;
   if (!scriptBox || !scriptNoteEl || !scriptPanel || !bpNote || !shortcutList || !canvas) return;
+  // The speed gauge on the glass, and the choice past a two-minute wait (T7).
+  const gaugeSlot = $("speed-gauge");
+  const speedAsk = $("speed-ask");
+  const speedQ = $("speed-q");
+  const speedRec = $<HTMLButtonElement>("speed-rec");
+  const speedAnyway = $<HTMLButtonElement>("speed-anyway");
+  if (!gaugeSlot || !speedAsk || !speedQ || !speedRec || !speedAnyway) return;
+  const gauge = mountGauge(gaugeSlot);
+  const hideSpeedAsk = () => {
+    if (speedAsk.hidden) return;
+    rescueFocus(speedRec, speedAnyway);
+    speedAsk.hidden = true;
+  };
+  speedRec.addEventListener("click", () => session?.pacer?.playRecording());
+  speedAnyway.addEventListener("click", () => session?.pacer?.startAnyway());
   const ribbonSegs = ribbon.querySelector("g.segs")!;
   const ribbonNeedle = ribbon.querySelector("line.needle")!;
   const ribbonHead = ribbon.querySelector("line.renderhead")!;
@@ -265,11 +283,13 @@ function setupRadio(): void {
     const w = WORKS[radio.tuned()]!;
     const text = texts.get(w.slug);
     const hasRecording = !!text?.cast && prepared.has(w.slug);
+    const makingHere = !!session?.live && session.work === w && session.kind === "made";
     // Offline, a work whose text is not on this device cannot play, and says so.
     if (!text && offline?.isOffline()) avail.textContent = WORK_NOT_ON_DEVICE;
-    else avail.textContent = text && !text.cast ? CAST_FAILED : hasRecording ? PLAYS_AT_ONCE : madeHere(voiceKept);
+    // The line describes the path in use: a work being made here never reads "Plays at once".
+    else avail.textContent = availLine({ castFailed: !!text && !text.cast, hasRecording, makingHere, voiceKept });
     // Making it here stays a small secondary link, and only where the recording plays at once.
-    const hideMake = !hasRecording || (!!session?.live && session.work === w && session.kind === "made");
+    const hideMake = !hasRecording || makingHere;
     if (hideMake) rescueFocus(makeHere);
     makeHere.hidden = hideMake;
     makeHere.textContent = makeItHere(voiceKept);
@@ -309,6 +329,12 @@ function setupRadio(): void {
     const s = session;
     if (!s?.live || !s.ready) {
       progress.textContent = "";
+      return;
+    }
+    // While a work made here waits to start (the countdown, a hold), the line counts down instead.
+    const waiting = s.pacer?.progressLine();
+    if (waiting) {
+      progress.textContent = waiting;
       return;
     }
     progress.textContent = progressLine({
@@ -414,7 +440,10 @@ function setupRadio(): void {
       void s.audio.close();
       s.wav = null;
       s.file = null;
+      s.pacer?.dispose();
     }
+    hideSpeedAsk();
+    paintAvail();
     air.analyser = null;
     air.playing = false;
     air.silent = false;
@@ -442,6 +471,8 @@ function setupRadio(): void {
   pause.addEventListener("click", () => {
     const s = session;
     if (!s?.live) return;
+    // While a work made here waits to start, Pause only decides whether it starts by itself (speed/pacer.ts).
+    if (s.pacer?.pausePressed()) return;
     const settle = () => {
       setLamp(); // repaints Tune in too: "Paused" once nothing is live
       setPlaybackState(s.audio.state === "running" ? "playing" : "paused");
@@ -674,6 +705,7 @@ function setupRadio(): void {
       gain,
       analyser,
       worker,
+      pacer: null,
       frame: 0,
       wake: () => undefined,
       feeder: 0,
@@ -694,6 +726,41 @@ function setupRadio(): void {
     session = own;
     measureStrip(own);
     const lines = readLines(cues);
+    // Made here: playback waits until it will never catch the making (speed/pacer.ts, T7).
+    if (worker) {
+      const mine = () => session === own && own.live;
+      own.pacer = new Pacer({
+        cues,
+        sched,
+        audio,
+        gauge,
+        hasRecording: () => prepared.has(work.slug),
+        playRecording: () => {
+          if (!mine() || !prepared.has(work.slug)) return;
+          own.tally();
+          const at = Math.max(0, own.line);
+          start(work, "prepared", { fromLine: at || undefined, heard: own.heard, spans: own.spans, counted: own.counted });
+        },
+        announce: (line) => mine() && announce(line),
+        setValve: (share, label) => mine() && setValve(share, label),
+        showAsk: (question, hasRecording) => {
+          if (!mine()) return;
+          speedQ.textContent = question;
+          speedRec.hidden = !hasRecording;
+          speedAnyway.className = hasRecording ? "btn quiet" : "btn";
+          speedAsk.hidden = false;
+          // Dial's recording is the default where there is one.
+          (hasRecording ? speedRec : speedAnyway).focus();
+        },
+        hideAsk: hideSpeedAsk,
+        repaint: () => mine() && paintProgress(),
+        allow: (upTo) => worker.postMessage({ type: "allow", upTo } satisfies ToWorker),
+        setPauseLabel: (paused) => {
+          pause.textContent = paused ? "Resume" : "Pause";
+        },
+        now: () => performance.now() / 1000,
+      });
+    }
     let warmingStated = false;
 
     /**
@@ -775,6 +842,7 @@ function setupRadio(): void {
     own.feeder = window.setInterval(() => {
       if (audio.state === "running") void sched.feed();
       own.tally();
+      own.pacer?.tick();
     }, 250);
 
     const follow = () => {
@@ -915,6 +983,14 @@ function setupRadio(): void {
         radio.setReady(1);
         announce(firstLineLine(work.title, own.kept));
         paintProgress();
+        own.pacer?.ready();
+      } else if (msg.type === "testing") {
+        setValve(1, "Testing");
+        own.pacer?.testing();
+      } else if (msg.type === "speed") {
+        // Kept on this device only, so the test runs once (speed/store.ts); never sent.
+        keepSpeed(msg.entry);
+        own.pacer?.speed(msg.choice);
       } else if (msg.type === "cue") {
         const cue = cues[msg.index]!;
         own.wav ??= new WavChunks(msg.sampleRate);
@@ -926,6 +1002,7 @@ function setupRadio(): void {
         own.wav.add(msg.audio, cue.pauseAfterMs);
         const speech = msg.audio.length / msg.sampleRate;
         sched.add(msg.index, speech, cue.pauseAfterMs / 1000);
+        own.pacer?.cue(speech);
         own.seconds += speech + cue.pauseAfterMs / 1000;
         own.made = msg.index + 1;
         meter.value = own.made;
@@ -962,6 +1039,7 @@ function setupRadio(): void {
         measureStrip(own);
         // Every line is made: the broadcast ends once the last one has been heard.
         sched.renderFinished();
+        own.pacer?.done();
       } else {
         stopped(stopLine(msg.message));
       }
@@ -971,7 +1049,7 @@ function setupRadio(): void {
       event.preventDefault();
       stopped(stopLine(event.message || ""));
     };
-    worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length } satisfies ToWorker);
+    worker!.postMessage({ type: "render", cues, voices: cast.voices, from: seeded.length, kept: readSpeed() } satisfies ToWorker);
   };
 
   // ---- scrubbing: the strip, J/K/L, [ ], and a line chosen in the script ----
