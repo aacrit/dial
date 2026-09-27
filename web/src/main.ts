@@ -1,12 +1,14 @@
-// The radio at /. Counts go through telemetry.ts sendEvent, which posts
-// nothing once the listener turns counts off on the Seal. This page's
+// The radio at / and /play/<work>: full-screen panels (the device, then the
+// work's widgets), moved between by the band selector (panels-ui.ts,
+// design/spec.md 00). Counts go through telemetry.ts sendEvent, which posts
+// nothing once the listener turns counts off in the Seal widget. This page's
 // requests, and its voice worker's, are recorded for the Seal's log
 // (request-recorder.ts): paths and sizes only, never text or audio.
 import { WORKS, aboutMinutes, countWords, type Work } from "./catalogue";
 import { addHeard, countsAsListen, firstOpen, heardStep, lampLit, wavName, type HeardSpans, type ListenKind } from "./broadcast-state";
 import { capture, mountRadio } from "./device/radio";
 import { detectPerfTier, type NavigatorLike } from "./device/perf-tier";
-import { motion, watchReducedMotion } from "./device/reduced-motion";
+import { watchReducedMotion } from "./device/reduced-motion";
 import { PRESETS, parseSpring } from "./device/spring";
 import { mountWave } from "./device/wave";
 import { isStatableTotal, warmingLine } from "./download-size";
@@ -56,6 +58,8 @@ import { RECORDING_RATE } from "./recording/timing";
 import { mountOffline } from "./offline/ui";
 import { noteSend, noteSendFailed, recordEntries, recordRequests } from "./request-recorder";
 import { sendEvent } from "./telemetry";
+import { centreWithin, inViewWithin, mountPanels } from "./panels-ui";
+import { mountSealWidget } from "./seal-widget";
 
 /**
  * Call this exactly where the product's core action completes (the export
@@ -162,9 +166,10 @@ function setupRadio(): void {
   const sentence = $("st-sentence");
   const meta = $("st-meta");
   const bookplate = $("bookplate");
+  const workTitle = $("w-title");
   if (!device || !tune || !pause || !avail || !status || !progress || !meter || !download || !readAlong || !raLines || !raWho) return;
   if (!note || !retry || !ask || !askQ || !askYes || !askNo || !valveLabel || !makeHere || !resumeLine) return;
-  if (!eyebrow || !title || !credit || !sentence || !meta || !bookplate) return;
+  if (!eyebrow || !title || !credit || !sentence || !meta || !bookplate || !workTitle) return;
   // The Broadcast's own parts: the strip, the transport keys, the sheets.
   const ribbonBox = $("ribbon-box");
   const ribbon = document.getElementById("ribbon") as SVGSVGElement | null;
@@ -177,12 +182,12 @@ function setupRadio(): void {
   const fwd10 = $<HTMLButtonElement>("fwd-10");
   const scriptBox = $("script");
   const scriptNoteEl = $("script-note");
-  const bpSheetDl = $("bookplate-sheet-dl");
   const bpNote = $("bookplate-note");
+  const scriptPanel = $("tp-script");
   const shortcutList = $("shortcut-list");
   const canvas = device.querySelector<HTMLCanvasElement>("canvas.dw-wave");
   if (!ribbonBox || !ribbon || !timeEl || !timeTotal || !scrubNote || !linePrev || !lineNext || !back10 || !fwd10) return;
-  if (!scriptBox || !scriptNoteEl || !bpSheetDl || !bpNote || !shortcutList || !canvas) return;
+  if (!scriptBox || !scriptNoteEl || !scriptPanel || !bpNote || !shortcutList || !canvas) return;
   const ribbonSegs = ribbon.querySelector("g.segs")!;
   const ribbonNeedle = ribbon.querySelector("line.needle")!;
   const ribbonHead = ribbon.querySelector("line.renderhead")!;
@@ -221,14 +226,17 @@ function setupRadio(): void {
     const text = texts.get(w.slug);
     eyebrow.innerHTML = eyebrowHtml(text ? aboutMinutes(text.source, text.cues) : undefined);
     title.textContent = w.title;
+    workTitle.textContent = w.title;
     credit.textContent = w.credit;
     sentence.textContent = w.sentence;
     meta.innerHTML = metaHtml(w, text ? countWords(text.source) : undefined, text?.cast ?? undefined);
     bookplate.innerHTML = bookplateHtml(w, text?.cast ?? undefined, recordingFacts(w));
+    bpNote.textContent = bookplateHeading(w);
     device.dataset.realm = w.slug;
     paintAvail();
     paintTuneIn();
     paintPreview();
+    paintScript();
     offline?.station();
   };
 
@@ -408,6 +416,7 @@ function setupRadio(): void {
     scrubNote.textContent = "";
     paintTransport();
     paintPreview();
+    paintScript();
   };
 
   pause.addEventListener("click", () => {
@@ -441,22 +450,19 @@ function setupRadio(): void {
     const path = next === "broadcast" ? playPath(w.slug) : "/";
     if (how !== "none" && location.pathname !== path) history[how === "push" ? "pushState" : "replaceState"](null, "", path);
     document.title = pageTitle(next === "broadcast" ? w : undefined);
-    // The rooms link names the Repertory as the current page only while it is.
-    const repertoryLink = document.getElementById("room-repertory");
-    if (next === "repertory") repertoryLink?.setAttribute("aria-current", "page");
-    else repertoryLink?.removeAttribute("aria-current");
+    // Both rooms are the radio: the top bar's Radio link stays the current page.
     paintPreview();
     // A control the new room does not show never keeps focus.
     const active = document.activeElement as HTMLElement | null;
     if (active && active !== document.body && typeof active.checkVisibility === "function" && !active.checkVisibility()) rescueFocus(active);
   };
 
-  /** On the Broadcast before Tune in, the read-along shows where the work begins. */
+  /** Before Tune in, the read-along shows where the tuned work begins (design/spec.md 00: the read-along is on the radio's panel). */
   const paintPreview = () => {
     if (session?.live && session.line >= 0) return;
     const w = WORKS[radio.tuned()]!;
     const text = texts.get(w.slug);
-    if (room !== "broadcast" || !text) {
+    if (!text) {
       if (!session?.live) readAlong.hidden = true;
       return;
     }
@@ -690,6 +696,7 @@ function setupRadio(): void {
     };
 
     raWho.textContent = `On air: ${work.title}`;
+    paintScript();
     setMediaSession(work, {
       // Play resumes only a paused broadcast; pause pauses only a playing one.
       play: () => {
@@ -875,6 +882,7 @@ function setupRadio(): void {
         own.seconds += speech + cue.pauseAfterMs / 1000;
         own.made = msg.index + 1;
         meter.value = own.made;
+        markMade(own);
         measureStrip(own);
         paintProgress();
         paintTransport();
@@ -1007,37 +1015,42 @@ function setupRadio(): void {
     }
   });
 
-  // ---- the sheets: the full script, the Bookplate, the keyboard ------------
-  const fallbackFocus = () => (!tune.disabled ? tune : device.querySelector<HTMLElement>("[data-dialwin]"));
-  const scriptSheet = mountSheet($<HTMLDialogElement>("script-sheet")!, fallbackFocus, () => {
+  // ---- the Script and the Bookplate: a widget on the work panel --------------
+  // The script is always there for the tuned work: every cue's text exactly
+  // as printed (Law 2). Only the live line and the made lines change while
+  // it plays, so a re-render happens on a new station or a new broadcast,
+  // and the line that had focus keeps it.
+  const panels = mountPanels();
+  const paintScript = () => {
     const w = WORKS[radio.tuned()]!;
     const text = texts.get(w.slug);
     const s = session?.live && session.work === w ? session : null;
+    const focused = scriptBox.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.i : undefined;
     scriptNoteEl.textContent = scriptNote(w.translator, !!s);
     scriptBox.innerHTML = text ? scriptHtml(text.source, text.cues, s ? s.line : -1, s ? s.made : 0) : "";
-  });
-  const bookplateSheet = mountSheet($<HTMLDialogElement>("bookplate-sheet")!, fallbackFocus, () => {
-    const w = WORKS[radio.tuned()]!;
-    bpNote.textContent = bookplateHeading(w);
-    bpSheetDl.innerHTML = bookplateHtml(w, texts.get(w.slug)?.cast ?? undefined, recordingFacts(w));
-  });
+    if (focused === undefined) return;
+    const el = scriptBox.querySelector<HTMLElement>(`.sl[data-i="${focused}"]`);
+    if (!el) return;
+    for (const x of scriptBox.querySelectorAll<HTMLElement>('.sl[tabindex="0"]')) x.tabIndex = -1;
+    el.tabIndex = 0;
+    el.focus({ preventScroll: true });
+  };
+  const fallbackFocus = () => (!tune.disabled ? tune : device.querySelector<HTMLElement>("[data-dialwin]"));
   const shortcutSheet = mountSheet($<HTMLDialogElement>("shortcuts")!, fallbackFocus, () => {
     shortcutList.innerHTML = shortcutsHtml(SHORTCUTS);
   });
+  // The read-along's Script and Bookplate keys open them on the work panel.
   const openScript = $("open-script");
-  openScript?.addEventListener("click", () => {
-    scriptSheet.open(openScript);
-    // The live line is in view when the sheet opens (no smooth scroll under reduced motion).
-    scriptBox.querySelector<HTMLElement>(".sl.live")?.scrollIntoView({ block: "center", behavior: motion.reduce ? "auto" : "smooth" });
-  });
+  openScript?.addEventListener("click", () => panels.openText("script", openScript));
   const openBp = $("open-bookplate");
-  openBp?.addEventListener("click", () => bookplateSheet.open(openBp));
+  openBp?.addEventListener("click", () => panels.openText("bookplate", openBp));
   const openKeys = $("open-shortcuts");
   openKeys?.addEventListener("click", () => shortcutSheet.open(openKeys));
 
-  /** The script's live line follows the broadcast while the sheet is open. */
+  /** The script's live line follows the broadcast; its scroller follows the line while the listener has not scrolled away (never smoothly under reduced motion). */
   const markScriptLine = (line: number) => {
-    if (!scriptSheet.isOpen()) return;
+    const was = scriptBox.querySelector<HTMLElement>(".sl.live");
+    const following = !was || inViewWithin(scriptPanel, was);
     for (const el of scriptBox.querySelectorAll<HTMLElement>(".sl.live")) {
       el.classList.remove("live");
       el.removeAttribute("aria-current");
@@ -1046,8 +1059,18 @@ function setupRadio(): void {
     if (!el) return;
     el.classList.add("live");
     el.setAttribute("aria-current", "true");
+    if (following && !scriptPanel.hidden && scriptPanel.clientHeight > 0) centreWithin(scriptPanel, el);
     const s = session;
     if (s) for (const u of scriptBox.querySelectorAll<HTMLElement>(".sl.unmade")) if (Number(u.dataset.i) < s.made) {
+      u.classList.remove("unmade");
+      u.removeAttribute("aria-disabled");
+    }
+  };
+
+  /** Lines made since the last look become playable in the script. */
+  const markMade = (s: Session) => {
+    if (session !== s || s.work !== WORKS[radio.tuned()]) return;
+    for (const u of scriptBox.querySelectorAll<HTMLElement>(".sl.unmade")) if (Number(u.dataset.i) < s.made) {
       u.classList.remove("unmade");
       u.removeAttribute("aria-disabled");
     }
@@ -1287,6 +1310,13 @@ function setupFeedback(): void {
   const form = document.getElementById("feedback-form");
   const status = document.getElementById("feedback-status");
   if (!(form instanceof HTMLFormElement) || !status) return;
+  // The form sits in a sheet, opened from the work panel, so the panels never grow to hold it.
+  const opener = document.getElementById("open-feedback");
+  const dialog = document.getElementById("feedback-sheet");
+  if (opener && dialog instanceof HTMLDialogElement) {
+    const sheet = mountSheet(dialog, () => opener);
+    opener.addEventListener("click", () => sheet.open(opener));
+  }
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1329,4 +1359,5 @@ recordRequests();
 sendEvent("page_view");
 setupRadio();
 setupFeedback();
+mountSealWidget();
 registerOfflineHelper();

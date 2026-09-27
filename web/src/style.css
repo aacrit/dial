@@ -203,16 +203,6 @@ body[data-on-air="true"] #tune-in.is-on-air::before {
   stroke-linecap: round;
 }
 
-/* ---- The room ------------------------------------------------------------ */
-
-.room {
-  padding: 0 0 40px;
-}
-
-.rep-head {
-  display: none;
-}
-
 /* ---- The device: a faceplate with a dial behind glass --------------------- */
 
 .device {
@@ -782,20 +772,6 @@ progress::-moz-progress-bar {
   text-overflow: ellipsis;
 }
 
-/* ---- Below the device ----------------------------------------------------- */
-
-.below {
-  display: grid;
-  gap: 14px;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 12px 16px 0;
-}
-
-.drill {
-  border-top: 1px solid var(--color-border);
-}
-
 /* ---- Save for offline, the offline notice, the install cards --------------
    The row always carries a label (design/spec.md 1.9): Save for offline,
    Saving… with its bytes and Cancel, Saved for offline with Remove. The
@@ -954,193 +930,8 @@ progress::-moz-progress-bar {
   white-space: nowrap;
 }
 
-.drill > summary {
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  cursor: pointer;
-  color: var(--color-cream);
-  font-weight: 500;
-}
-
-.drill > summary::-webkit-details-marker {
-  display: none;
-}
-
-.drill > summary::after {
-  content: "";
-  margin-left: auto;
-  width: 8px;
-  height: 8px;
-  border-right: 1.6px solid var(--color-cream-muted);
-  border-bottom: 1.6px solid var(--color-cream-muted);
-  transform: rotate(45deg) translateY(-2px);
-  transition: transform var(--dur-fast) var(--ease-out);
-}
-
-.drill[open] > summary::after {
-  transform: rotate(-135deg) translateY(-2px);
-}
-
-.drill-body {
-  padding: 4px 0 16px;
-}
-
-.bookplate dl {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  font-size: 0.88rem;
-}
-
-.bookplate dt {
-  font: 500 0.64rem/1 var(--font-data);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-cream-muted);
-  padding-top: 10px;
-}
-
-.bookplate dd {
-  margin: 0;
-}
-
 .pd {
   color: var(--color-magic-eye);
-}
-
-.own {
-  font-size: 0.9rem;
-  color: var(--color-cream-muted);
-  padding: 12px 0;
-  border-top: 1px solid var(--color-border);
-}
-
-/* ---- Rooms: the pages that exist, as text tabs ---------------------------- */
-
-.rooms {
-  display: flex;
-  gap: 4px;
-}
-
-.rooms a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 10px;
-  color: var(--color-cream-muted);
-  font-size: 0.9rem;
-  text-decoration: none;
-}
-
-.rooms a:hover {
-  color: var(--color-cream);
-}
-
-.rooms a[aria-current="page"] {
-  color: var(--color-cream);
-  text-decoration: underline;
-  text-decoration-color: var(--color-filament);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 8px;
-}
-
-/* ---- The Seal (design/mocks/seal.html): the eye is the hero, the log its evidence */
-
-.seal {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 12px 16px 40px;
-}
-
-.seal-top {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.hero {
-  display: grid;
-  gap: 16px;
-  align-content: start;
-}
-
-.meye {
-  width: 150px;
-  height: 150px;
-  display: block;
-}
-
-.meye .glass {
-  fill: var(--color-eye-dim);
-}
-
-.meye .fan {
-  fill: var(--color-magic-eye);
-  filter: drop-shadow(0 0 3px var(--color-magic-eye));
-  transition: opacity var(--dur-valve-warm) var(--ease-valve-warm);
-}
-
-.meye[data-state="reading"] .fan,
-.meye:not([data-state]) .fan {
-  opacity: 0.35;
-  filter: none;
-}
-
-/* Open: a request went to another address. Ochre is attention (it cannot
-   happen under the CSP; the limits drill says so). */
-.meye[data-state="open"] .fan {
-  fill: var(--color-ochre);
-  filter: none;
-}
-
-.meye .cap {
-  fill: var(--color-bg);
-  stroke: var(--color-border);
-  stroke-width: 0.4;
-}
-
-.meye .rim {
-  fill: none;
-  stroke: var(--color-border);
-  stroke-width: 0.8;
-}
-
-.hero h1 {
-  font-size: 2.6rem;
-  line-height: 1;
-}
-
-.hero .say {
-  font-size: 1.02rem;
-  max-width: 46ch;
-}
-
-.switch-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px 16px;
-  align-items: center;
-  padding: 14px 0;
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.switch-row .lab {
-  font-weight: 500;
-}
-
-.switch-row p {
-  grid-column: 1 / -1;
-  font-size: 0.86rem;
-  color: var(--color-cream-muted);
-  max-width: 52ch;
-}
-
-.switch-row .sw-note:empty {
-  display: none;
 }
 
 .switch {
@@ -1183,52 +974,6 @@ progress::-moz-progress-bar {
 .switch[aria-checked="true"]::after {
   transform: translateX(22px);
   background: var(--color-bg);
-}
-
-.limits {
-  font-size: 0.88rem;
-}
-
-.limits p {
-  max-width: 56ch;
-  margin-bottom: 8px;
-}
-
-.limits b {
-  font-weight: 600;
-}
-
-.logcard {
-  padding: 0;
-  overflow: hidden;
-}
-
-.loghead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 16px;
-  padding: 18px 20px 12px;
-}
-
-.loghead h2 {
-  font-size: 1.3rem;
-  margin: 0;
-}
-
-.loghead .tot {
-  font: 400 0.76rem/1.4 var(--font-data);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-cream-muted);
-}
-
-.loghead .tot b {
-  color: var(--color-cream);
-  font-weight: 400;
-}
-
-.logwrap {
-  overflow: auto;
 }
 
 .log {
@@ -1328,114 +1073,6 @@ progress::-moz-progress-bar {
   color: var(--color-cream-muted);
 }
 
-.sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.bench {
-  display: grid;
-  gap: 14px;
-  margin-top: 28px;
-}
-
-.bench-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.bench h2 {
-  font-size: 1.5rem;
-  margin: 0;
-}
-
-.bench-intro {
-  font-size: 0.9rem;
-  max-width: 66ch;
-}
-
-.bench-cols {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.bcol {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  padding: 16px;
-  border-radius: var(--radius-card);
-  background: var(--gradient-glass);
-  box-shadow: var(--shadow-glass-inset);
-  color: var(--color-glass-ink);
-}
-
-.bcol h3 {
-  margin: 0;
-  font: 600 0.95rem/1.3 var(--font-structure);
-}
-
-.bcol h3 .muted {
-  color: var(--color-glass-ink-muted);
-  font-weight: 400;
-}
-
-.bcol dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px 14px;
-  margin: 0;
-  font-size: 0.86rem;
-}
-
-.bcol dl:empty {
-  display: none;
-}
-
-.bcol dt {
-  color: var(--color-glass-ink-muted);
-}
-
-.bcol dd {
-  margin: 0;
-}
-
-.bcol .none {
-  font-size: 0.88rem;
-  color: var(--color-glass-ink-muted);
-}
-
-.bg {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 64px;
-}
-
-.bg .gauge {
-  width: 110px;
-  height: 60px;
-}
-
-.bg .big {
-  font: 400 1.8rem/1 var(--font-data);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-glass-ink);
-}
-
-.bg .big small {
-  font-size: 0.8rem;
-  font-family: var(--font-structure);
-  color: var(--color-glass-ink-muted);
-}
-
 .gauge .g-arc {
   fill: none;
   stroke: var(--color-glass-ink-faint);
@@ -1474,109 +1111,6 @@ progress::-moz-progress-bar {
 
 .gauge .g-cap {
   fill: var(--color-glass-ink-muted);
-}
-
-.bench-status:empty {
-  display: none;
-}
-
-.bench-verdict {
-  font-size: 0.95rem;
-}
-
-.bench-verdict b {
-  font-weight: 600;
-}
-
-.bench-note {
-  font-size: 0.84rem;
-}
-
-.seal .page-footer {
-  margin-top: 28px;
-  font-size: 0.9rem;
-}
-
-@media (max-width: 767px) {
-  .log th.wh-h,
-  .log td.wh {
-    display: none;
-  }
-
-  .log td.pa .w {
-    display: block;
-    font-family: var(--font-structure);
-    font-size: 0.76rem;
-    color: var(--color-cream-muted);
-    word-break: normal;
-  }
-
-  .hero {
-    grid-template-columns: auto 1fr;
-    align-items: center;
-  }
-
-  .hero .meye {
-    width: 104px;
-    height: 104px;
-  }
-
-  .hero > *:not(.meye):not(.hgroup) {
-    grid-column: 1 / -1;
-  }
-
-  .bench-head {
-    flex-wrap: wrap;
-    align-items: flex-start;
-  }
-}
-
-@media (min-width: 768px) {
-  .log td.pa .w {
-    display: none;
-  }
-
-  .seal {
-    padding: 32px 24px 40px;
-  }
-
-  .bench-cols {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (min-width: 1024px) {
-  .seal-top {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    gap: 48px;
-    align-items: start;
-  }
-
-  .meye {
-    width: 200px;
-    height: 200px;
-  }
-
-  .hero h1 {
-    font-size: 3.4rem;
-  }
-}
-
-@media (min-width: 1280px) {
-  .seal {
-    padding: 40px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .seal {
-    max-width: 1600px;
-  }
-
-  .meye {
-    width: 240px;
-    height: 240px;
-  }
 }
 
 /* ---- Cards, forms, the privacy page ------------------------------------- */
@@ -1658,10 +1192,6 @@ textarea:focus {
   padding: 8px 0 24px;
 }
 
-/* ---- Breakpoints ---------------------------------------------------------- */
-
-/* Phone: the faceplate is the screen. Window, station line, Tune in, keys
-   and knobs in the bottom third for thumbs, then the glass display. */
 /* ---- The Broadcast: the same radio on air (T3) ------------------------------ */
 
 /* The keyboard's key, in the masthead and the shortcuts sheet. */
@@ -1689,10 +1219,7 @@ button.keycap {
 body:not([data-room="broadcast"]) .transport,
 body:not([data-room="broadcast"]) .dev-ribbon,
 body:not([data-room="broadcast"]) .meters,
-body:not([data-room="broadcast"]) .ra-sheets,
-body[data-room="broadcast"] [data-presets],
-body[data-room="broadcast"] .rep-head,
-body[data-room="broadcast"] .below > .bookplate {
+body[data-room="broadcast"] [data-presets] {
   display: none;
 }
 
@@ -2036,169 +1563,1109 @@ dialog.sheet::backdrop {
   }
 }
 
-/* The Broadcast on a phone: window, station line, glass, strip, then the keys and knobs. */
-@media (max-width: 767px) {
-  body[data-room="broadcast"] .device > .dialwin { order: 1; }
-  body[data-room="broadcast"] .device > .station-line { order: 2; }
-  body[data-room="broadcast"] .device > .display { order: 3; }
-  body[data-room="broadcast"] .device > .dev-ribbon { order: 4; }
-  body[data-room="broadcast"] .device > .tunein { order: 5; }
-  body[data-room="broadcast"] .device > .switch-ask { order: 6; }
-  body[data-room="broadcast"] .device > .onair-panel { order: 6; }
-  body[data-room="broadcast"] .device > .controls { order: 7; }
 
-  body[data-room="broadcast"] .instruments {
-    flex-wrap: wrap;
+/* ==== No-scroll panels (design/spec.md 00, G2 amendment 2026-09-27) ========
+   The radio is one or more full-viewport panels: the device, then the work's
+   widgets. The page never scrolls sideways; vertically it snaps panel to
+   panel inside .panels (never body). Long content scrolls inside its own
+   widget. The media queries are panels.ts's, word for word
+   (tests/panels.test.ts), and scripts/layout-check.mjs checks the result in
+   a browser at the six viewports of the panel map. */
+
+html:has(body.faceplate-page),
+body.faceplate-page {
+  height: 100%;
+  overflow: hidden;
+}
+
+body.faceplate-page {
+  background: var(--gradient-cabinet);
+  --top: 48px;
+  --bandh: 44px;
+  --padr: 12px;
+}
+
+/* The top bar: the brand, the rooms, the keyboard key. */
+.topbar {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--top) + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  justify-content: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.topbar .brand .arch {
+  height: 26px;
+}
+
+.topbar .brand .wm {
+  height: 12px;
+}
+
+.rooms {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.rooms a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 44px;
+  padding: 0 10px;
+  color: var(--color-cream-muted);
+  text-decoration: none;
+  font: 500 0.88rem/1 var(--font-structure);
+}
+
+.rooms a:hover,
+.rooms a[aria-current="page"] {
+  color: var(--color-cream);
+}
+
+/* The living-wave underline under the room you are in: the carrier drifts. */
+.wave-box {
+  display: block;
+  width: 32px;
+  height: 8px;
+  overflow: hidden;
+  visibility: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 25%, black 75%, transparent);
+  mask-image: linear-gradient(90deg, transparent, black 25%, black 75%, transparent);
+}
+
+.rooms a[aria-current="page"] .wave-box {
+  visibility: visible;
+}
+
+.wave-underline {
+  display: block;
+  width: 80px;
+  height: 8px;
+  animation: carrier 1.4s linear infinite;
+}
+
+.wave-underline path {
+  fill: none;
+  stroke: var(--color-filament);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+@keyframes carrier {
+  to {
+    transform: translateX(-20px);
   }
+}
 
+/* The scroll container and its panels. */
+.panels {
+  position: fixed;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.panels::-webkit-scrollbar {
+  display: none;
+}
+
+.panel {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  overflow: hidden;
+  padding: calc(var(--top) + env(safe-area-inset-top) + 4px) max(var(--padr), env(safe-area-inset-right)) calc(var(--bandh) + env(safe-area-inset-bottom) + 8px) max(12px, env(safe-area-inset-left));
+}
+
+/* Panel 1: the device, fitted. The dial takes whatever height is left. */
+.p-device .device {
+  height: 100%;
+  max-width: none;
+  margin: 0 auto;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.p-device .device::after {
+  display: none;
+}
+
+.dialbox {
+  flex: 1 1 auto;
+  min-height: 110px;
+  min-width: 0;
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+
+.dialbox .dialwin {
+  width: min(100cqw, 160cqh);
+  height: auto;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.side > *,
+.display,
+.instruments,
+.ra-head,
+.ra-lines {
+  min-width: 0;
+}
+
+.station-line h2 {
+  font-size: 1.3rem;
+  line-height: 1.15;
+}
+
+.station-line .eyebrow:empty {
+  display: none;
+}
+
+.readalong {
+  padding: 8px 14px 10px;
+  gap: 4px;
+}
+
+.ra.live {
+  font-size: 1.02rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ra.prev {
+  display: none;
+}
+
+.devnote:empty {
+  display: none;
+}
+
+.tunein #tune-in {
+  min-height: 46px;
+  padding: 0 20px;
+}
+
+.tunein .avail {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+#broadcast-status {
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+#broadcast-status:empty {
+  display: none;
+}
+
+.onair-panel {
+  gap: 4px;
+  overscroll-behavior: contain;
+}
+
+.onair-panel:has(#broadcast-status:empty) {
+  display: none;
+}
+
+.controls {
+  padding: 0;
+}
+
+.notice {
+  padding: 8px 12px;
+  font-size: 0.84rem;
+}
+
+/* Panel 2: the work, as widgets. Long text scrolls inside its widget. */
+.widgets {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.widget {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-bezel);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.widget > h2,
+.text-head {
+  flex: none;
+}
+
+.widget > h2 {
+  font: 600 0.66rem/1 var(--font-data);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+}
+
+.widget .scroll {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* Each widget keeps its own row, so one that steps aside leaves the others where they are. */
+.w-about {
+  grid-row: 1;
+}
+
+.w-keep {
+  grid-row: 2;
+}
+
+.w-text {
+  grid-row: 3;
+}
+
+.w-seal {
+  grid-row: 4;
+}
+
+/* Keep it with nothing to offer (no offline helper in this browser, nothing made yet) steps aside. */
+.w-keep:not(:has(#save-row:not([hidden]), #download:not([hidden]), .install:not([hidden]))) {
+  display: none;
+}
+
+/* The work */
+.w-about h3 {
+  font-size: 1.2rem;
+  line-height: 1.15;
+}
+
+.w-about .about-scroll {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.w-about .d {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 0.98rem;
+  line-height: 1.45;
+  max-width: var(--measure-reading);
+}
+
+.w-about .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font: 400 0.72rem/1.4 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cream-muted);
+}
+
+.w-about .own {
+  font-size: 0.8rem;
+  color: var(--color-cream-muted);
+}
+
+.asks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 16px;
+  font-size: 0.84rem;
+}
+
+.linkish {
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-filament);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+}
+
+.asks a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+/* Keep it */
+.keep-scroll {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  align-content: start;
+}
+
+.w-keep .save {
+  width: 100%;
+  padding: 0;
+  border-top: 0;
+}
+
+.w-keep .save .btn,
+.w-keep #download {
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 0.86rem;
+}
+
+.w-keep .install {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+
+.w-keep .install h3 {
+  font-size: 1.05rem;
+}
+
+/* Script and Bookplate */
+.text-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: -4px;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.tabs [role="tab"] {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--color-cream-muted);
+  font: 500 0.88rem var(--font-structure);
+  cursor: pointer;
+}
+
+.tabs [role="tab"][aria-selected="true"] {
+  color: var(--color-cream);
+  border-bottom-color: var(--color-filament);
+}
+
+.close-key {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.86rem;
+}
+
+.w-text .scroll {
+  flex: 1;
+}
+
+.w-text .script {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.w-text .sheet-note {
+  margin: 0 0 10px;
+}
+
+/* The Seal, as a widget */
+.seal-top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.seye {
+  width: 38px;
+  height: 38px;
+  flex: none;
+}
+
+.seye .g {
+  fill: var(--color-glass-eye-dim);
+}
+
+.seye .f {
+  fill: var(--color-glass-eye);
+  filter: drop-shadow(0 0 4px var(--color-glass-eye));
+  transition: opacity var(--dur-valve-warm) var(--ease-valve-warm);
+}
+
+.seye[data-state="reading"] .f {
+  opacity: 0.35;
+  filter: none;
+}
+
+/* Open: a request went to another address. Ochre is attention; under the CSP it cannot happen. */
+.seye[data-state="open"] .f {
+  fill: var(--color-ochre);
+  filter: none;
+}
+
+.seye .c {
+  fill: var(--color-glass);
+}
+
+.w-seal .line {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.w-seal .line b {
+  font-weight: 600;
+}
+
+.w-seal .count {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--color-cream-muted);
+}
+
+.sw-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.86rem;
+}
+
+.sw-row .switch {
+  flex: none;
+}
+
+.sw-note {
+  font-size: 0.8rem;
+}
+
+.sw-note:empty {
+  display: none;
+}
+
+.reqs-box > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-filament);
+  font: 500 0.86rem var(--font-structure);
+}
+
+.reqs-box > summary::-webkit-details-marker {
+  display: none;
+}
+
+.reqs-box[open] > summary .sh,
+.reqs-box:not([open]) > summary .hd {
+  display: none;
+}
+
+.reqs-box[open] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.reqs-in {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+}
+
+.reqs-in .tot {
+  font: 400 0.7rem/1.4 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cream-muted);
+}
+
+.reqs-in .tot b {
+  font-weight: 400;
+  color: var(--color-cream);
+}
+
+.reqs {
+  max-height: min(34dvh, 260px);
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--color-border);
+}
+
+.reqs .log {
+  font-size: 0.74rem;
+}
+
+.reqs .log td {
+  padding: 5px 4px;
+}
+
+.reqs .log td.dir {
+  width: 20px;
+}
+
+.reqs .log .wh-h,
+.reqs .log td.wh {
+  display: none;
+}
+
+.reqs .log td.pa .w {
+  display: block;
+  font-family: var(--font-structure);
+  font-size: 0.72rem;
+  color: var(--color-cream-muted);
+  word-break: normal;
+}
+
+.reqs-in .logfoot {
+  padding: 0;
+  font-size: 0.74rem;
+}
+
+/* The band selector: which panel you are on, as a radio's band switch */
+.band {
+  position: fixed;
+  z-index: 45;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--bandh) + env(safe-area-inset-bottom));
+  padding: 0 12px env(safe-area-inset-bottom);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.band .bl {
+  font: 600 0.56rem/1 var(--font-data);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+  margin-right: 6px;
+}
+
+.band button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--color-bezel);
+  border-radius: 10px;
+  background: var(--gradient-key);
+  box-shadow: var(--shadow-key);
+  color: var(--color-cream-muted);
+  font: 500 0.76rem/1 var(--font-structure);
+  cursor: pointer;
+  transform: translateY(0);
+  transition:
+    transform var(--dur-needle-drop) var(--ease-needle-drop),
+    box-shadow var(--dur-needle-drop) var(--ease-needle-drop);
+}
+
+/* The current band's key is pressed in, and its lamp is amber. */
+.band button[aria-current="true"] {
+  color: var(--color-cream);
+  transform: translateY(var(--key-travel));
+  box-shadow: var(--shadow-key-pressed);
+}
+
+.band .lampb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--color-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--color-bezel);
+  transition:
+    background-color var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+
+.band button[aria-current="true"] .lampb {
+  background: var(--color-filament);
+  box-shadow: 0 0 8px var(--color-filament);
+}
+
+/* ---- Phone held upright: the device in a column; the widgets stacked ---- */
+@media (max-width: 767px) and (orientation: portrait) {
   /* Phones rarely have a keyboard: the key's sheet is still one "?" away. */
   .masthead .keycap {
     display: none;
   }
 
-  .transport .key {
-    min-width: 48px;
-    padding: 6px;
-  }
-}
-
-@media (max-width: 767px) {
-  html:has(body.faceplate-page) {
-    background: var(--color-surface);
+  .instruments {
+    padding: 6px 12px;
+    gap: 10px;
   }
 
-  body.faceplate-page {
-    background: var(--gradient-cabinet);
-    min-height: 100dvh;
+  .mini-eye,
+  .valve {
+    width: 32px;
+    height: 32px;
   }
 
-  .device {
-    padding: 8px 12px 12px;
-    border-radius: 0;
-    box-shadow: none;
-    background: transparent;
-  }
-
-  .device::after {
-    display: none;
-  }
-
-  .device > .dialwin { order: 1; }
-  .device > .station-line { order: 3; }
-  .device > .tunein { order: 4; }
-  .device > .switch-ask { order: 5; }
-  .device > .onair-panel { order: 5; }
-  .device > .controls { order: 6; }
-  .device > .display { order: 7; }
-
-  /* Phone: the live line and the next only. */
-  .ra.prev {
+  .station-line .by {
     display: none;
   }
 
   .kn-dial {
-    width: 56px;
-    height: 56px;
+    width: 50px;
+    height: 50px;
   }
 
   .kn-dial::before {
-    -webkit-mask: radial-gradient(circle, transparent 27px, black 28px 32px, transparent 33px);
-    mask: radial-gradient(circle, transparent 27px, black 28px 32px, transparent 33px);
+    -webkit-mask: radial-gradient(circle, transparent 24px, black 25px 29px, transparent 30px);
+    mask: radial-gradient(circle, transparent 24px, black 25px 29px, transparent 30px);
   }
 
   .key {
-    min-width: 52px;
-    min-height: 52px;
+    min-width: 48px;
+    min-height: 48px;
+  }
+
+  .transport .key {
+    min-width: 44px;
+    padding: 6px;
+  }
+
+  /* On air the ribbon takes Tune in's place; the line under Tune in waits for the idle radio. */
+  body[data-room="broadcast"] .tunein .avail {
+    display: none;
+  }
+
+  .ribbon {
+    height: 36px;
+  }
+
+  .w-about .own {
+    display: none;
+  }
+
+  .w-about .d {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* The open request list covers the work panel until "Hide the requests". */
+  .w-seal:has(.reqs-box[open]) {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    /* Placed by the grid, an absolute box would cover only its own row. */
+    grid-area: auto;
+  }
+
+  .w-seal:has(.reqs-box[open]) .reqs {
+    flex: 1;
+    max-height: none;
+  }
+
+  /* Script tapped: the script fills the work panel; the others come back on Close. */
+  .widgets[data-fill="text"] > .widget:not(.w-text) {
+    display: none;
+  }
+
+  .widgets[data-fill="text"] > .w-text {
+    grid-row: 1 / -1;
   }
 }
 
-@media (min-width: 768px) {
-  .room {
-    padding: 28px 24px 40px;
+/* ---- Tablet held upright ---- */
+@media (min-width: 768px) and (orientation: portrait) {
+  body.faceplate-page {
+    --top: 60px;
+    --bandh: 52px;
   }
 
-  .masthead {
-    max-width: 608px;
-    margin: 0 auto;
-    padding: 20px 24px 0;
+  .p-device .device {
+    max-width: 680px;
   }
 
-  .rep-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 20px;
-    max-width: 560px;
-    margin: 0 auto 18px;
+  .widgets {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
   }
 
-  .rep-head h1 {
-    font-size: 1.5rem;
-  }
-
-  .below {
-    max-width: 640px;
-    padding-top: 24px;
-  }
-}
-
-/* Desktop: a landscape cabinet, the dial window on the left. */
-@media (min-width: 1024px) {
-  .rep-head {
-    max-width: 1080px;
-  }
-
-  .masthead {
-    max-width: 1128px;
-  }
-
-  .device {
-    max-width: 1080px;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    column-gap: 26px;
-    row-gap: 14px;
-    padding: 26px;
-    align-items: start;
-  }
-
-  .device > .dialwin {
+  .w-about {
     grid-column: 1;
-    grid-row: 1 / span 8;
-    align-self: center;
+    grid-row: 1;
   }
 
-  .device > *:not(.dialwin) {
+  .w-keep {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .w-seal {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .w-seal:has(.reqs-box[open]) .reqs {
+    flex: 1;
+    max-height: none;
+  }
+
+  .w-text {
     grid-column: 2;
-  }
-
-  .below {
-    max-width: 1080px;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    column-gap: 26px;
-    align-items: start;
-  }
-
-  .below > .card,
-  .below > .page-footer {
-    grid-column: 1 / -1;
+    grid-row: 1 / 4;
   }
 }
 
-/* 1920: the device grows to 1,420 px; the extra goes to the dial and the knobs. */
-@media (min-width: 1920px) {
-  .rep-head,
-  .below {
-    max-width: 1420px;
+/* ---- Landscape: the dial on the left, the rest on the right; the band a plate at the right edge ---- */
+@media (orientation: landscape) {
+  body.faceplate-page {
+    --top: 56px;
+    --bandh: 0px;
+    --padr: 84px;
   }
 
-  .masthead {
-    max-width: 1468px;
+  .p-device .device {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    column-gap: 28px;
+    max-width: 1240px;
+    align-items: stretch;
   }
 
-  .device {
-    max-width: 1420px;
-    padding: 34px;
-    column-gap: 40px;
+  .dialbox {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .side {
+    justify-content: center;
+  }
+
+  .ra.prev {
+    display: -webkit-box;
+  }
+
+  .widgets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto minmax(0, 1fr);
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .w-keep {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .w-about {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .w-text {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  .w-seal {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    align-self: start;
+    max-height: 100%;
+  }
+
+  .w-seal:has(.reqs-box[open]) {
+    align-self: stretch;
+  }
+
+  .w-seal:has(.reqs-box[open]) .reqs {
+    flex: 1;
+    max-height: none;
+  }
+
+  .band {
+    left: auto;
+    right: max(10px, env(safe-area-inset-right));
+    top: 50%;
+    bottom: auto;
+    height: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    padding: 10px 6px;
+    border-radius: 14px;
+    background: var(--gradient-cabinet);
+    border: 1px solid var(--color-bezel);
+    box-shadow: var(--shadow-card);
+  }
+
+  .band .bl {
+    writing-mode: vertical-rl;
+    margin: 0 0 4px;
+  }
+
+  .band button {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 6px;
+    min-width: 58px;
+  }
+}
+
+/* Short landscape (a phone on its side): everything tighter */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.faceplate-page {
+    --top: 38px;
+  }
+
+  .topbar .brand .freq,
+  .topbar .brand .wm,
+  .wave-box {
+    display: none;
+  }
+
+  .rooms a {
+    min-height: 36px;
+  }
+
+  .masthead .keycap {
+    min-height: 34px;
+  }
+
+  .p-device .device {
+    column-gap: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  }
+
+  .side {
+    gap: 6px;
+  }
+
+  .station-line .by,
+  .station-line .eyebrow,
+  .ra.prev,
+  .ra.next,
+  .ra-who {
+    display: none;
+  }
+
+  .station-line h2 {
+    font-size: 1.05rem;
+  }
+
+  .instruments {
+    padding: 4px 10px;
+    gap: 8px;
+  }
+
+  .mini-eye,
+  .valve {
+    width: 28px;
+    height: 28px;
+  }
+
+  .il {
+    display: none;
+  }
+
+  .inst {
+    min-width: 32px;
+  }
+
+  .readalong {
+    padding: 2px 12px 6px;
+  }
+
+  .ra-head {
+    justify-content: flex-end;
+  }
+
+  .ra-btn {
+    min-height: 32px;
+  }
+
+  .ra.live {
+    font-size: 0.9rem;
+  }
+
+  .tunein #tune-in,
+  .tunein .btn {
+    min-height: 40px;
+  }
+
+  .tunein .avail {
+    display: none;
+  }
+
+  .ribbon {
+    height: 28px;
+  }
+
+  .dev-ribbon {
+    gap: 2px;
+  }
+
+  /* A long status line scrolls inside its own box rather than pushing the keys off the panel. */
+  .onair-panel {
+    max-height: 3.6em;
+    overflow-y: auto;
+  }
+
+  #broadcast-status {
+    font-size: 0.8rem;
+  }
+
+  .kn-dial {
+    width: 42px;
+    height: 42px;
+  }
+
+  .kn-dial::before,
+  .knob .kl {
+    display: none;
+  }
+
+  .key {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 8px;
+  }
+
+  .key .glyph {
+    width: 18px;
+    height: 18px;
+  }
+
+  .widget {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .w-keep .install p,
+  .w-keep .install ol {
+    display: none;
+  }
+
+  .w-seal:has(.reqs-box[open]) {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: calc((100% - 20px) / 3);
+    z-index: 5;
+    grid-area: auto;
+  }
+
+  .band button {
+    min-width: 44px;
+    padding: 6px 4px;
+  }
+}
+
+@media (orientation: landscape) and (min-height: 501px) and (max-height: 760px) {
+  .station-line .by,
+  .ra.prev {
+    display: none;
+  }
+}
+
+/* Large screens: everything on one panel, no snapping, no band selector */
+@media (min-width: 1600px) and (min-height: 900px) {
+  body.faceplate-page {
+    --top: 60px;
+    --padr: 0px;
+  }
+
+  .panels {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    gap: 28px;
+    overflow: hidden;
+    scroll-snap-type: none;
+    padding: 0 32px;
+  }
+
+  .panel {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .p-device .device {
+    max-width: 1320px;
+  }
+
+  .widgets {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    max-width: none;
+  }
+
+  .w-about,
+  .w-keep,
+  .w-text,
+  .w-seal {
+    grid-column: 1;
+    grid-row: auto;
+    align-self: stretch;
+  }
+
+  .w-seal:has(.reqs-box[open]) .reqs {
+    flex: 0 1 auto;
+    max-height: min(34dvh, 260px);
+  }
+
+  .band {
+    display: none;
   }
 
   .kn-dial {
@@ -2210,32 +2677,4 @@ dialog.sheet::backdrop {
     -webkit-mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
     mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
   }
-}
-
-/* The Seal's masthead spans the page's own width. */
-@media (min-width: 1024px) {
-  .seal-page .masthead {
-    max-width: 1400px;
-  }
-}
-
-@media (min-width: 1280px) {
-  .seal-page .masthead {
-    padding-left: 40px;
-    padding-right: 40px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .seal-page .masthead {
-    max-width: 1600px;
-  }
-}
-
-.bench-need {
-  font-size: 0.88rem;
-}
-
-.bench-need:empty {
-  display: none;
 }

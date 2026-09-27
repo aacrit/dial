@@ -377,7 +377,7 @@ describe("installing Dial", () => {
   it("on iPhone and iPad Safari, the Home Screen steps instead, with no Install button", () => {
     expect(installCard({ ...base, iosSafari: true })).toBe("ios");
     const html = read("web/index.html");
-    const ios = /<section class="card install" id="ios-card"[\s\S]*?<\/section>/.exec(html)![0];
+    const ios = /<section class="install" id="ios-card"[\s\S]*?<\/section>/.exec(html)![0];
     // The saved-works note starts hidden, and shows only where offline saving works.
     expect(ios).toContain('<p class="muted install-note" id="ios-saved-note" hidden>');
     expect(read("web/src/offline/ui.ts")).toContain('if (iosSaved) iosSaved.hidden = card !== "ios" || !(await offlineWorks());');
