@@ -198,7 +198,15 @@ describe("contract runner: deployed-only burst checks", () => {
 
   it("runContract sends only bursts to the burst host; every other check stays on the base", async () => {
     // A burst_zone matching the local test host proves the routing without leaving the machine.
-    const other = createServer((_req, res) => {
+    let otherBuild = "abc123";
+    let bursts = 0;
+    const other = createServer((req, res) => {
+      if (req.url === "/healthz") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, build: otherBuild }));
+        return;
+      }
+      bursts++;
       res.writeHead(429, { "content-type": "application/json" });
       res.end('{"error":"rate_limited"}');
     });
@@ -216,10 +224,34 @@ describe("contract runner: deployed-only burst checks", () => {
       const local = baseUrl.replace("127.0.0.1", "localhost");
       const [home, burst] = await runContract(contract, local);
       expect(home.pass).toBe(true);
+      expect(home.detail).toBeUndefined();
       expect(burst.pass).toBe(true);
+      // The result says where the burst ran: the summary names the base, and it did not run there.
+      expect(burst.detail).toBe(`via http://127.0.0.1:${port}`);
+      expect(bursts).toBe(2);
+
+      // A burst host serving another build is not the production Worker: the burst fails, and nothing is sent.
+      otherBuild = "release/older";
+      bursts = 0;
+      const [, stale] = await runContract(contract, local);
+      expect(stale.pass).toBe(false);
+      expect(stale.detail).toBe(`burst_host http://127.0.0.1:${port} serves release/older, ${local} serves abc123; via http://127.0.0.1:${port}`);
+      expect(bursts).toBe(0);
     } finally {
       other.close();
     }
+  });
+
+  it("host_suffix is judged on the URL the contract ran against, never on a rerouted burst host", async () => {
+    // The base is under burst_zone but not under host_suffix; the burst host is under host_suffix.
+    // Judged on the burst host, the check would run (and fetch); judged on the base, it is n/a.
+    const contract = {
+      burst_zone: "localhost",
+      burst_host: "https://unused.voidvision.org",
+      checks: [{ name: "zone-only burst", type: "burst", path: "/", count: 1, expect_status: 429, host_suffix: "voidvision.org" }],
+    };
+    const [r] = await runContract(contract, baseUrl.replace("127.0.0.1", "localhost"));
+    expect(r).toMatchObject({ notApplicable: true, detail: NOT_APPLICABLE });
   });
 
   it("contract.yaml routes production bursts to this Worker's workers.dev host", () => {
