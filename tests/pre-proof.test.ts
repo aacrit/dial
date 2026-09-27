@@ -144,8 +144,9 @@ describe("a count refused on a shared network is tried once more, after Retry-Af
 
   it("the charter says counts may undercount on shared networks, and how a spike is read", () => {
     expect(read("CHARTER.md")).toContain(
-      "Counts are rate limited per network; large shared networks may undercount; a spike of counts at the daily ceiling is treated as suspect (see the counter's ceiling flag).",
+      'Counts are rate limited per network; large shared networks may undercount; a spike of counts at the daily ceiling is treated as suspect (see "Reading the counts" below: a day whose count equals the ceiling is the signal).',
     );
+    expect(read("CHARTER.md")).toContain("Reading the counts:");
   });
 });
 

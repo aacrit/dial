@@ -64,6 +64,17 @@ export async function shellComplete(caches: CacheStorageLike, b: Pick<ShellBuild
   return true;
 }
 
+/**
+ * The answer to the page's shell-status: whether this build's shell is
+ * whole. Where a work is saved, the shell is completed first (a no-op when
+ * it already is), so a shell left incomplete by an offline activation
+ * heals on the next visit with a connection, before the page says "Saved".
+ */
+export async function shellStatus(caches: CacheStorageLike, b: ShellBuild): Promise<boolean> {
+  if (await anySaved(caches)) await precache(caches, b, b.shell);
+  return shellComplete(caches, b);
+}
+
 /** Whether a work is saved on this device (its text is in the saved cache). Opens no cache that does not exist. */
 export async function anySaved(caches: CacheStorageLike): Promise<boolean> {
   if (!(await caches.has(SAVED_CACHE))) return false;

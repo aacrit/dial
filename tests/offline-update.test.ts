@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SAVED_CACHE, shellCacheName } from "../web/src/offline/routes";
-import { activateShell, anySaved, precache, shellComplete, shellMatch, type CacheStorageLike, type ShellBuild } from "../web/src/offline/shell-cache";
+import { activateShell, anySaved, precache, shellComplete, shellMatch, shellStatus, type CacheStorageLike, type ShellBuild } from "../web/src/offline/shell-cache";
 import { coreShellPaths } from "../scripts/lib/shell.mjs";
 
 const ORIGIN = "https://dial.test";
@@ -111,6 +111,37 @@ describe("a saved work stays playable offline across an update", () => {
     expect(await shellComplete(caches, v2)).toBe(true);
     expect([...(await caches.keys())].filter((n) => n.startsWith("dial-shell-"))).toEqual([shellCacheName("v2")]);
     expect(await (await shellMatch(caches, "v2", new Request(abs(WORKER))))!.text()).toBe(`// ${WORKER} of v2`);
+  });
+
+  it("a shell left incomplete by an offline activation heals on the next shell-status with a connection", async () => {
+    online = true;
+    const caches = new FakeCaches();
+    const v1 = build("v1");
+    const v2 = build("v2");
+    await precache(caches, v1, coreShellPaths(SHELL));
+    await precache(caches, v2, coreShellPaths(SHELL));
+    await saveThrough(caches, v1);
+    online = false;
+    expect(await activateShell(caches, v2)).toBe(false);
+    // Still offline: shell-status cannot complete it, and says so ("Saved" is not shown on a broken shell).
+    expect(await shellStatus(caches, v2)).toBe(false);
+    // The next visit with a connection: shell-status completes the shell before it answers.
+    online = true;
+    expect(await shellStatus(caches, v2)).toBe(true);
+    expect(await shellComplete(caches, v2)).toBe(true);
+    expect(await (await (await caches.open(shellCacheName("v2"))).match(abs(WORKER)))!.text()).toBe(`// ${WORKER} of v2`);
+  });
+
+  it("with nothing saved, shell-status only reports: it downloads nothing a first visit does not need", async () => {
+    online = true;
+    const caches = new FakeCaches();
+    const v2 = build("v2");
+    let fetched = 0;
+    const counting: ShellBuild = { ...v2, get: (p) => (fetched++, v2.get(p)) };
+    await precache(caches, counting, coreShellPaths(SHELL));
+    const before = fetched;
+    expect(await shellStatus(caches, counting)).toBe(false);
+    expect(fetched).toBe(before);
   });
 
   it("with nothing saved, activate deletes the old shells at once and needs no network", async () => {

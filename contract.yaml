@@ -362,13 +362,17 @@ checks:
 
   # http:// answers 301 to https:// (CoS decision I). The redirect is the
   # zone's "Always Use HTTPS" setting, not the Worker's, so this fails until
-  # the founder switches it on; G3 requires it.
-  - name: http:// redirects to https:// (deployed only)
+  # the founder switches it on; G3 requires it. Only the zone's own host
+  # can pass it: on a workers.dev preview (outside the zone) or localhost
+  # the runner reports it "n/a (production host only)", neither passed nor
+  # skipped.
+  - name: http:// redirects to https:// (production host only)
     type: redirect
     path: /
     scheme: http
     expect: 301
     location_starts_with: "https://"
+    host_suffix: voidvision.org
     requires: deployed
     failure_note: "Waiting on the founder: switch on Always Use HTTPS for the voidvision.org zone (the open Board ask). G3 requires this check."
 

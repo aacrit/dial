@@ -209,7 +209,8 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     expect(isThisBuild('<meta name="build" content="def5678" />', "abc1234")).toBe(false);
     expect(isThisBuild("<p>no meta</p>", "abc1234")).toBe(false);
     // "Saved" needs every shell path, checked by the helper for this page's build.
-    expect(sw).toContain("const shellComplete = () => shellCompleteIn(caches, BUILD);");
+    expect(sw).toContain('else if (data?.type === "shell-status") event.waitUntil(shellStatus(caches, BUILD).then((ok) =>');
+    expect(read("web/src/offline/shell-cache.ts")).toMatch(/if \(await anySaved\(caches\)\) await precache\(caches, b, b\.shell\);\s*return shellComplete\(caches, b\);/);
     const store = read("web/src/offline/store.ts");
     expect(store).toContain("const helper = \"serviceWorker\" in navigator ? navigator.serviceWorker.controller : null;");
     expect(store).toContain("resolve({ ok: e.data?.ok === true, key: typeof e.data?.key === \"string\" ? e.data.key : null });");

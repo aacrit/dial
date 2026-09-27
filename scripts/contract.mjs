@@ -44,6 +44,16 @@ export function isLocalUrl(baseUrl) {
   return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1" || host.endsWith(".localhost");
 }
 
+/** The runner's words for a check that does not apply to this host. The /release skill matches them exactly. */
+export const NOT_APPLICABLE = "n/a (production host only)";
+
+/** Whether `baseUrl`'s host is `suffix` or one of its subdomains. */
+export function onHost(baseUrl, suffix) {
+  const host = new URL(baseUrl).hostname.toLowerCase();
+  const s = String(suffix).toLowerCase().replace(/^\./, "");
+  return host === s || host.endsWith(`.${s}`);
+}
+
 function joinUrl(base, checkPath) {
   return new URL(checkPath, base).toString();
 }
@@ -89,6 +99,13 @@ export async function contractFetch(url, init = {}, retryMs = 2000) {
 async function runCheck(check, baseUrl) {
   const target = joinUrl(baseUrl, check.path ?? "/");
   const label = check.name ?? `${check.type} ${check.path ?? "/"}`;
+
+  // A check about the production zone (host_suffix: voidvision.org) does not
+  // apply to any other host, a workers.dev preview included: reported as not
+  // applicable, never as a skip or a pass (the /release skill matches NOT_APPLICABLE).
+  if (check.host_suffix && !onHost(baseUrl, check.host_suffix)) {
+    return { label, pass: true, notApplicable: true, detail: NOT_APPLICABLE };
+  }
 
   if (check.requires === "deployed" && isLocalUrl(baseUrl)) {
     return { label, pass: true, skipped: true, detail: "skipped: needs deployed runtime" };
@@ -241,14 +258,17 @@ async function main() {
   }
 
   const results = await runContract(contract, baseUrl);
-  const passed = results.filter((r) => r.pass && !r.skipped).length;
+  const passed = results.filter((r) => r.pass && !r.skipped && !r.notApplicable).length;
   const skipped = results.filter((r) => r.skipped).length;
-  const ran = results.length - skipped;
+  const notApplicable = results.filter((r) => r.notApplicable).length;
+  const ran = results.length - skipped - notApplicable;
 
   for (const r of results) {
-    console.log(`${r.skipped ? "SKIP" : r.pass ? "PASS" : "FAIL"}  ${r.label}${r.detail ? ` - ${r.detail}` : ""}`);
+    console.log(`${r.notApplicable ? "N/A " : r.skipped ? "SKIP" : r.pass ? "PASS" : "FAIL"}  ${r.label}${r.detail ? ` - ${r.detail}` : ""}`);
   }
-  console.log(`\n${passed}/${ran} checks passed against ${baseUrl}${skipped ? `; ${skipped} skipped: needs deployed runtime` : ""}`);
+  console.log(
+    `\n${passed}/${ran} checks passed against ${baseUrl}${skipped ? `; ${skipped} skipped: needs deployed runtime` : ""}${notApplicable ? `; ${notApplicable} ${NOT_APPLICABLE}` : ""}`,
+  );
 
   if (passed !== ran) {
     process.exit(1);

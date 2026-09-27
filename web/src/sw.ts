@@ -12,7 +12,7 @@ import { REQUESTS_ASK, REQUESTS_MESSAGE, watchWorkerRequests } from "./worker-re
 import { answerFor, claim, groupByClient, prune, remember, settle, type HelperEntry, type PendingFetch } from "./offline/attribution";
 import type { RawEntry } from "./request-log";
 import { OFFLINE_HEADER, SAVED_CACHE, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey } from "./offline/routes";
-import { activateShell, anySaved, precache as precacheShell, shellComplete as shellCompleteIn, shellMatch, type ShellBuild } from "./offline/shell-cache";
+import { activateShell, anySaved, precache as precacheShell, shellMatch, shellStatus, type ShellBuild } from "./offline/shell-cache";
 
 declare const __BUILD_TAG__: string;
 declare const __SHELL__: string[];
@@ -52,7 +52,6 @@ const SHELL = shellCacheName(__BUILD_TAG__);
 /** This build's shell: its tag, its paths, and how a path is fetched (this origin only, past the HTTP cache). */
 const BUILD: ShellBuild = { tag: __BUILD_TAG__, shell: __SHELL__, get: (path) => fetch(path, { cache: "reload" }) };
 const precache = (paths: readonly string[]) => precacheShell(caches, BUILD, paths);
-const shellComplete = () => shellCompleteIn(caches, BUILD);
 
 // An incomplete shell fails the install: the browser keeps the previous
 // helper (and its shell) serving, and tries this one again later. A first
@@ -90,7 +89,8 @@ sw.addEventListener("message", (event) => {
   const port = event.ports[0];
   if (!port) return;
   if (data?.type === "ensure-shell") event.waitUntil(precache(__SHELL__).then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
-  else if (data?.type === "shell-status") event.waitUntil(shellComplete().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
+  // Where a work is saved, shell-status completes the shell before it answers (shell-cache.ts shellStatus).
+  else if (data?.type === "shell-status") event.waitUntil(shellStatus(caches, BUILD).then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
 });
 
 async function fromShell(request: Request, client: string): Promise<Response> {

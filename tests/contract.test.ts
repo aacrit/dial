@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { USER_AGENT, contractFetch, describeFetchError, isLocalUrl, loadContract, runContract } from "../scripts/contract.mjs";
+import { NOT_APPLICABLE, USER_AGENT, contractFetch, describeFetchError, isLocalUrl, loadContract, onHost, runContract } from "../scripts/contract.mjs";
 import { contractAt, deployedTag } from "../scripts/deployed-contract.mjs";
 
 let server: Server;
@@ -259,10 +259,57 @@ describe("http:// must redirect to https:// (CoS decision I)", () => {
     expect(served.detail).toMatch(/answered 200, expected 301 to https:\/\/\. Waiting on the founder\.$/);
   });
 
-  it("contract.yaml checks it on the deployed site only, over http, and names the Board ask when it fails", () => {
-    const file = fileURLToPath(new URL("../contract.yaml", import.meta.url));
-    const c = loadContract(path.resolve(file)).checks.find((x: { type: string }) => x.type === "redirect");
-    expect(c).toMatchObject({ path: "/", scheme: "http", expect: 301, location_starts_with: "https://", requires: "deployed" });
+  const yamlCheck = () => loadContract(path.resolve(fileURLToPath(new URL("../contract.yaml", import.meta.url)))).checks.find((x: { type: string }) => x.type === "redirect");
+
+  it("the check is left out on a workers.dev preview and on localhost, reported exactly 'n/a (production host only)', never failed or skipped", async () => {
+    const realFetch = globalThis.fetch;
+    const fetched: string[] = [];
+    globalThis.fetch = (async (u: string | URL) => {
+      fetched.push(String(u));
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+    try {
+      for (const base of ["https://dial.aacrit.workers.dev", "https://abc123-dial.aacrit.workers.dev", baseUrl, "https://voidvision.org.evil.example"]) {
+        const [r] = await runContract({ checks: [yamlCheck()] }, base);
+        expect(r, base).toMatchObject({ pass: true, notApplicable: true, detail: "n/a (production host only)" });
+        expect(r.skipped, base).toBeUndefined();
+      }
+      expect(fetched).toEqual([]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(NOT_APPLICABLE).toBe("n/a (production host only)");
+  });
+
+  it("the check runs on dial.voidvision.org, over http, not following the redirect", async () => {
+    const realFetch = globalThis.fetch;
+    const calls: [string, RequestInit | undefined][] = [];
+    let answer = new Response(null, { status: 301, headers: { location: "https://dial.voidvision.org/" } });
+    globalThis.fetch = (async (u: string | URL, init?: RequestInit) => {
+      calls.push([String(u), init]);
+      return answer;
+    }) as typeof fetch;
+    try {
+      const [ok] = await runContract({ checks: [yamlCheck()] }, "https://dial.voidvision.org");
+      expect(ok.pass).toBe(true);
+      expect(ok.notApplicable).toBeUndefined();
+      expect(calls[0]![0]).toBe("http://dial.voidvision.org/");
+      expect(calls[0]![1]?.redirect).toBe("manual");
+      answer = new Response("page", { status: 200 });
+      const [bad] = await runContract({ checks: [yamlCheck()] }, "https://dial.voidvision.org");
+      expect(bad.pass).toBe(false);
+      expect(bad.detail).toMatch(/answered 200, expected 301 to https:\/\/\. Waiting on the founder/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(onHost("https://dial.voidvision.org", "voidvision.org")).toBe(true);
+    expect(onHost("https://voidvision.org", "voidvision.org")).toBe(true);
+    expect(onHost("https://notvoidvision.org", "voidvision.org")).toBe(false);
+  });
+
+  it("contract.yaml limits it to the production zone's host, over http, and names the Board ask when it fails", () => {
+    const c = yamlCheck();
+    expect(c).toMatchObject({ path: "/", scheme: "http", expect: 301, location_starts_with: "https://", host_suffix: "voidvision.org" });
     expect(c.failure_note).toMatch(/Always Use HTTPS/);
     expect(c.failure_note).toMatch(/Board ask/);
     expect(c.failure_note).toMatch(/G3/);
