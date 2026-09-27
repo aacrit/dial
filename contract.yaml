@@ -110,9 +110,9 @@ checks:
 
   # Every voice file the manifest pins (scripts/fetch-voice.mjs VOICES; the
   # cast in web/src/engine/cast.ts): tests/speakers.test.ts keeps the two lists equal.
-  - name: the voice bm_george is served
+  - name: the voice am_michael is served
     type: status
-    path: /voice/voices/bm_george.bin
+    path: /voice/voices/am_michael.bin
     expect: 200
 
   - name: the voice af_heart is served
@@ -120,14 +120,14 @@ checks:
     path: /voice/voices/af_heart.bin
     expect: 200
 
+  - name: the voice am_fenrir is served
+    type: status
+    path: /voice/voices/am_fenrir.bin
+    expect: 200
+
   - name: the voice bm_fable is served
     type: status
     path: /voice/voices/bm_fable.bin
-    expect: 200
-
-  - name: the voice bm_lewis is served
-    type: status
-    path: /voice/voices/bm_lewis.bin
     expect: 200
 
   - name: the voice's first model part is served

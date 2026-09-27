@@ -17,7 +17,7 @@ import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voice
 
 export interface VoiceManifest extends VoicePins, SizedManifest {
   sha256: string;
-  /** Every voice file in the casting palette, by id, with its SHA-256 pin. */
+  /** Every staged voice file (the narrators and the catalogue's cast voices), by id, with its SHA-256 pin. */
   voices: Record<string, string>;
   /** Every staged byte; no single visit downloads all of it. */
   totalBytes: number;

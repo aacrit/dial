@@ -216,7 +216,7 @@ describe("true copy: the first voice download", () => {
     }
     // Everything the tab downloads for the voice is in the sum.
     expect(kinds.part).toBe(manifest.parts.length);
-    // Every voice the cast can use (George, Heart, Fable, Lewis) is in the total.
+    // Every staged voice (the two narrators and the catalogue's cast voices) is in the total.
     expect(kinds.voice).toBe(Object.keys(VOICES).length);
     expect(kinds.voice).toBe(4);
     expect(kinds.mjs).toBe(1);

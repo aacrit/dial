@@ -43,8 +43,8 @@ export function metaHtml(work: Work, words?: number, cast?: Pick<Cast, "voices">
 }
 
 /**
- * The Voice row's first sentence, from the cast: "Socrates: Fable. Crito:
- * Lewis." for a work whose speakers are labelled, "One voice, George, reads
+ * The Voice row's first sentence, from the cast: "Socrates: Fenrir. Crito:
+ * Fable." for a work whose speakers are labelled, "One voice, Michael, reads
  * every part." for one without labels. Nothing until the text is read.
  */
 export function castSentence(cast?: Pick<Cast, "narrator" | "parts" | "narrated">): string {
@@ -53,7 +53,7 @@ export function castSentence(cast?: Pick<Cast, "narrator" | "parts" | "narrated"
   if (cast.parts.length === 0) return `One voice, ${narrator}, reads every part. `;
   const lines = cast.parts.map((p) => `${esc(speakerName(p.speaker))}: ${VOICE_NAMES[p.voice]}.`);
   if (cast.narrated) lines.unshift(`The narration: ${narrator}.`);
-  return `${lines.join(" ")} Voices are cast in the order the speakers first speak, never from their names. `;
+  return `${lines.join(" ")} Voices are cast from their measured quality and contrast, never from the speakers' names. `;
 }
 
 const SEX_WORDS = { m: "male", f: "female" } as const;
