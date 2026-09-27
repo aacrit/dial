@@ -26,6 +26,16 @@ beforeAll(async () => {
       res.end(JSON.stringify({ error: "rate_limited" }));
       return;
     }
+    if (req.url === "/list-ok") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(["/", "/healthz"]));
+      return;
+    }
+    if (req.url === "/list-bad") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(["/", "/waf"]));
+      return;
+    }
     if (req.url === "/healthz") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, build: "abc123" }));
@@ -83,6 +93,16 @@ describe("contract runner", () => {
     const missing = await runContract({ checks: [{ name: "m", type: "header", path: "/", header: "referrer-policy", expect: "no-referrer" }] }, baseUrl);
     expect(missing[0].pass).toBe(false);
     currentFrameHeader = "DENY";
+  });
+});
+
+describe("contract runner: each_status", () => {
+  it("passes when every listed path answers the status, and names each one that does not", async () => {
+    const [ok] = await runContract({ checks: [{ name: "each", type: "each_status", path: "/list-ok", expect: 200 }] }, baseUrl);
+    expect(ok.pass).toBe(true);
+    const [bad] = await runContract({ checks: [{ name: "each", type: "each_status", path: "/list-bad", expect: 200 }] }, baseUrl);
+    expect(bad.pass).toBe(false);
+    expect(bad.detail).toBe("not 200: /waf 429");
   });
 });
 

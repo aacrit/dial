@@ -12,6 +12,7 @@
 
 import { env } from "@huggingface/transformers";
 import { KokoroTTS } from "kokoro-js";
+import { KOKORO_VOICES_CACHE, MODELS, hfVoiceKey, readCounted, sha256Hex, stitchModel } from "./voice-files";
 import { neededBytes, runtimeCacheKey, runtimeCacheName, staleVoiceCaches, voiceCacheName, type Need, type SizedManifest, type VoicePins } from "./voice-cache";
 
 export interface VoiceManifest extends VoicePins, SizedManifest {
@@ -32,13 +33,6 @@ export interface LoadedVoice {
   kept: boolean;
 }
 
-const MODELS = "/voice/models/";
-
-async function sha256Hex(buf: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 /** A cache write that may fail (a full quota) without stopping the voice. Returns whether it was kept. */
 async function keep(cache: Cache, key: string, response: Response): Promise<boolean> {
   try {
@@ -48,21 +42,6 @@ async function keep(cache: Cache, key: string, response: Response): Promise<bool
     // Out of space or storage blocked: the bytes stay in memory for this visit.
     return false;
   }
-}
-
-async function stitchModel(m: VoiceManifest, count: (bytes: number) => void): Promise<Response> {
-  const buffers: ArrayBuffer[] = [];
-  for (const part of m.parts) {
-    const res = await fetch(`/voice/models/${m.repo}/onnx/${part}`);
-    if (!res.ok) throw new Error(`voice part ${part}: ${res.status}`);
-    const buf = await res.arrayBuffer();
-    count(buf.byteLength);
-    buffers.push(buf);
-  }
-  const blob = new Blob(buffers);
-  const whole = await blob.arrayBuffer();
-  if ((await sha256Hex(whole)) !== m.sha256) throw new Error("voice: the model did not match its pin");
-  return new Response(blob, { headers: { "content-type": "application/octet-stream", "content-length": String(blob.size) } });
 }
 
 /**
@@ -97,8 +76,8 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
   // kokoro-js looks for a voice in the "kokoro-voices" cache under its
   // Hugging Face address before it would fetch one; put ours there first,
   // so that fetch never happens. A cached voice that fails its pin is dropped.
-  const voiceKey = (id: string) => `https://huggingface.co/${manifest.repo}/resolve/main/voices/${id}.bin`;
-  const voices = await caches.open("kokoro-voices");
+  const voiceKey = (id: string) => hfVoiceKey(manifest.repo, id);
+  const voices = await caches.open(KOKORO_VOICES_CACHE);
   const runtimeKey = runtimeCacheKey(manifest);
   const cast = [...new Set(wanted)];
   for (const id of cast) if (!Object.hasOwn(manifest.voices, id)) throw new Error(`voice: ${id} is not pinned`);
@@ -145,8 +124,7 @@ export async function loadVoice(wanted: readonly string[], onProgress: VoiceProg
       if (!key.startsWith(MODELS)) return undefined;
       const res = await fetch(`/voice/models/${key.slice(MODELS.length)}`);
       if (!res.ok) return undefined;
-      const buf = await res.arrayBuffer();
-      count(buf.byteLength);
+      const buf = await readCounted(res, count);
       const file = new Response(buf, { headers: res.headers });
       await hold(cache, key, file.clone());
       return file;

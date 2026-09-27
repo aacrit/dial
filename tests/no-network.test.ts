@@ -10,6 +10,7 @@ import { CSP } from "../scripts/lib/csp.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const allow = JSON.parse(readFileSync(path.join(root, "privacy-allowlist.json"), "utf8")) as { sends: string[]; downloads: string[] };
+// "/voice/manifest.json" is under "/voice/": the allowlist's downloads are prefixes.
 const sources = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[])
   .filter((f) => f.endsWith(".ts"))
   .map((f) => [f.split(path.sep).join("/"), readFileSync(path.join(root, "web/src", f), "utf8")] as const);
@@ -23,7 +24,10 @@ describe("Law 1: no request leaves this origin", () => {
   it("every fetch() in web/src names an allowlisted same-origin path", () => {
     const allowed = [...allow.sends, ...allow.downloads];
     let seen = 0;
-    for (const [file, src] of sources) {
+    // The offline helper (sw.ts) fetches the page's own request after its
+    // same-origin routing, and the shell's paths: tests/offline.test.ts holds
+    // both to this origin.
+    for (const [file, src] of sources.filter(([f]) => f !== "sw.ts")) {
       for (const m of src.matchAll(/\bfetch\(\s*([^,)]+)/g)) {
         seen++;
         const arg = m[1]!.trim();

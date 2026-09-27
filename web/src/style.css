@@ -779,6 +779,164 @@ progress::-moz-progress-bar {
   border-top: 1px solid var(--color-border);
 }
 
+/* ---- Save for offline, the offline notice, the install cards --------------
+   The row always carries a label (design/spec.md 1.9): Save for offline,
+   Saving… with its bytes and Cancel, Saved for offline with Remove. The
+   green pip is the magic eye: a thing on this device checked and in place. */
+
+.save {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.save .btn {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 0.9rem;
+}
+
+.save .sz {
+  font-size: 0.8rem;
+  color: var(--color-cream-muted);
+  line-height: 1.35;
+}
+
+.save .ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.save .bar {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--color-cream-faint);
+  overflow: hidden;
+  appearance: none;
+}
+
+.save .bar::-webkit-progress-bar {
+  background: var(--color-cream-faint);
+}
+
+.save .bar::-webkit-progress-value {
+  background: var(--color-filament);
+}
+
+.save .bar::-moz-progress-bar {
+  background: var(--color-filament);
+}
+
+.save .btn.text,
+.save .save-error {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.save .save-error {
+  font-size: 0.84rem;
+  color: var(--color-cream);
+}
+
+.btn.text {
+  background: transparent;
+  color: var(--color-filament);
+  padding: 0 4px;
+  min-height: 44px;
+}
+
+.btn.text:hover {
+  background: transparent;
+  color: var(--color-filament-hover);
+}
+
+.pip {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.pip.eye {
+  background: var(--color-magic-eye);
+}
+
+.notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  font-size: 0.9rem;
+}
+
+.glyph {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.card.install {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.card.install h2 {
+  margin: 0;
+}
+
+.install-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.install-note {
+  font-size: 0.88rem;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.3em;
+  display: grid;
+  gap: 6px;
+  font-size: 0.95rem;
+}
+
+.steps li::marker {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cream-muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .drill > summary {
   list-style: none;
   display: flex;

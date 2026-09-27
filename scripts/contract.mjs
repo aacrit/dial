@@ -132,6 +132,19 @@ async function runCheck(check, baseUrl) {
         const pass = found.length === 0;
         return { label, pass, detail: pass ? undefined : `found forbidden string(s): ${found.join(", ")}` };
       }
+      case "each_status": {
+        // `path` answers a JSON list of this site's paths; each must answer `expect`.
+        const list = await response.json();
+        if (!Array.isArray(list) || list.length === 0) return { label, pass: false, detail: `no list of paths at ${target}` };
+        const bad = [];
+        for (const p of list) {
+          const r = await fetch(new URL(p, baseUrl));
+          await r.arrayBuffer();
+          if (r.status !== check.expect) bad.push(`${p} ${r.status}`);
+        }
+        const pass = bad.length === 0;
+        return { label, pass, detail: pass ? undefined : `not ${check.expect}: ${bad.join(", ")}` };
+      }
       case "header": {
         // A response header, matched exactly (`expect`) or by
         // substring (`contains`). Header names are case-insensitive.

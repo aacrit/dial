@@ -140,6 +140,33 @@ checks:
     path: /ort/ort-wasm-simd-threaded.jsep.mjs
     expect: 200
 
+  # T4: the installable app and the offline helper (web/src/sw.ts, built
+  # to dist/sw.js), both static files from this origin.
+  - name: the app manifest is served
+    type: status
+    path: /manifest.webmanifest
+    expect: 200
+
+  - name: the app manifest names Dial
+    type: contains
+    path: /manifest.webmanifest
+    text: "\"short_name\": \"Dial\""
+
+  - name: the app icon is served
+    type: status
+    path: /icons/dial-192.png
+    expect: 200
+
+  - name: the offline helper is served
+    type: status
+    path: /sw.js
+    expect: 200
+
+  - name: the offline helper served is the built one (it names the routes it leaves alone)
+    type: contains
+    path: /sw.js
+    text: "/feedback"
+
   - name: homepage is cross-origin isolated (threaded render)
     type: header
     path: /
@@ -190,6 +217,15 @@ checks:
     path: /healthz
     header: x-frame-options
     expect: DENY
+
+  # Every file the offline helper keeps (dist/offline-shell.json, the list
+  # compiled into /sw.js) is served. Waits out the zone WAF's 10 s window
+  # first, since the pages and icons are outside /assets/.
+  - name: every offline shell file is served
+    type: each_status
+    path: /offline-shell.json
+    expect: 200
+    pause_before_seconds: 11
 
   # The per-client rate limit actually bites. The Workers Rate Limiting
   # binding only counts on Cloudflare, so this runs against the preview and

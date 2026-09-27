@@ -22,6 +22,15 @@
 
 import type { Cue } from "./segment";
 
+/**
+ * The casting rule's version. Bump it whenever a change here can give a work
+ * a different set of voices (a new narrator, a new palette, a new scoring
+ * rule): works saved for offline under another version are then shown as
+ * "Saved on an older version" (offline/routes.ts offlineKey) until the
+ * listener reopens Dial with a connection.
+ */
+export const CAST_ENGINE_VERSION = "1";
+
 /** A voice's sex, as its model publishes it, and as a cast sheet declares it. */
 export type VoiceSex = "m" | "f";
 
