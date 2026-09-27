@@ -1,0 +1,487 @@
+// T6: the Seal at /seal. The request log's classification (sent, fetched,
+// blocked; this origin or not) as pure functions, the counts switch that
+// stops every sendEvent, the speed test's words and its no-send path, and
+// the escaping of everything the log renders.
+
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it, vi } from "vitest";
+import { parse as parseYaml } from "yaml";
+import {
+  SEND_PATHS,
+  appendLog,
+  blockedRecord,
+  classify,
+  fromEntry,
+  isSealed,
+  logRowsHtml,
+  confirmSend,
+  footHtml,
+  markFailed,
+  parseLog,
+  sealWords,
+  sentRecord,
+  serializeLog,
+  sizeLabel,
+  summarize,
+  toRecord,
+  totalsHtml,
+  whatItWas,
+  type RequestRecord,
+} from "../web/src/request-log";
+import { COUNTS_KEY, STORAGE_REFUSED, canKeepSetting, countsOn, sendEvent, setCounts, type SendDeps, type SettingStore } from "../web/src/telemetry";
+import { PLANNING_MARGIN, benchNeedLine, benchStopLine, cpuDetailsHtml, plannedSpeed, reportsHtml, speedLabel, speedOf, verdictHtml } from "../web/src/bench";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const read = (f: string) => readFileSync(path.join(root, f), "utf8");
+const ORIGIN = "https://dial.voidvision.org";
+const XSS = `"><img src=x onerror=alert(1)>`;
+
+const entry = (url: string, over: Partial<{ t: number; transferSize: number; encodedBodySize: number }> = {}) => ({
+  url,
+  t: over.t ?? 1_790_000_000_000,
+  transferSize: over.transferSize ?? 500,
+  encodedBodySize: over.encodedBodySize ?? 400,
+});
+
+describe("the request log: sent, fetched and blocked, this origin or not", () => {
+  it("the send paths are privacy-allowlist.json's sends", () => {
+    expect([...SEND_PATHS]).toEqual(JSON.parse(read("privacy-allowlist.json")).sends);
+  });
+
+  it("classifies a same-origin send, a same-origin fetch, another origin, and non-network addresses", () => {
+    expect(classify(`${ORIGIN}/e`, ORIGIN)).toEqual({ path: "/e", own: true, dir: "sent" });
+    expect(classify(`${ORIGIN}/feedback`, ORIGIN)).toEqual({ path: "/feedback", own: true, dir: "sent" });
+    expect(classify(`${ORIGIN}/works/cave.txt`, ORIGIN)).toEqual({ path: "/works/cave.txt", own: true, dir: "fetched" });
+    expect(classify(`${ORIGIN}/e/x`, ORIGIN)?.dir).toBe("fetched");
+    expect(classify("https://fonts.gstatic.com/s/roboto.woff2", ORIGIN)).toEqual({ path: "https://fonts.gstatic.com/s/roboto.woff2", own: false, dir: "fetched" });
+    // A look-alike host is another origin.
+    expect(classify("https://dial.voidvision.org.evil.example/e", ORIGIN)?.own).toBe(false);
+    expect(classify("http://dial.voidvision.org/e", ORIGIN)?.own).toBe(false);
+    for (const u of ["data:image/svg+xml,x", "blob:https://dial.voidvision.org/abc", "about:blank", "inline", "eval"]) expect(classify(u, ORIGIN), u).toBeNull();
+  });
+
+  it("a fetched entry keeps its body size and marks a cache hit; another origin's hidden size is not known", () => {
+    expect(fromEntry(entry(`${ORIGIN}/`), ORIGIN)).toMatchObject({ path: "/", own: true, dir: "fetched", bytes: 400 });
+    expect(fromEntry(entry(`${ORIGIN}/assets/a.js`, { transferSize: 0 }), ORIGIN)?.served).toBe("cache");
+    // A copy from memory reports no sizes: from the cache, size not known, never "0 B".
+    expect(fromEntry(entry(`${ORIGIN}/assets/a.js`, { transferSize: 0, encodedBodySize: 0 }), ORIGIN)).toMatchObject({ served: "cache", bytes: null });
+    // Answered by Dial's offline helper (workerStart > 0): the helper, never "cache", even with nothing transferred.
+    expect(fromEntry({ ...entry(`${ORIGIN}/`, { transferSize: 0 }), workerStart: 12.5 }, ORIGIN)?.served).toBe("helper");
+    expect(fromEntry({ ...entry(`${ORIGIN}/`), workerStart: 0 }, ORIGIN)?.served).toBeUndefined();
+    // The helper's own request is marked as its own.
+    expect(fromEntry(entry(`${ORIGIN}/assets/a.js`), ORIGIN, "helper")?.by).toBe("helper");
+    expect(fromEntry(entry("https://cdn.example/x.js", { transferSize: 0, encodedBodySize: 0 }), ORIGIN)?.bytes).toBeNull();
+  });
+
+  it("a send is recorded by its sender; the browser's entry only confirms it, oldest first, and an unrecorded send is listed with its size not known", () => {
+    expect(sentRecord("/e", 20, 1000.4, "page_view")).toEqual({ t: 1000, path: "/e", own: true, dir: "sent", bytes: 20, event: "page_view" });
+    const pending = ["/e", "/feedback", "/e"];
+    expect(confirmSend(fromEntry(entry(`${ORIGIN}/e`), ORIGIN)!, pending)).toBeNull();
+    expect(pending).toEqual(["/feedback", "/e"]);
+    expect(confirmSend(fromEntry(entry(`${ORIGIN}/feedback`), ORIGIN)!, pending)).toBeNull();
+    expect(confirmSend(fromEntry(entry(`${ORIGIN}/e`), ORIGIN)!, pending)).toBeNull();
+    const unrecorded = confirmSend(fromEntry(entry(`${ORIGIN}/e`), ORIGIN)!, pending);
+    expect(unrecorded).toMatchObject({ dir: "sent", bytes: null });
+    expect(unrecorded!.event).toBeUndefined();
+    // A fetched row passes through and confirms nothing.
+    const keep = ["/e"];
+    expect(confirmSend(fromEntry(entry(`${ORIGIN}/`), ORIGIN)!, keep)?.bytes).toBe(400);
+    expect(keep).toEqual(["/e"]);
+  });
+
+  it("the recorder writes a send at send time and keeps it; a later send keeps its own name; entries never re-pair", async () => {
+    const data: Record<string, string> = {};
+    const session = { getItem: (k: string) => data[k] ?? null, setItem: (k: string, v: string) => void (data[k] = v) };
+    vi.stubGlobal("window", { sessionStorage: session });
+    vi.stubGlobal("location", { origin: ORIGIN });
+    vi.resetModules();
+    try {
+      const rec = await import("../web/src/request-recorder");
+      rec.noteSend("/e", 20, "page_view");
+      // No entry ever arrives for this send (a failed or unrecorded request): the row stays.
+      let log = rec.readLog();
+      expect(log.records).toEqual([expect.objectContaining({ path: "/e", dir: "sent", bytes: 20, event: "page_view" })]);
+      expect(parseLog(data[rec.LOG_KEY]!).records).toHaveLength(1);
+      rec.noteSend("/e", 27, "chapter_rendered");
+      // The browser's entries confirm both sends and add no row, in any order they arrive.
+      rec.recordEntries([entry(`${ORIGIN}/e`, { t: 5 }), entry(`${ORIGIN}/e`, { t: 6 })]);
+      log = rec.readLog();
+      expect(log.records.map((r) => [r.bytes, r.event])).toEqual([
+        [20, "page_view"],
+        [27, "chapter_rendered"],
+      ]);
+      // A third entry with no send behind it is listed as it is, size not known.
+      rec.recordEntries([entry(`${ORIGIN}/e`, { t: 7 })]);
+      expect(rec.readLog().records.filter((r) => r.dir === "sent")).toHaveLength(3);
+      expect(rec.readLog().records.find((r) => r.t === 7)?.bytes).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it("sealed while every request went to this origin; a blocked request never left, so it keeps the seal; anything else opens it", () => {
+    const own = fromEntry(entry(`${ORIGIN}/`), ORIGIN)!;
+    const blocked = blockedRecord("https://fonts.gstatic.com/x.woff2", 2, ORIGIN)!;
+    const foreign = fromEntry(entry("https://tracker.example/p.gif"), ORIGIN)!;
+    expect(isSealed([])).toBe(true);
+    expect(isSealed([own])).toBe(true);
+    expect(isSealed([own, blocked])).toBe(true);
+    expect(isSealed([own, foreign])).toBe(false);
+    expect(blockedRecord("inline", 2, ORIGIN)).toBeNull();
+    const s = summarize([own, blocked, foreign]);
+    expect(s).toMatchObject({ fetched: 2, blocked: 1, foreign: 1, counts: 0 });
+  });
+
+  it("the summary counts sends apart from fetches, and says what it was in plain words", () => {
+    const recs: RequestRecord[] = [
+      { t: 3, path: "/e", own: true, dir: "sent", bytes: 20, event: "page_view" },
+      { t: 1, path: "/", own: true, dir: "fetched", bytes: 3100 },
+      { t: 2, path: "/voice/models/onnx-community/Kokoro-82M-v1.0-ONNX/onnx/model_quantized.part0", own: true, dir: "fetched", bytes: 20_971_520 },
+      { t: 4, path: "/feedback", own: true, dir: "sent", bytes: null },
+    ];
+    const s = summarize(recs);
+    expect(s).toMatchObject({ counts: 1, feedback: 1, sentBytes: 20, sentUnknown: 1, fetched: 2, fetchedBytes: 20_974_620, cached: 0, since: 1, lastSent: 4 });
+    expect(whatItWas(recs[0]!)).toBe("Count: page_view");
+    expect(whatItWas(recs[2]!)).toBe("Voice model, part 1");
+    expect(whatItWas({ path: "/voice/voices/bm_george.bin", own: true, dir: "fetched" })).toBe("Voice: George");
+    expect(whatItWas({ path: "/seal", own: true, dir: "fetched" })).toBe("The page");
+    expect(sizeLabel(27)).toBe("27 B");
+    expect(sizeLabel(114_600_000)).toBe("114.6 MB");
+    expect(sizeLabel(null)).toBe("not known");
+  });
+
+  it("the stored log reads back only well-formed records, keeps newest last, and caps its size", () => {
+    expect(parseLog(null)).toEqual({ records: [], dropped: 0 });
+    expect(parseLog("{not json")).toEqual({ records: [], dropped: 0 });
+    const good = { t: 1, path: "/", own: true, dir: "fetched", bytes: 1 };
+    const raw = JSON.stringify({ records: [good, { ...good, dir: "evil" }, { ...good, bytes: -1 }, { ...good, t: "x" }, { ...good, event: "<b>" }], dropped: 2 });
+    const back = parseLog(raw);
+    expect(back.records).toHaveLength(2);
+    expect(back.records[1]!.event).toBeUndefined();
+    expect(back.dropped).toBe(2);
+    expect(toRecord({ ...good, path: "" })).toBeNull();
+    const log = appendLog({ records: [], dropped: 0 }, [{ ...good, t: 5 } as RequestRecord, { ...good, t: 2 } as RequestRecord, { ...good, t: 9 } as RequestRecord], 2);
+    expect(log.records.map((r) => r.t)).toEqual([5, 9]);
+    expect(log.dropped).toBe(1);
+    expect(parseLog(serializeLog(log))).toEqual(log);
+  });
+});
+
+describe("escaping: every rendered path, label and host", () => {
+  it("a hostile path from the network or from storage renders as text", () => {
+    const recs: RequestRecord[] = [
+      { t: 1, path: `/works/${XSS}`, own: true, dir: "fetched", bytes: 1 },
+      { t: 2, path: `https://x.example/${XSS}`, own: false, dir: "fetched", bytes: null },
+      { t: 3, path: `/e?${XSS}`, own: true, dir: "sent", bytes: 5 },
+      { t: 4, path: XSS, own: false, dir: "blocked", bytes: null },
+    ];
+    const html = logRowsHtml(recs);
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&quot;&gt;&lt;img src=x onerror=alert(1)&gt;");
+    // A stored record's path goes through the same renderer.
+    const back = parseLog(JSON.stringify({ records: recs, dropped: 0 })).records;
+    expect(logRowsHtml(back)).not.toContain("<img");
+    const words = sealWords(summarize(recs), false, "on", XSS);
+    expect(words.say).not.toContain("<img");
+    expect(sealWords(summarize([recs[0]!]), true, "on", XSS).say).not.toContain("<img");
+    expect(totalsHtml(summarize(recs))).not.toContain("<img");
+  });
+});
+
+describe("the Seal's words are true in every state", () => {
+  const page: RequestRecord = { t: new Date(2026, 8, 26, 21, 4, 7).getTime(), path: "/seal", own: true, dir: "fetched", bytes: 2900 };
+  const count: RequestRecord = { t: page.t + 1000, path: "/e", own: true, dir: "sent", bytes: 20, event: "page_view" };
+
+  it("sealed, with a count sent: names the count, its bytes, and where everything else came from", () => {
+    const w = sealWords(summarize([page, count]), true, "on", "dial.voidvision.org");
+    expect(w.headline).toBe("Sealed");
+    expect(w.say.replace(/<[^>]+>/g, "")).toBe(
+      "Since you opened Dial at 21:04, this tab has sent 1 count with no identifier and no content: 20 bytes. Everything else was fetched: 1 file from dial.voidvision.org, and it stays on this device.",
+    );
+  });
+
+  it("nothing sent: says so", () => {
+    expect(sealWords(summarize([page]), true, "on", "h").say.replace(/<[^>]+>/g, "")).toContain("this tab has sent nothing.");
+  });
+
+  it("counts off: says none are sent, and why earlier ones are still listed", () => {
+    const say = sealWords(summarize([page, count]), true, "off", "h").say.replace(/<[^>]+>/g, "");
+    expect(say).toMatch(/^Counts are off, so this tab sends none\. Counts sent before you turned them off are still listed below/);
+    expect(sealWords(summarize([page]), true, "off", "h").say).not.toContain("still listed");
+  });
+
+  it("counts on: the sentence never says they are off", () => {
+    expect(sealWords(summarize([page]), true, "on", "h").say).not.toContain("Counts are off");
+  });
+
+  it("a send that was not delivered is marked, and the sentence counts only delivered sends", () => {
+    const lost: RequestRecord = { ...count, t: count.t + 1, event: "work_opened", failed: true };
+    const s = summarize([page, count, lost]);
+    expect(s).toMatchObject({ counts: 1, sentBytes: 20, failed: 1 });
+    const say = sealWords(s, true, "on", "h").say.replace(/<[^>]+>/g, "");
+    expect(say).toContain("this tab has sent 1 count with no identifier and no content: 20 bytes. 1 more send was not delivered: the network failed before it arrived.");
+    const rows = logRowsHtml([lost]);
+    expect(rows).toContain('class="sent failed"');
+    expect(rows).toContain("not delivered");
+    expect(totalsHtml(s).replace(/<[^>]+>/g, "")).toContain("1 count, 20 B; 1 more was not delivered");
+    // markFailed marks the one send recorded at that time, and toRecord keeps the mark only on a send.
+    const log = markFailed({ records: [page, count], dropped: 0 }, count.t, "/e");
+    expect(log.records[1]!.failed).toBe(true);
+    expect(markFailed(log, 1, "/e")).toBe(log);
+    expect(toRecord({ ...count, failed: true })?.failed).toBe(true);
+    expect(toRecord({ ...page, failed: true })?.failed).toBeUndefined();
+    expect(toRecord({ ...page, served: "elsewhere" })?.served).toBeUndefined();
+  });
+
+  it("once old records were dropped, the log no longer starts when Dial was opened: only \"Since\"", () => {
+    const say = sealWords(summarize([page, count]), true, "on", "h", 12).say.replace(/<[^>]+>/g, "");
+    expect(say).toMatch(/^Since 21:04, this tab has sent/);
+    expect(say).not.toContain("opened Dial");
+    expect(footHtml(true, 12)).toContain("<span data-numeral>12</span> requests are no longer listed");
+    expect(footHtml(true, 1)).toContain("request is no longer listed");
+    expect(footHtml(true, 0)).toBe("Newest last. Nothing has been sent to any other address.");
+    expect(footHtml(false, 0)).toContain("Marked rows went to another address.");
+  });
+
+  it("cached and helper-served files are counted, but add nothing to what crossed the network", () => {
+    const cached: RequestRecord = { t: page.t + 5, path: "/assets/a.js", own: true, dir: "fetched", bytes: 9000, served: "cache" };
+    const helped: RequestRecord = { t: page.t + 6, path: "/assets/b.js", own: true, dir: "fetched", bytes: 7000, served: "helper" };
+    const byHelper: RequestRecord = { t: page.t + 7, path: "/assets/c.js", own: true, dir: "fetched", bytes: 1000, by: "helper" };
+    const s = summarize([page, cached, helped, byHelper]);
+    expect(s).toMatchObject({ fetched: 4, fetchedBytes: 3900, cached: 1, helper: 1 });
+    expect(totalsHtml(s).replace(/<[^>]+>/g, "").replace("&middot;", "·")).toBe(
+      "Sent: nothing · Fetched: 4 files, 3.9 kB over the network; 1 from this device's cache and 1 from Dial's offline helper",
+    );
+    const rows = logRowsHtml([cached, helped, byHelper]).replaceAll("&#39;", "'");
+    expect(rows).toContain("from this device's cache");
+    expect(rows).toContain("from Dial's offline helper");
+    expect(rows).toContain("requested by Dial's offline helper");
+    // Only a true HTTP-cache hit says "cache".
+    expect(logRowsHtml([helped])).not.toMatch(/device&#39;s cache/);
+  });
+
+  it("blocked: still sealed; another origin: open, and says it should not be possible", () => {
+    expect(sealWords(summarize([page, blockedRecord("https://x.example/a", 5, ORIGIN)!]), true, "on", "h").headline).toBe("Still sealed");
+    const open = sealWords(summarize([page, fromEntry(entry("https://x.example/a"), ORIGIN)!]), false, "on", "h");
+    expect(open.headline).toBe("Open");
+    expect(open.say).toContain("this should not be possible");
+  });
+
+  it("an unpaired send's size is not claimed", () => {
+    const say = sealWords(summarize([page, { ...count, bytes: null }]), true, "on", "h").say;
+    expect(say).not.toContain("bytes");
+  });
+});
+
+// ---- The counts switch -------------------------------------------------------
+
+function memoryStore(init: Record<string, string> = {}): SettingStore & { data: Record<string, string> } {
+  const data = { ...init };
+  return { data, getItem: (k) => (k in data ? data[k]! : null), setItem: (k, v) => void (data[k] = v) };
+}
+
+function deps(store: SettingStore | null, fails = false) {
+  const fetch = vi.fn((_input: string, _init: RequestInit) => (fails ? Promise.reject(new TypeError("Failed to fetch")) : Promise.resolve(new Response(null, { status: 202 }))));
+  const note = vi.fn((path: string, _bytes: number, _event?: string) => ({ t: 1, path }));
+  const failed = vi.fn();
+  return { d: { fetch, store, note, failed } satisfies SendDeps, fetch, note, failed };
+}
+
+describe("the counts switch stops every sendEvent", () => {
+
+  it("on by default: each count posts {name} to /e as same-origin JSON, and notes its size for the log", () => {
+    const { d, fetch, note } = deps(memoryStore());
+    sendEvent("page_view", d);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("/e");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe('{"name":"page_view"}');
+    expect(note).toHaveBeenCalledWith("/e", 20, "page_view");
+  });
+
+  it("off: page_view, work_opened and chapter_rendered all post nothing, and note nothing", () => {
+    const store = memoryStore();
+    expect(setCounts(false, store)).toBe(true);
+    expect(store.data[COUNTS_KEY]).toBe("off");
+    const { d, fetch, note } = deps(store);
+    for (const name of JSON.parse(JSON.stringify(parseYaml(read("contract.yaml")).events.allowed)) as string[]) sendEvent(name, d);
+    for (const name of ["page_view", "work_opened", "chapter_rendered"]) sendEvent(name, d);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(note).not.toHaveBeenCalled();
+    // Back on: counts go again.
+    setCounts(true, store);
+    sendEvent("page_view", d);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("a send the network drops is marked not delivered; a delivered one is not", async () => {
+    const lost = deps(memoryStore(), true);
+    sendEvent("work_opened", lost.d);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(lost.failed).toHaveBeenCalledWith({ t: 1, path: "/e" });
+    const ok = deps(memoryStore());
+    sendEvent("work_opened", ok.d);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ok.failed).not.toHaveBeenCalled();
+  });
+
+  it("the setting lives under one key; storage that refuses changes nothing, and the Seal disables the switch", () => {
+    expect(COUNTS_KEY).toBe("dial.counts");
+    expect(countsOn(memoryStore({ [COUNTS_KEY]: "off" }))).toBe(false);
+    expect(countsOn(memoryStore({ [COUNTS_KEY]: "on" }))).toBe(true);
+    expect(countsOn(memoryStore())).toBe(true);
+    const refusing: SettingStore = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+    };
+    expect(setCounts(false, refusing)).toBe(false);
+    // Nothing changed: counts are still on, and still send.
+    const { d, fetch } = deps(refusing);
+    sendEvent("chapter_rendered", d);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(setCounts(false, null)).toBe(false);
+    expect(countsOn(null)).toBe(true);
+    expect(canKeepSetting(null)).toBe(false);
+    expect(canKeepSetting(memoryStore())).toBe(true);
+    expect(STORAGE_REFUSED).toBe("This browser will not keep the setting, so Dial cannot turn counts off here.");
+    expect(read("web/src/seal.ts")).toMatch(/if \(!canKeepSetting\(\)\) refuse\(\);/);
+    expect(read("web/src/seal.ts")).toMatch(/if \(!kept\) refuse\(\);/);
+  });
+
+  it("every count in web/src goes through telemetry.ts sendEvent: no other /e sender, no second definition", () => {
+    const files = (readdirSync(path.join(root, "web/src"), { recursive: true, encoding: "utf8" }) as string[]).filter((f) => f.endsWith(".ts")).map((f) => f.split(path.sep).join("/"));
+    for (const f of files) {
+      const src = read(`web/src/${f}`);
+      if (f !== "telemetry.ts") {
+        expect(src, f).not.toMatch(/fetch\(\s*["'`]\/e["'`]/);
+        expect(src, f).not.toMatch(/function sendEvent\b/);
+      }
+      if (/\bsendEvent\(/.test(src) && f !== "telemetry.ts") expect(src, f).toMatch(/import \{[^}]*\bsendEvent\b[^}]*\} from "\.\/telemetry";/);
+    }
+    expect(read("web/src/telemetry.ts")).toMatch(/export function sendEvent\(name: string, deps: SendDeps = defaults\(\)\): void \{\s*if \(!countsOn\(deps\.store\)\) return;/);
+  });
+});
+
+// ---- The speed of this device ---------------------------------------------------
+
+describe("speed of this device: processor only, results never sent", () => {
+  it("speed is seconds of speech per second of work; Dial plans on 80% of it", () => {
+    expect(speedOf(3, 1000)).toBe(3);
+    expect(speedOf(3, 0)).toBe(0);
+    // Kept for T7; not in the copy until the radio plans on it.
+    expect(PLANNING_MARGIN).toBe(0.8);
+    expect(plannedSpeed(1.1)).toBeCloseTo(0.88);
+    expect(speedLabel(1.1)).toBe("1.1×");
+    expect(speedLabel(0.88)).toBe("0.88×");
+    // The 1.00× edge: just under 1 reads "1.0×" and "as fast as real time", never "1.00×, slower".
+    expect(speedLabel(0.996)).toBe("1.0×");
+    expect(speedLabel(0.994)).toBe("0.99×");
+    expect(verdictHtml(0.996).replace(/<[^>]+>/g, "")).toBe("Dial will use the processor: 1.0×, as fast as real time.");
+    expect(verdictHtml(1.04).replace(/<[^>]+>/g, "")).toBe("Dial will use the processor: 1.0×, as fast as real time.");
+    expect(verdictHtml(1.1).replace(/<[^>]+>/g, "")).toBe("Dial will use the processor: 1.1×, faster than real time.");
+    expect(verdictHtml(0.7).replace(/<[^>]+>/g, "")).toBe("Dial will use the processor: 0.70×, slower than real time.");
+    expect(verdictHtml(1.02).replace(/<[^>]+>/g, "")).toBe("Dial will use the processor: 1.0×, as fast as real time.");
+    // No planning claim reaches the page before T7.
+    for (const x of [0.5, 1, 3]) expect(verdictHtml(x)).not.toMatch(/plan|80|margin/i);
+    for (const f of ["web/seal.html", "web/src/seal.ts"]) expect(read(f), f).not.toMatch(/plans on|80%|PLANNING_MARGIN|plannedSpeed/);
+  });
+
+  it("before the click, the button line states what the test will download, by the radio's size rules", () => {
+    expect(benchNeedLine(0, "none", 0)).toBe("The test uses the voice already on this device.");
+    expect(benchNeedLine(114_527_513, "all", 1)).toBe("The test downloads the voice once (about 115 MB) and keeps it on this device.");
+    expect(benchNeedLine(522_240, "voices", 1)).toBe("The test adds its voice to this device first (about 1 MB).");
+    expect(benchNeedLine(NaN, "all")).toBe("The test downloads the voice first if it is not on this device.");
+    expect(benchNeedLine(null, null)).toBe("The test downloads the voice first if it is not on this device.");
+    // A presence-only look (voice-files.ts voicePresence): no hashing, and no cache opened that does not exist.
+    expect(read("web/src/seal.ts")).toMatch(/voicePresence\(\[NARRATORS\.m\]\)[\s\S]*?benchNeedLine\(n\.bytes, n\.need, n\.missingVoices\)/);
+    const files = read("web/src/voice-files.ts");
+    const presence = files.slice(files.indexOf("export async function voicePresence"));
+    expect(presence).not.toMatch(/sha256Hex|arrayBuffer|dropIfUnpinned|\.put\(|\.delete\(/);
+    expect(presence).toMatch(/const open = \(name: string\) => \(names\.has\(name\) \? caches\.open\(name\) : Promise\.resolve\(null\)\);/);
+    expect(presence).not.toMatch(/caches\.open\((?!name)/);
+  });
+
+  it("threads and isolation come from what the browser reports; timings appear only after a run", () => {
+    expect(reportsHtml(8).replace(/<[^>]+>/g, "")).toBe("This browser reports 8 processor threads.");
+    expect(reportsHtml(undefined)).toBe("This browser does not report its processor threads.");
+    const before = cpuDetailsHtml(8, true).replace(/<[^>]+>/g, " ");
+    expect(before).toContain("Cross-origin isolated");
+    expect(before).not.toContain("Voice load");
+    const after = cpuDetailsHtml(8, false, { loadMs: 3400, firstMs: 2900, audioSeconds: 3.2 }).replace(/<[^>]+>/g, " ");
+    expect(after).toMatch(/Voice load\s+3\.4 s\s+First sentence\s+2\.9 s/);
+  });
+
+  it("a stopped test speaks plain words and says to run it again, never Tune in", () => {
+    for (const raw of ["TypeError: Failed to fetch", "Error: voice part x: 503", "QuotaExceededError: no room", "Error: weird"]) {
+      expect(benchStopLine(raw)).not.toMatch(/Tune in|Error|fetch/);
+    }
+  });
+
+  it("no send in the test's path: bench.ts, the render worker's bench() and seal.ts's setupBench post nothing and count nothing", () => {
+    const worker = read("web/src/narrate.worker.ts");
+    const benchFn = worker.slice(worker.indexOf("async function bench()"), worker.indexOf("ctx.onmessage"));
+    const seal = read("web/src/seal.ts");
+    const benchPath = seal.slice(seal.indexOf("function setupBench"), seal.indexOf("\nwatchReducedMotion();"));
+    expect(benchPath.length).toBeGreaterThan(200);
+    for (const [name, src] of [["bench.ts", read("web/src/bench.ts")], ["bench()", benchFn], ["setupBench", benchPath]] as const) {
+      expect(src, name).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|sendBeacon|\/e\b|noteSend/);
+    }
+    // The worker only loads the voice and times one sentence; the voice's own requests are Law 1 downloads.
+    expect(benchFn).toMatch(/await loadVoice\(\[voice\]/);
+    // The speed test shares the render worker, so the speech runtime ships once.
+    expect(read("web/src/seal.ts")).toContain('new Worker(new URL("./narrate.worker.ts", import.meta.url), { type: "module" })');
+  });
+
+  it("the voice size follows the radio's truth rules: warmingLine from the manifest's needed bytes", () => {
+    const seal = read("web/src/seal.ts");
+    expect(seal).toContain("warmingLine(msg.total, msg.need, \"the test\", msg.missingVoices)");
+    expect(seal).not.toMatch(/\d+\s*MB/);
+    expect(read("web/seal.html")).not.toMatch(/\d+\s*MB/);
+  });
+});
+
+describe("the page", () => {
+  const html = read("web/seal.html");
+  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+  it("is a built page, reachable from the radio, and in the contract", () => {
+    expect(read("web/vite.config.ts")).toContain('seal: "seal.html"');
+    expect(read("web/index.html")).toContain('<a href="/seal">Seal</a>');
+    expect(html).toContain('<a href="/seal" aria-current="page">Seal</a>');
+    const checks = parseYaml(read("contract.yaml")).checks as { path: string; type: string; expect?: number }[];
+    expect(checks.some((c) => c.path === "/seal" && c.type === "status" && c.expect === 200)).toBe(true);
+  });
+
+  it("reads before it claims: the headline is \"Reading this tab\" until the browser's first batch arrives", () => {
+    expect(html).toContain('<h1 id="seal-h">Reading this tab</h1>');
+    const seal = read("web/src/seal.ts");
+    expect(seal).toMatch(/let ready = typeof PerformanceObserver !== "function";\s*recordRequests\(\(\) => \{\s*ready = true;/);
+    expect(seal).not.toMatch(/setTimeout\(render/);
+  });
+
+  it("the Seal itself is not counted", () => {
+    expect(read("web/src/seal.ts")).not.toMatch(/sendEvent|reportCoreSuccess|page_view/);
+  });
+
+  it("says what it can and cannot show, and how to check it yourself", () => {
+    expect(text).toContain("What this can and cannot show");
+    expect(text).toContain("Check it yourself: open your browser's developer tools, choose the Network tab, and reload this page.");
+    expect(text).toContain("so under those rules the eye cannot open");
+    expect(text).toContain("Browser extensions and the browser's own services run outside the page, so they cannot appear here");
+  });
+
+  it("the switch says feedback still goes; the graphics chip is not faked; no /verify control yet (F5)", () => {
+    expect(text).toContain("only a feedback message you choose to send leaves this device");
+    expect(html).toContain('role="switch"');
+    expect(text).toContain("Measured in a later update");
+    expect(html).not.toMatch(/navigator\.gpu|requestAdapter/);
+    expect(read("web/src/seal.ts")).not.toMatch(/navigator\.gpu|requestAdapter/);
+    expect(html).not.toMatch(/verify|Check a recording/i);
+  });
+});

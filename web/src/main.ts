@@ -1,10 +1,7 @@
-// Telemetry here is aggregate counts only: no anonymous id, no localStorage,
-// no cookies, nothing that could identify a visitor. `/e` accepts exactly
-// `{ "name": "<allowed event>" }` and bumps a same-day, same-name counter.
-// Because it collects and stores nothing personal, no consent banner is
-// needed (see web/privacy.html). Every POST is same-origin JSON: the Worker
-// refuses anything else (worker/src/guard.ts), so never use sendBeacon,
-// which sends text/plain.
+// The radio at /. Counts go through telemetry.ts sendEvent, which posts
+// nothing once the listener turns counts off on the Seal. This page's
+// requests, and its voice worker's, are recorded for the Seal's log
+// (request-recorder.ts): paths and sizes only, never text or audio.
 import { WORKS, aboutMinutes, countWords, type Work } from "./catalogue";
 import { firstOpen, lampLit, liveLine, wavName } from "./broadcast-state";
 import { mountRadio } from "./device/radio";
@@ -32,17 +29,8 @@ import type { FromWorker, ToWorker } from "./narrate.worker";
 import { WORK_NOT_ON_DEVICE } from "./offline/plan";
 import { registerOfflineHelper } from "./offline/store";
 import { mountOffline } from "./offline/ui";
-
-function sendEvent(name: string): void {
-  fetch("/e", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name }),
-    keepalive: true,
-  }).catch(() => {
-    // Best-effort telemetry: a failed send is not the user's problem.
-  });
-}
+import { noteSend, noteSendFailed, recordEntries, recordRequests } from "./request-recorder";
+import { sendEvent } from "./telemetry";
 
 /**
  * Call this exactly where the product's core action completes (the export
@@ -402,6 +390,8 @@ function setupRadio(): void {
     };
 
     worker.onmessage = (event: MessageEvent<FromWorker>) => {
+      // The worker's own requests go to the Seal's log, whatever the broadcast is doing.
+      if (event.data.type === "requests") return recordEntries(event.data.entries);
       if (session !== own || !own.live) return;
       const msg = event.data;
       if (msg.type === "loading") {
@@ -576,11 +566,17 @@ function setupFeedback(): void {
     status.textContent = "Sending.";
     status.removeAttribute("data-state");
 
-    fetch("/feedback", {
+    const body = JSON.stringify({ text, page: location.pathname });
+    // The Seal's log shows the message's size, never its text.
+    const token = noteSend("/feedback", new TextEncoder().encode(body).length);
+    const sending = fetch("/feedback", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, page: location.pathname }),
-    })
+      body,
+    });
+    // The network failed before it arrived: the Seal's log says "not delivered".
+    sending.catch(() => noteSendFailed(token));
+    sending
       .then((response) => {
         if (response.status === 429) throw new Error("ceiling");
         if (!response.ok) throw new Error(`status ${response.status}`);
@@ -598,6 +594,7 @@ function setupFeedback(): void {
 }
 
 watchReducedMotion();
+recordRequests();
 sendEvent("page_view");
 setupRadio();
 setupFeedback();

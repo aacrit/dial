@@ -298,7 +298,7 @@ describe("POSTs: JSON only, and never from another site", () => {
   });
 
   it("the page sends /e and /feedback as fetch with application/json, never sendBeacon", () => {
-    const src = readFileSync(path.join(root, "web", "src", "main.ts"), "utf8");
+    const src = ["main.ts", "telemetry.ts"].map((f) => readFileSync(path.join(root, "web", "src", f), "utf8")).join("\n");
     expect(src).not.toMatch(/navigator\.sendBeacon\(/);
     const posts = [...src.matchAll(/method: "POST",\s*headers: \{([^}]*)\}/g)];
     expect(posts.length).toBeGreaterThanOrEqual(2);

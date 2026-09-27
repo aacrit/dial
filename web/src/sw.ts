@@ -3,9 +3,13 @@
 // functions in offline/routes.ts. It answers this origin's own GET requests
 // only, and makes only two kinds of request itself: the request the page
 // made (to this origin, already under the page's CSP), and the shell's own
-// paths, all on this origin (tests/offline.test.ts). It never sends anything.
+// paths, all on this origin (tests/offline.test.ts). It never sends anything
+// off the device; it tells Dial's open pages which requests it made, for the
+// Seal's log.
 
 import { CAST_ENGINE_VERSION } from "./engine/cast-version";
+import { REQUESTS_ASK, REQUESTS_MESSAGE, toRawEntries, watchWorkerRequests } from "./worker-requests";
+import type { RawEntry } from "./request-log";
 import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, staleShellCaches } from "./offline/routes";
 
 declare const __BUILD_TAG__: string;
@@ -155,4 +159,30 @@ sw.addEventListener("fetch", (event) => {
   const r = route(new URL(request.url), request.method, sw.location.origin, request.mode);
   if (r === "ignore") return;
   event.respondWith(r === "page" ? page(request) : r === "saved" ? saved(request) : fromShell(request));
+});
+
+// ---- The Seal's log: this helper's own requests -------------------------------
+// The helper's Resource Timing record (the shell it keeps, the requests it
+// makes on the page's behalf) is its own; no page can read it. So it posts
+// each entry, as the voice workers do (worker-requests.ts: address, time and
+// sizes only), to the Dial pages open now, and answers a page that asks for
+// what it has recorded so far. Pages record them like any worker's.
+
+interface Clients {
+  matchAll(options: { type: "window"; includeUncontrolled: boolean }): Promise<readonly { postMessage(m: unknown): void }[]>;
+}
+
+const tell = (entries: RawEntry[]) =>
+  void (sw.clients as unknown as Clients).matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const client of list) client.postMessage({ type: REQUESTS_MESSAGE, entries });
+  });
+
+watchWorkerRequests(tell);
+
+sw.addEventListener("message", (event) => {
+  const data = event.data as { type?: string } | null;
+  if (data?.type !== REQUESTS_ASK) return;
+  const source = (event as unknown as { source: { postMessage(m: unknown): void } | null }).source;
+  const entries = toRawEntries(performance.getEntriesByType("resource"));
+  if (source && entries.length) source.postMessage({ type: REQUESTS_MESSAGE, entries });
 });

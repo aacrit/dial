@@ -146,6 +146,8 @@ body[data-on-air="true"] #tune-in.is-on-air::before {
 .masthead {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding: 14px 16px 0;
   padding-top: max(14px, env(safe-area-inset-top));
 }
@@ -155,6 +157,7 @@ body[data-on-air="true"] #tune-in.is-on-air::before {
   align-items: center;
   gap: 10px;
   color: var(--color-cream);
+  text-decoration: none;
 }
 
 .brand .arch {
@@ -1001,6 +1004,567 @@ progress::-moz-progress-bar {
   border-top: 1px solid var(--color-border);
 }
 
+/* ---- Rooms: the pages that exist, as text tabs ---------------------------- */
+
+.rooms {
+  display: flex;
+  gap: 4px;
+}
+
+.rooms a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  color: var(--color-cream-muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.rooms a:hover {
+  color: var(--color-cream);
+}
+
+.rooms a[aria-current="page"] {
+  color: var(--color-cream);
+  text-decoration: underline;
+  text-decoration-color: var(--color-filament);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 8px;
+}
+
+/* ---- The Seal (design/mocks/seal.html): the eye is the hero, the log its evidence */
+
+.seal {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 12px 16px 40px;
+}
+
+.seal-top {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.hero {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.meye {
+  width: 150px;
+  height: 150px;
+  display: block;
+}
+
+.meye .glass {
+  fill: var(--color-eye-dim);
+}
+
+.meye .fan {
+  fill: var(--color-magic-eye);
+  filter: drop-shadow(0 0 3px var(--color-magic-eye));
+  transition: opacity var(--dur-valve-warm) var(--ease-valve-warm);
+}
+
+.meye[data-state="reading"] .fan,
+.meye:not([data-state]) .fan {
+  opacity: 0.35;
+  filter: none;
+}
+
+/* Open: a request went to another address. Ochre is attention (it cannot
+   happen under the CSP; the limits drill says so). */
+.meye[data-state="open"] .fan {
+  fill: var(--color-ochre);
+  filter: none;
+}
+
+.meye .cap {
+  fill: var(--color-bg);
+  stroke: var(--color-border);
+  stroke-width: 0.4;
+}
+
+.meye .rim {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 0.8;
+}
+
+.hero h1 {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.hero .say {
+  font-size: 1.02rem;
+  max-width: 46ch;
+}
+
+.switch-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.switch-row .lab {
+  font-weight: 500;
+}
+
+.switch-row p {
+  grid-column: 1 / -1;
+  font-size: 0.86rem;
+  color: var(--color-cream-muted);
+  max-width: 52ch;
+}
+
+.switch-row .sw-note:empty {
+  display: none;
+}
+
+.switch {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* A 44 px target around the 30 px track. */
+.switch::before {
+  content: "";
+  position: absolute;
+  inset: -8px -4px;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-cream-muted);
+  transition:
+    transform var(--dur-normal) var(--ease-needle-drop),
+    background-color var(--dur-fast);
+}
+
+.switch[aria-checked="true"] {
+  background: var(--color-filament);
+  border-color: var(--color-filament);
+}
+
+.switch[aria-checked="true"]::after {
+  transform: translateX(22px);
+  background: var(--color-bg);
+}
+
+.limits {
+  font-size: 0.88rem;
+}
+
+.limits p {
+  max-width: 56ch;
+  margin-bottom: 8px;
+}
+
+.limits b {
+  font-weight: 600;
+}
+
+.logcard {
+  padding: 0;
+  overflow: hidden;
+}
+
+.loghead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+  padding: 18px 20px 12px;
+}
+
+.loghead h2 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.loghead .tot {
+  font: 400 0.76rem/1.4 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cream-muted);
+}
+
+.loghead .tot b {
+  color: var(--color-cream);
+  font-weight: 400;
+}
+
+.logwrap {
+  overflow: auto;
+}
+
+.log {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.log th {
+  text-align: left;
+  font: 500 0.62rem/1 var(--font-data);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-cream-muted);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.log th.sz-h {
+  text-align: right;
+}
+
+.log td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.log td.tm,
+.log td.sz {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cream-muted);
+  white-space: nowrap;
+}
+
+.log td.sz {
+  text-align: right;
+}
+
+.log td.pa {
+  font-family: var(--font-data);
+  font-size: 0.76rem;
+  word-break: break-all;
+}
+
+.log td.wh {
+  color: var(--color-cream-muted);
+}
+
+.log td.wh .cached {
+  display: block;
+  font-size: 0.72rem;
+}
+
+.log td.dir {
+  width: 28px;
+  padding-right: 0;
+}
+
+.log .glyph {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.log tr.sent td {
+  background: var(--color-surface-raised);
+}
+
+.log tr.sent td.pa {
+  color: var(--color-cream);
+}
+
+.log tr.blocked td {
+  background: var(--color-surface-raised);
+}
+
+.log tr.blocked td.pa {
+  text-decoration: line-through;
+  text-decoration-color: var(--color-ochre);
+}
+
+.log tr.blocked .dir,
+.log tr.foreign .dir,
+.log tr.foreign td.pa {
+  color: var(--color-ochre);
+}
+
+.logfoot {
+  padding: 12px 20px 16px;
+  font-size: 0.8rem;
+  color: var(--color-cream-muted);
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.bench {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.bench-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.bench h2 {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.bench-intro {
+  font-size: 0.9rem;
+  max-width: 66ch;
+}
+
+.bench-cols {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bcol {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 16px;
+  border-radius: var(--radius-card);
+  background: var(--gradient-glass);
+  box-shadow: var(--shadow-glass-inset);
+  color: var(--color-glass-ink);
+}
+
+.bcol h3 {
+  margin: 0;
+  font: 600 0.95rem/1.3 var(--font-structure);
+}
+
+.bcol h3 .muted {
+  color: var(--color-glass-ink-muted);
+  font-weight: 400;
+}
+
+.bcol dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.bcol dl:empty {
+  display: none;
+}
+
+.bcol dt {
+  color: var(--color-glass-ink-muted);
+}
+
+.bcol dd {
+  margin: 0;
+}
+
+.bcol .none {
+  font-size: 0.88rem;
+  color: var(--color-glass-ink-muted);
+}
+
+.bg {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+}
+
+.bg .gauge {
+  width: 110px;
+  height: 60px;
+}
+
+.bg .big {
+  font: 400 1.8rem/1 var(--font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-glass-ink);
+}
+
+.bg .big small {
+  font-size: 0.8rem;
+  font-family: var(--font-structure);
+  color: var(--color-glass-ink-muted);
+}
+
+.gauge .g-arc {
+  fill: none;
+  stroke: var(--color-glass-ink-faint);
+  stroke-width: 1.2;
+}
+
+.gauge .g-slow {
+  fill: none;
+  stroke: var(--color-glass-ink-muted);
+  stroke-width: 1.2;
+  stroke-dasharray: 1.5 2.5;
+}
+
+.gauge .g-tk {
+  stroke: var(--color-glass-ink-muted);
+  stroke-width: 1;
+}
+
+.gauge .g-tk.rt {
+  stroke: var(--color-glass-ink);
+  stroke-width: 1.6;
+}
+
+.gauge .g-lb {
+  fill: var(--color-glass-ink-muted);
+  font: 500 7px var(--font-data);
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+}
+
+.gauge .g-nd {
+  stroke: var(--color-glass-amber);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.gauge .g-cap {
+  fill: var(--color-glass-ink-muted);
+}
+
+.bench-status:empty {
+  display: none;
+}
+
+.bench-verdict {
+  font-size: 0.95rem;
+}
+
+.bench-verdict b {
+  font-weight: 600;
+}
+
+.bench-note {
+  font-size: 0.84rem;
+}
+
+.seal .page-footer {
+  margin-top: 28px;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 767px) {
+  .log th.wh-h,
+  .log td.wh {
+    display: none;
+  }
+
+  .log td.pa .w {
+    display: block;
+    font-family: var(--font-structure);
+    font-size: 0.76rem;
+    color: var(--color-cream-muted);
+    word-break: normal;
+  }
+
+  .hero {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .hero .meye {
+    width: 104px;
+    height: 104px;
+  }
+
+  .hero > *:not(.meye):not(.hgroup) {
+    grid-column: 1 / -1;
+  }
+
+  .bench-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+}
+
+@media (min-width: 768px) {
+  .log td.pa .w {
+    display: none;
+  }
+
+  .seal {
+    padding: 32px 24px 40px;
+  }
+
+  .bench-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .seal-top {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 48px;
+    align-items: start;
+  }
+
+  .meye {
+    width: 200px;
+    height: 200px;
+  }
+
+  .hero h1 {
+    font-size: 3.4rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .seal {
+    padding: 40px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .seal {
+    max-width: 1600px;
+  }
+
+  .meye {
+    width: 240px;
+    height: 240px;
+  }
+}
+
 /* ---- Cards, forms, the privacy page ------------------------------------- */
 
 .page {
@@ -1232,4 +1796,32 @@ textarea:focus {
     -webkit-mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
     mask: radial-gradient(circle, transparent 37px, black 38px 42px, transparent 43px);
   }
+}
+
+/* The Seal's masthead spans the page's own width. */
+@media (min-width: 1024px) {
+  .seal-page .masthead {
+    max-width: 1400px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .seal-page .masthead {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .seal-page .masthead {
+    max-width: 1600px;
+  }
+}
+
+.bench-need {
+  font-size: 0.88rem;
+}
+
+.bench-need:empty {
+  display: none;
 }
