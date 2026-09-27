@@ -40,6 +40,7 @@ import {
 import { SAVED_CACHE, isNeverCached, isPage, isThisBuild, offlineKey, pageHeaders, pinsOf, route, shellCacheName, shellKey, shellPaths, staleShellCaches } from "../web/src/offline/routes";
 import { CAST_ENGINE_VERSION } from "../web/src/engine/cast-version";
 import type { Held, SizedManifest } from "../web/src/voice-cache";
+import { coreShellPaths } from "../scripts/lib/shell.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f: string) => readFileSync(path.join(root, f), "utf8");
@@ -131,6 +132,9 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     for (const c of calls) expect(["request", 'path, { cache: "reload" }'], c).toContain(c);
     // The shell's paths come from the build's list; the page's request only after route() said this origin.
     expect(sw).toMatch(/for \(const path of __SHELL__\)/);
+    // precache fetches only the lists the build compiled in.
+    const precacheArgs = [...sw.matchAll(/\bprecache\(([^)]*)\)/g)].map((m) => m[1]!.trim());
+    for (const a of precacheArgs) expect(["paths: readonly string[]", "saved ? __SHELL__ : __CORE_SHELL__", "__SHELL__"], a).toContain(a);
     expect(sw).toMatch(/const r = route\(new URL\(request\.url\), request\.method, sw\.location\.origin, request\.mode\);\s*if \(r === "ignore"\) return;/);
     expect(sw).not.toMatch(/sendBeacon|WebSocket|EventSource|XMLHttpRequest|method:\s*"POST"/);
   });
@@ -139,27 +143,56 @@ describe("Law 1: the offline helper fetches only this origin's own files", () =>
     const built = path.join(root, "dist", "sw.js");
     // The gate builds before it tests: a missing helper is a failure, not a skip.
     expect(existsSync(built), "dist/sw.js: run npm run build first").toBe(true);
-    const list = /`(\/[^`]*)`\.split\(`,`\)/.exec(readFileSync(built, "utf8"))?.[1];
-    expect(list).toBeDefined();
-    for (const p of list!.split(",")) {
+    // Two lists are compiled in: the whole shell, and the core kept at install (the pre-Proof audit).
+    const lists = [...new Set([...readFileSync(built, "utf8").matchAll(/`(\/[^`]*)`\.split\(`,`\)/g)].map((m) => m[1]!))].map((l) => l.split(","));
+    expect(lists).toHaveLength(2);
+    const [core, full] = lists.sort((a, b) => a.length - b.length) as [string[], string[]];
+    for (const p of full) {
       expect(p.startsWith("/") && !p.startsWith("//"), p).toBe(true);
       // Dial's prepared recordings are kept only when a listener saves a work (T5), never with the shell.
       expect(p, p).not.toMatch(/^\/(voice|ort|works|recordings)\/|\.wasm$|^\/sw\.js$|^\/e$|^\/feedback$/);
     }
-    expect(list!.split(",")).toContain("/");
-    // privacy.html says the shell is about 3 MB.
-    const bytes = list!.split(",").reduce((sum, p) => {
-      // Pages are kept by their address: "/" is index.html; "/privacy", "/seal" and "/play/crito" are their .html files.
-      const f = path.join(root, "dist", p === "/" ? "index.html" : /^\/(privacy|seal)$/.test(p) || p.startsWith("/play/") ? `${p.slice(1)}.html` : p.slice(1));
-      return sum + readFileSync(f).byteLength;
-    }, 0);
-    expect(Math.round(bytes / 1_000_000)).toBe(3);
+    expect(full).toContain("/");
+    expect(full).toEqual(JSON.parse(readFileSync(path.join(root, "dist", "offline-shell.json"), "utf8")));
+    // The core is part of the shell, opens every page, and leaves out only the render worker and the extended-Latin faces.
+    expect(core).toEqual(coreShellPaths(full));
+    for (const p of core) expect(full).toContain(p);
+    for (const page of ["/", "/privacy", "/play/cave", "/play/crito", "/play/meditations", "/manifest.webmanifest"]) expect(core, page).toContain(page);
+    expect(core.some((p) => /^\/assets\/main-[^/]+\.js$/.test(p))).toBe(true);
+    expect(core.some((p) => /^\/assets\/style-[^/]+\.css$/.test(p))).toBe(true);
+    expect(full.filter((p) => !core.includes(p)).every((p) => /narrate\.worker-|-latin-ext-/.test(p))).toBe(true);
+    const size = (list: string[]) =>
+      list.reduce((sum, p) => {
+        // Pages are kept by their address: "/" is index.html; "/privacy" and "/play/crito" are their .html files.
+        const f = path.join(root, "dist", p === "/" ? "index.html" : /^\/(privacy|seal)$/.test(p) || p.startsWith("/play/") ? `${p.slice(1)}.html` : p.slice(1));
+        return sum + readFileSync(f).byteLength;
+      }, 0);
+    // privacy.html says every visitor keeps about 0.6 MB, and a save adds about 2.5 MB more.
+    expect((size(core) / 1_000_000).toFixed(1)).toBe("0.6");
+    expect(((size(full) - size(core)) / 1_000_000).toFixed(1)).toBe("2.5");
+  });
+
+  it("a first visit keeps only the core shell; a save, or an update where a work is saved, keeps it all", () => {
+    expect(coreShellPaths(["/", "/assets/main-a.js", "/assets/narrate.worker-b.js", "/assets/inter-latin-400-normal-c.woff2", "/assets/inter-latin-ext-400-normal-d.woff2", "/privacy"])).toEqual([
+      "/",
+      "/assets/main-a.js",
+      "/assets/inter-latin-400-normal-c.woff2",
+      "/privacy",
+    ]);
+    const sw = read("web/src/sw.ts");
+    expect(sw).toMatch(/anySaved\(\)\s*\.then\(\(saved\) => precache\(saved \? __SHELL__ : __CORE_SHELL__\)\)/);
+    expect(sw).toContain('if (data?.type === "ensure-shell") event.waitUntil(precache(__SHELL__)');
+    // "Saved" still needs the whole shell.
+    expect(sw).toMatch(/for \(const path of __SHELL__\) if \(!\(await cache\.match\(path\)\)\) return false;/);
+    // Looking for a saved work opens no cache that does not exist.
+    expect(sw).toMatch(/if \(!\(await caches\.has\(SAVED_CACHE\)\)\) return false;/);
+    expect(read("scripts/build.mjs")).toContain("__CORE_SHELL__: JSON.stringify(coreShellPaths(shell))");
   });
 
   it("a partial shell never replaces a complete one", () => {
     const sw = read("web/src/sw.ts");
     // Install fails on an incomplete shell, so the previous helper keeps serving.
-    expect(sw).toMatch(/precache\(\)\.then\(\(ok\) => \{\s*if \(!ok\) throw/);
+    expect(sw).toMatch(/precache\(saved \? __SHELL__ : __CORE_SHELL__\)\)\s*\.then\(\(ok\) => \{\s*if \(!ok\) throw/);
     // A fetched home page from another build is refused.
     // Every page kept (not only "/") must be this build's.
     expect(sw).toContain('if (isPage(copy.headers.get("content-type")) && !isThisBuild(await copy.clone().text(), __BUILD_TAG__)) throw');

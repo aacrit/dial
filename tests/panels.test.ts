@@ -4,13 +4,14 @@
 // same rule runs in a real browser at the six viewports with
 // `npm run layout-check`, a gate step in CI (CoS decision G).
 
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { judge } from "../scripts/lib/layout-probe.mjs";
-import { SMALL_VIEWPORTS as CHECKED_SMALL, VIEWPORTS as CHECKED } from "../scripts/layout-check.mjs";
-import { LANDSCAPE, NARROW_LANDSCAPE, PANELS, PHONE_PORTRAIT, QUERIES, SHORT_LANDSCAPE, SINGLE_PANEL, SMALL_VIEWPORTS, TABLET_PORTRAIT, VIEWPORTS, chrome, dialSize, matchesQuery, panelBox, panelLayout } from "../web/src/panels";
+import { SMALL_VIEWPORTS as CHECKED_SMALL, VIEWPORTS as CHECKED, onlyMatches } from "../scripts/layout-check.mjs";
+import { LANDSCAPE, NARROW_LANDSCAPE, PANELS, PHONE_PORTRAIT, QUERIES, SHORT_LANDSCAPE, SINGLE_PANEL, SMALL_VIEWPORTS, TABLET_PORTRAIT, VIEWPORTS, chrome, dialSize, matchesQuery, panelBox, panelLayout, sealCovers } from "../web/src/panels";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -60,7 +61,7 @@ describe("the panel map (design/spec.md 00)", () => {
     }
   });
 
-  it("the browser check runs at exactly these six viewports, and the five smaller ones", () => {
+  it("the browser check runs at exactly these six viewports, and the six smaller ones", () => {
     expect(CHECKED).toEqual(VIEWPORTS.map((v) => [v.width, v.height]));
     expect(CHECKED_SMALL).toEqual(SMALL_VIEWPORTS.map((v) => [v.width, v.height]));
     expect(CHECKED_SMALL).toEqual([
@@ -69,6 +70,7 @@ describe("the panel map (design/spec.md 00)", () => {
       [320, 568],
       [640, 360],
       [960, 540],
+      [568, 320],
     ]);
     // A landscape screen too narrow for columns stacks its widgets.
     expect(matchesQuery(NARROW_LANDSCAPE, 568, 320)).toBe(true);
@@ -169,6 +171,21 @@ describe("style.css agrees with the map", () => {
     expect(mediaBlocks(SINGLE_PANEL)[0]).toMatch(/grid-template-rows: auto auto minmax\(220px, 1fr\) minmax\(0, auto\);/);
   });
 
+  it("the open Seal makes inert exactly what it covers: all of the panel on a phone held upright or a landscape screen under 600 px, the Script column on other short landscapes (T8 review)", () => {
+    const at = (w: number, h: number) => sealCovers((q) => matchesQuery(q, w, h));
+    expect(at(375, 812)).toBe("all");
+    expect(at(568, 320)).toBe("all");
+    expect(at(599, 400)).toBe("all");
+    expect(at(740, 360)).toBe("text");
+    expect(at(640, 360)).toBe("text");
+    expect(at(1280, 800)).toBe("none");
+    expect(at(768, 1024)).toBe("none");
+    // The stylesheet agrees: under 600 px wide in landscape the open Seal covers the whole panel.
+    expect(mediaBlocks(NARROW_LANDSCAPE)[0]).toMatch(/\.w-seal:has\(\.reqs-box\[open\]\) \{\s*position: absolute;\s*inset: 0;/);
+    // And the layout check visits such a screen.
+    expect(CHECKED_SMALL).toContainEqual([568, 320]);
+  });
+
   it("on a phone, the open request list and the tapped script fill the work panel; an absolute widget leaves its grid row", () => {
     const phone = mediaBlocks(PHONE_PORTRAIT)[0]!;
     expect(phone).toMatch(/\.w-seal:has\(\.reqs-box\[open\]\) \{\s*position: absolute;\s*inset: 0;\s*z-index: 5;[\s\S]*?grid-area: auto;/);
@@ -217,6 +234,31 @@ describe("the no-scroll rule's verdict (layout-probe judge)", () => {
     expect(judge(page([{ id: "radio", missing: true, parts: [] }])).ok).toBe(false);
   });
 
+  it("a line clamp may cut text short, but a clamped block below one line's height fails (T8 review)", () => {
+    const withClamp = (height: number) => judge(page([{ ...panel([]), clampedLines: [{ el: "p.ra.live", height, line: 24 }] }]));
+    expect(withClamp(24).ok).toBe(true);
+    expect(withClamp(48).ok).toBe(true);
+    expect(withClamp(23.5).ok).toBe(true);
+    const squeezed = withClamp(10);
+    expect(squeezed.ok).toBe(false);
+    expect(squeezed.clipped).toBe(1);
+    expect(squeezed.problems[0]).toMatch(/^#work line-clamped text p\.ra\.live is 10 px tall, less than one line \(24 px\)/);
+    // The probe measures the clamping block, not only skips it.
+    const probe = read("scripts/lib/layout-probe.mjs");
+    expect(probe).toMatch(/if \(lb\.height > 0\) clampedLines\.push\(\{ el: name\(clamp\), \.\.\.lb \}\);/);
+  });
+
+  it("--only that names no checked viewport fails instead of passing with nothing checked (T8 review)", () => {
+    expect(onlyMatches(undefined)).toBe(true);
+    expect(onlyMatches("740x360")).toBe(true);
+    expect(onlyMatches("568x320")).toBe(true);
+    expect(onlyMatches("740X360")).toBe(false);
+    expect(onlyMatches("1x1")).toBe(false);
+    const run = spawnSync(process.execPath, [path.join(root, "scripts", "layout-check.mjs"), "--only", "1x1"], { encoding: "utf8" });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("--only 1x1 matches no viewport");
+  });
+
   it("allows a pixel of rounding, and no more", () => {
     expect(judge(page([panel([part("seal", 320, 760.9)])])).ok).toBe(true);
     expect(judge(page([panel([part("seal", 320, 761.5)])])).ok).toBe(false);
@@ -251,7 +293,9 @@ describe("the band selector and the rooms", () => {
     expect(ui).toMatch(/if \(p\.id !== current\) show\(p\.id, true\);/);
     // On a phone both tabs fill the panel; the open Seal list makes what it covers inert.
     expect(ui).toMatch(/if \(matches\(PHONE_PORTRAIT\) && !filled\(\)\) \{/);
-    expect(ui).toMatch(/w\.inert = phone \|\| \(side && w\.classList\.contains\("w-text"\)\);/);
+    expect(ui).toMatch(/const covers = reqs\?\.open \? sealCovers\(matches\) : "none";/);
+    expect(ui).toMatch(/w\.inert = covers === "all" \|\| \(covers === "text" && w\.classList\.contains\("w-text"\)\);/);
+    for (const q of ["PHONE_PORTRAIT", "SHORT_LANDSCAPE", "NARROW_LANDSCAPE"]) expect(ui).toContain(`matchMedia(${q}).addEventListener("change"`);
     expect(ui).toMatch(/band\?\.addEventListener\("keydown"/);
     expect(ui).toContain('behavior: instant || motion.reduce ? "auto" : "smooth"');
     // The phone's filled script closes with its key or Esc, and focus goes back to the key that opened it.

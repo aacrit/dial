@@ -16,9 +16,9 @@ import {
   RATE_LIMITER_ERROR_DAILY_CEILING,
   worstCaseDailyWrites,
 } from "../worker/src/config";
-import { clientKey, limiterFor, type RateLimiter } from "../worker/src/guard";
+import { LIMITER_LIMITS, LIMITER_PERIOD_SECONDS, clientKey, limiterFor, rateLimitedMessage, type RateLimiter } from "../worker/src/guard";
 import { API_CSP } from "../worker/src/headers";
-import { PAGE_CSP_HEADER, headersFile } from "../scripts/lib/csp.mjs";
+import { PAGE_CSP_HEADER, SECURITY_HEADERS, headersFile } from "../scripts/lib/csp.mjs";
 import { createSqliteD1 } from "./helpers/sqlite-d1";
 import { createMockAssets, createMockD1 } from "./helpers/mock-d1";
 import { IDLE_SCENARIOS, runIdleScenario, simulateRetention } from "./helpers/retention-sim";
@@ -48,6 +48,14 @@ async function sqliteEnv(overrides: Partial<Env> = {}) {
 }
 
 const mockEnv = (overrides: Partial<Env> = {}): Env => ({ DB: createMockD1().db, ASSETS: createMockAssets(), ...overrides });
+
+/** A D1 that fails every query, as the account's does past its daily read cap (hard errors). */
+function brokenDb(): D1Database {
+  const fail = () => {
+    throw new Error("D1_ERROR: at /secret/path.ts:12 daily read limit exceeded");
+  };
+  return { prepare: fail, batch: fail, exec: fail, dump: fail } as unknown as D1Database;
+}
 
 /** wrangler.jsonc without its // comments (no string value in it contains " //"). */
 function wranglerConfig(): Record<string, any> {
@@ -193,31 +201,59 @@ describe("the account's D1 writes: every ceiling together stays within this prod
 // ---- Per-client rate limit -----------------------------------------------------
 
 describe("per-client rate limit (Workers Rate Limiting binding)", () => {
-  it("every request that reaches the Worker counts against RL_API", () => {
-    for (const [m, p] of [["POST", "/e"], ["POST", "/feedback"], ["GET", "/healthz"], ["GET", "/api/x"], ["GET", "/no-such-path"]]) {
-      expect(limiterFor(m, p)).toBe("RL_API");
+  it("each write path has its own binding; everything else that reaches the Worker counts against RL_API", () => {
+    expect(limiterFor("POST", "/e")).toBe("RL_EVENTS");
+    expect(limiterFor("POST", "/feedback")).toBe("RL_FEEDBACK");
+    for (const [m, p] of [["GET", "/e"], ["GET", "/feedback"], ["GET", "/healthz"], ["GET", "/api/x"], ["GET", "/no-such-path"], ["POST", "/healthz"]]) {
+      expect(limiterFor(m, p), `${m} ${p}`).toBe("RL_API");
     }
   });
 
-  it("refuses a client over its limit with 429 and Retry-After, keyed on CF-Connecting-IP, and counts clients apart", async () => {
-    const RL_API = fakeLimiter(1);
-    const { env, d1 } = await sqliteEnv({ RL_API });
+  it("refuses a client over its limit with 429, Retry-After and a plain message, keyed on CF-Connecting-IP, and counts clients apart", async () => {
+    const RL_EVENTS = fakeLimiter(1);
+    const { env, d1 } = await sqliteEnv({ RL_EVENTS });
     const ip = (a: string) => ({ "cf-connecting-ip": a });
     expect((await handle(post("/e", { name: "page_view" }, ip("203.0.113.7")), env)).status).toBe(202);
     const limited = await handle(post("/e", { name: "page_view" }, ip("203.0.113.7")), env);
     expect(limited.status).toBe(429);
-    expect(limited.headers.get("retry-after")).toBe("10");
-    expect(await limited.json()).toEqual({ error: "rate_limited" });
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(limited.headers.get("content-type")).toBe("application/json");
+    expect(await limited.json()).toEqual({ error: "rate_limited", message: "Too many requests from this network. Wait a minute, then try again." });
     expect((await handle(post("/e", { name: "page_view" }, ip("198.51.100.2")), env)).status).toBe(202);
-    expect(RL_API.keys).toEqual(["203.0.113.7", "203.0.113.7", "198.51.100.2"]);
+    expect(RL_EVENTS.keys).toEqual(["203.0.113.7", "203.0.113.7", "198.51.100.2"]);
     // The IP never reaches D1.
     const dump = JSON.stringify([d1.query("SELECT * FROM event_counts"), d1.query("SELECT * FROM feedback")]);
     expect(dump).not.toContain("203.0.113");
     expect(dump).not.toContain("198.51.100");
   });
 
+  it("bites at each binding's own count: the 7th /e, the 3rd /feedback and the 21st other request in a period", async () => {
+    const limiters = { RL_API: fakeLimiter(LIMITER_LIMITS.RL_API), RL_EVENTS: fakeLimiter(LIMITER_LIMITS.RL_EVENTS), RL_FEEDBACK: fakeLimiter(LIMITER_LIMITS.RL_FEEDBACK) };
+    const env = mockEnv(limiters);
+    const statuses = async (n: number, make: () => Request) => {
+      const out: number[] = [];
+      for (let i = 0; i < n; i++) out.push((await handle(make(), env)).status);
+      return out;
+    };
+    // Invalid bodies: refused by validation (400) until the limit, then 429, so no count is written either way.
+    expect(await statuses(7, () => post("/e", { name: "nope" }))).toEqual([400, 400, 400, 400, 400, 400, 429]);
+    expect(await statuses(3, () => post("/feedback", { text: "" }))).toEqual([400, 400, 429]);
+    const health = await statuses(21, () => get("/healthz"));
+    expect(health.slice(0, 20).every((s) => s === 200)).toBe(true);
+    expect(health[20]).toBe(429);
+    // The limits are separate: using up /e's does not touch /healthz's, and the other way round.
+    expect(limiters.RL_API.keys).toHaveLength(21);
+    expect(limiters.RL_EVENTS.keys).toHaveLength(7);
+    expect(limiters.RL_FEEDBACK.keys).toHaveLength(3);
+    const feedbackLimited = await handle(post("/feedback", { text: "hello" }), env);
+    expect(feedbackLimited.headers.get("retry-after")).toBe("60");
+    const apiLimited = await handle(get("/healthz"), env);
+    expect(await apiLimited.json()).toEqual({ error: "rate_limited", message: rateLimitedMessage("RL_API") });
+    expect(rateLimitedMessage("RL_API")).toBe("Too many requests from this network. Wait 10 seconds, then try again.");
+  });
+
   it("limits every Worker path: /e, /feedback, /healthz and unmatched paths", async () => {
-    const env = mockEnv({ RL_API: fakeLimiter(0) });
+    const env = mockEnv({ RL_API: fakeLimiter(0), RL_EVENTS: fakeLimiter(0), RL_FEEDBACK: fakeLimiter(0) });
     expect((await handle(post("/e", { name: "page_view" }), env)).status).toBe(429);
     expect((await handle(post("/feedback", { text: "x" }), env)).status).toBe(429);
     expect((await handle(get("/healthz"), env)).status).toBe(429);
@@ -227,7 +263,7 @@ describe("per-client rate limit (Workers Rate Limiting binding)", () => {
   it("fails open when the binding is missing or throws, and counts the failure as rate_limiter_error (capped, no address)", async () => {
     expect((await handle(post("/e", { name: "page_view" }), mockEnv())).status).toBe(202);
     const broken: RateLimiter = { limit: async () => { throw new Error("binding down"); } };
-    const { env, count, d1 } = await sqliteEnv({ RL_API: broken });
+    const { env, count, d1 } = await sqliteEnv({ RL_EVENTS: broken });
     for (let i = 0; i < RATE_LIMITER_ERROR_DAILY_CEILING + 5; i++) {
       expect((await handle(post("/e", { name: "page_view" }, { "cf-connecting-ip": "203.0.113.9" }), env)).status).toBe(202);
     }
@@ -235,12 +271,20 @@ describe("per-client rate limit (Workers Rate Limiting binding)", () => {
     expect(JSON.stringify(d1.query("SELECT * FROM event_counts"))).not.toContain("203.0.113.9");
   });
 
-  it("wrangler.jsonc declares RL_API with an allowed period and a namespace id /brief assigns", () => {
-    const rl = (wranglerConfig().ratelimits as { name: string; namespace_id: string; simple: { limit: number; period: number } }[]).find((r) => r.name === "RL_API");
-    expect(rl).toBeDefined();
-    expect([10, 60]).toContain(rl!.simple.period);
-    expect(rl!.simple.limit).toBe(20);
-    expect(rl!.namespace_id).toMatch(/^(\d+|__RL_NAMESPACE_ID__)$/);
+  it("wrangler.jsonc declares the three bindings with guard.ts's limits and periods, each on its own namespace id", () => {
+    const rls = wranglerConfig().ratelimits as { name: string; namespace_id: string; simple: { limit: number; period: number } }[];
+    expect(rls.map((r) => r.name).sort()).toEqual(Object.keys(LIMITER_LIMITS).sort());
+    for (const rl of rls) {
+      const name = rl.name as keyof typeof LIMITER_LIMITS;
+      expect([10, 60], rl.name).toContain(rl.simple.period);
+      expect(rl.simple.period, rl.name).toBe(LIMITER_PERIOD_SECONDS[name]);
+      expect(rl.simple.limit, rl.name).toBe(LIMITER_LIMITS[name]);
+      expect(rl.namespace_id, rl.name).toMatch(/^\d+$/);
+    }
+    // Namespace ids are account-wide: Dial's are its own three (Rollbook holds 7201 to 7203).
+    const ids = rls.map((r) => r.namespace_id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(["7201", "7202", "7203"]).not.toContain(id);
   });
 });
 
@@ -261,9 +305,9 @@ describe("rate-limit keys: IPv4 whole, IPv6 by its /64", () => {
   });
 
   it("the Worker hands the binding the /64, never the full IPv6 address", async () => {
-    const RL_API = fakeLimiter(5);
-    await handle(post("/e", { name: "page_view" }, { "cf-connecting-ip": "2001:db8:1:2:3:4:5:6" }), mockEnv({ RL_API }));
-    expect(RL_API.keys).toEqual(["2001:db8:1:2::/64"]);
+    const RL_EVENTS = fakeLimiter(5);
+    await handle(post("/e", { name: "page_view" }, { "cf-connecting-ip": "2001:db8:1:2:3:4:5:6" }), mockEnv({ RL_EVENTS }));
+    expect(RL_EVENTS.keys).toEqual(["2001:db8:1:2::/64"]);
   });
 });
 
@@ -314,16 +358,45 @@ describe("security headers", () => {
     expect(res.headers.get("x-content-type-options"), label).toBe("nosniff");
     expect(res.headers.get("referrer-policy"), label).toBe("no-referrer");
     expect(res.headers.get("content-security-policy") ?? "", label).toContain("frame-ancestors 'none'");
+    expect(res.headers.get("strict-transport-security"), label).toBe("max-age=31536000");
+    expect(res.headers.get("permissions-policy"), label).toBe("camera=(), microphone=(), geolocation=(), usb=()");
   }
 
-  it("every Worker response carries them: JSON, errors, 415, 403, 429 and the static fallthrough", async () => {
+  it("HSTS for a year with no preload yet, and a Permissions-Policy that allows no device feature", () => {
+    expect(SECURITY_HEADERS["Strict-Transport-Security"]).toBe("max-age=31536000");
+    expect(SECURITY_HEADERS["Strict-Transport-Security"]).not.toContain("preload");
+    for (const feature of ["camera", "microphone", "geolocation", "usb"]) expect(SECURITY_HEADERS["Permissions-Policy"]).toContain(`${feature}=()`);
+    expect(headersFile()).toContain("  Strict-Transport-Security: max-age=31536000\n");
+    expect(headersFile()).toContain("  Permissions-Policy: camera=(), microphone=(), geolocation=(), usb=()\n");
+  });
+
+  it("a failure inside a route (D1 past its read cap) is a 503 in JSON with the headers, never an error page or a stack trace", async () => {
+    for (const req of [post("/e", { name: "page_view" }), post("/feedback", { text: "hello", page: "/" })]) {
+      const res = await handle(req, mockEnv({ DB: brokenDb() }));
+      expect(res.status).toBe(503);
+      expect(res.headers.get("content-type")).toBe("application/json");
+      expect(res.headers.get("retry-after")).toBe("60");
+      expect(res.headers.get("content-security-policy")).toBe(API_CSP);
+      const text = await res.text();
+      expect(JSON.parse(text)).toEqual({ error: "unavailable", message: "Dial could not answer just now. Try again in a minute." });
+      expect(text).not.toMatch(/D1_ERROR|secret|\.ts:|at /);
+    }
+    // The assets binding throwing on a fallthrough path is answered the same way.
+    const assetsDown = mockEnv({ ASSETS: { fetch: async () => { throw new Error("assets down"); } } as unknown as Fetcher });
+    expect((await handle(get("/no-such-path"), assetsDown)).status).toBe(503);
+    // The Worker's entry point is handle(), so nothing escapes it.
+    expect(readFileSync(path.join(root, "worker", "src", "index.ts"), "utf8")).toMatch(/async fetch\(request: Request, env: Env\): Promise<Response> \{\s*return handle\(request, env\);/);
+  });
+
+  it("every Worker response carries them: JSON, errors, 415, 403, 429, 503 and the static fallthrough", async () => {
     const cases: [string, Request, Env][] = [
       ["healthz", get("/healthz"), mockEnv()],
       ["event", post("/e", { name: "page_view" }), mockEnv()],
       ["400", post("/e", { name: "nope" }), mockEnv()],
       ["415", post("/e", "x", { "content-type": "text/plain" }), mockEnv()],
       ["403", post("/e", { name: "page_view" }, { origin: "https://evil.example" }), mockEnv()],
-      ["429", post("/e", { name: "page_view" }), mockEnv({ RL_API: fakeLimiter(0) })],
+      ["429", post("/e", { name: "page_view" }), mockEnv({ RL_EVENTS: fakeLimiter(0) })],
+      ["503", post("/e", { name: "page_view" }), mockEnv({ DB: brokenDb() })],
       ["fallthrough", get("/nothing-here"), mockEnv()],
     ];
     for (const [label, req, env] of cases) expectBaseHeaders(await handle(req, env), label);

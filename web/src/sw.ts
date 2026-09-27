@@ -15,6 +15,8 @@ import { OFFLINE_HEADER, SAVED_CACHE, isPage, isThisBuild, offlineKey, pageHeade
 
 declare const __BUILD_TAG__: string;
 declare const __SHELL__: string[];
+/** The part of the shell every visitor's helper keeps at install (scripts/lib/shell.mjs coreShellPaths). */
+declare const __CORE_SHELL__: string[];
 declare const __VOICE_PINS__: unknown;
 declare const __RECORDING_PINS__: Record<string, string>;
 
@@ -53,14 +55,14 @@ async function clean(res: Response): Promise<Response> {
 }
 
 /**
- * Keeps every shell path not yet kept. True only when the whole shell is in
- * place. A page is kept only if it is this build's (its <meta name="build">
+ * Keeps every path in `paths` not yet kept. True only when all of them are
+ * in place. A page is kept only if it is this build's (its <meta name="build">
  * is this helper's tag), so a shell never mixes two releases.
  */
-async function precache(): Promise<boolean> {
+async function precache(paths: readonly string[]): Promise<boolean> {
   const cache = await caches.open(SHELL);
   let ok = true;
-  for (const path of __SHELL__) {
+  for (const path of paths) {
     if (await cache.match(path)) continue;
     try {
       const res = await fetch(path, { cache: "reload" });
@@ -83,13 +85,25 @@ async function shellComplete(): Promise<boolean> {
   return true;
 }
 
+/** Whether a work is saved on this device (its text is in the saved cache). Opens no cache that does not exist. */
+async function anySaved(): Promise<boolean> {
+  if (!(await caches.has(SAVED_CACHE))) return false;
+  const saved = await caches.open(SAVED_CACHE);
+  return (await saved.keys()).some((r) => new URL(r.url).pathname.startsWith("/works/"));
+}
+
 // An incomplete shell fails the install: the browser keeps the previous
 // helper (and its complete shell) serving, and tries this one again later.
+// A first visit keeps only the core shell (the pages open offline); the
+// rest waits for a save (ensure-shell). Where a work is already saved, the
+// whole shell is kept now, so an update never leaves a saved work unplayable.
 sw.addEventListener("install", (event) => {
   event.waitUntil(
-    precache().then((ok) => {
-      if (!ok) throw new Error("offline helper: the shell is incomplete");
-    }),
+    anySaved()
+      .then((saved) => precache(saved ? __SHELL__ : __CORE_SHELL__))
+      .then((ok) => {
+        if (!ok) throw new Error("offline helper: the shell is incomplete");
+      }),
   );
 });
 
@@ -109,7 +123,7 @@ sw.addEventListener("message", (event) => {
   const data = event.data as { type?: string } | null;
   const port = event.ports[0];
   if (!port) return;
-  if (data?.type === "ensure-shell") event.waitUntil(precache().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
+  if (data?.type === "ensure-shell") event.waitUntil(precache(__SHELL__).then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
   else if (data?.type === "shell-status") event.waitUntil(shellComplete().then((ok) => port.postMessage({ type: "shell", ok, build: __BUILD_TAG__, key: KEY })));
 });
 

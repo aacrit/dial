@@ -5,8 +5,8 @@ import {
   FEEDBACK_PURGE_DAILY_MULTIPLE,
   FEEDBACK_PURGE_ON_INSERT,
   MAX_EVENT_BODY_BYTES,
+  FEEDBACK_PAGE_PATTERN,
   MAX_FEEDBACK_BODY_BYTES,
-  MAX_FEEDBACK_PAGE_CHARS,
   MAX_FEEDBACK_TEXT_BYTES,
   RATE_LIMITER_ERROR_DAILY_CEILING,
   RETENTION_DAYS,
@@ -15,7 +15,7 @@ import {
 } from "./config";
 import { incrementUnderCeiling, utcDay } from "./events";
 import { readJsonWithCap } from "./http";
-import { isCrossSite, isJsonContentType, LIMITER_PERIOD_SECONDS, limiterFor, withinRateLimit, type GuardEnv } from "./guard";
+import { isCrossSite, isJsonContentType, LIMITER_PERIOD_SECONDS, limiterFor, rateLimitedMessage, withinRateLimit, type GuardEnv } from "./guard";
 import { API_CSP, withSecurityHeaders } from "./headers";
 import { PAGE_CSP_HEADER } from "../../scripts/lib/csp.mjs";
 
@@ -129,7 +129,7 @@ export async function handleFeedback(request: Request, env: Env): Promise<Respon
   const text = typeof body.text === "string" ? body.text.trim() : "";
   if (!text) return jsonResponse({ error: "invalid_feedback" }, 400);
   if (utf8Bytes(text) > MAX_FEEDBACK_TEXT_BYTES) return jsonResponse({ error: "feedback_too_long" }, 400);
-  const page = typeof body.page === "string" ? body.page.slice(0, MAX_FEEDBACK_PAGE_CHARS) : null;
+  const page = typeof body.page === "string" && FEEDBACK_PAGE_PATTERN.test(body.page) ? body.page : null;
 
   const now = Date.now();
   // A day ceiling on stored feedback, the same conditional upsert as /e.
@@ -169,8 +169,31 @@ export async function handleHealthz(env: Env): Promise<Response> {
   return res;
 }
 
-/** The Worker's whole request path: guards, then the route, then headers. */
+/**
+ * The answer when something the Worker depends on fails (D1 past the
+ * account's read cap answers with hard errors, the assets binding may
+ * throw): a 503 in JSON with the security headers, never Cloudflare's
+ * error page and never a stack trace. Nothing about the failure is echoed.
+ */
+export function unavailableResponse(): Response {
+  const res = jsonResponse({ error: "unavailable", message: "Dial could not answer just now. Try again in a minute." }, 503);
+  res.headers.set("retry-after", "60");
+  res.headers.set("cache-control", "no-store");
+  return withSecurityHeaders(res, API_CSP);
+}
+
+/** The Worker's whole request path, with every failure answered as a 503 (unavailableResponse). */
 export async function handle(request: Request, env: Env): Promise<Response> {
+  try {
+    return await guarded(request, env);
+  } catch {
+    // Deliberately nothing logged from the request: the error may carry its body.
+    return unavailableResponse();
+  }
+}
+
+/** Guards, then the route, then headers. */
+async function guarded(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
 
   // Per-client rate limit first (worker/src/guard.ts), so refused requests
@@ -179,7 +202,7 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   const countLimiterError = () =>
     incrementUnderCeiling(env.DB, utcDay(Date.now()), "rate_limiter_error", RATE_LIMITER_ERROR_DAILY_CEILING);
   if (!(await withinRateLimit(env, limiter, request, countLimiterError))) {
-    const res = jsonResponse({ error: "rate_limited" }, 429);
+    const res = jsonResponse({ error: "rate_limited", message: rateLimitedMessage(limiter) }, 429);
     res.headers.set("retry-after", String(LIMITER_PERIOD_SECONDS[limiter]));
     return withSecurityHeaders(res, API_CSP);
   }

@@ -1,21 +1,26 @@
 // Names and keys for the voice's Cache Storage, kept pure so tests can check
-// them without loading the runtime. Each cache is keyed to a pin from the
-// manifest: the model to its Kokoro revision, the runtime to its SHA-256.
-// So a runtime-only bump never re-downloads the 92 MB model, and a new
-// revision or runtime never reuses stale bytes.
+// them without loading the runtime. Each cache is keyed to pins from the
+// manifest: the model to its Kokoro revision and the model's own SHA-256,
+// the runtime to its SHA-256. So a runtime-only bump never re-downloads the
+// 92 MB model, and a changed model pin (a new revision, or the same
+// revision re-pinned) never reuses stale bytes: a cached model is used by
+// presence (hashing 92 MB on every load would stall a phone), so its cache
+// name is what ties it to its pin.
 
 export const VOICE_CACHE_PREFIX = "dial-voice-";
 export const RUNTIME_CACHE_PREFIX = "dial-runtime-";
 
 export interface VoicePins {
   revision: string;
+  /** The stitched model's SHA-256 (scripts/fetch-voice.mjs). */
+  sha256: string;
   runtime: string;
   runtimeSha256: string;
 }
 
-/** The model, tokenizer and config: keyed on the Kokoro revision only. */
-export function voiceCacheName(m: Pick<VoicePins, "revision">): string {
-  return `${VOICE_CACHE_PREFIX}${m.revision}`;
+/** The model, tokenizer and config: keyed on the Kokoro revision and the model's pin. */
+export function voiceCacheName(m: Pick<VoicePins, "revision" | "sha256">): string {
+  return `${VOICE_CACHE_PREFIX}${m.revision}-${m.sha256.slice(0, 16)}`;
 }
 
 /** The runtime's .wasm: its own cache, named for its pin. */

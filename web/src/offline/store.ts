@@ -7,7 +7,10 @@
 //   voice.ts, have no pin of their own), the runtime's .wasm and the voices
 //   the work's cast uses (each checked against its pin); a file already
 //   kept is never downloaded again. What is already kept is judged by
-//   presence here; the render worker checks every pin again on each load;
+//   presence here. On each load the render worker checks the runtime and
+//   the voices against their pins again; the model is judged by presence
+//   too (it was checked when it was kept), in a cache named for its pin
+//   (voice-cache.ts voiceCacheName), so a changed pin downloads it afresh;
 // - the work's text, the voice manifest and the runtime's script in the
 //   saved cache (offline/routes.ts SAVED_CACHE), which the offline helper
 //   reads when there is no connection;

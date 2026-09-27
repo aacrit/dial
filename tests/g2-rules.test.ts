@@ -153,7 +153,17 @@ describe("the lamp is lit only while a render or playback is live", () => {
     expect(main).toMatch(/s\.audio\.suspend\(\)\.then\(settle\)/);
     expect(main).toMatch(/s\.audio\.resume\(\)\.then\(settle\)/);
     expect(main).toMatch(/const settle = \(\) => \{\s*setLamp\(\);/);
-    expect(main).toContain("audio.onstatechange = setLamp");
+    expect(main).toMatch(/audio\.onstatechange = \(\) => \{\s*setLamp\(\);\s*own\.wake\(\);\s*\};/);
+  });
+
+  it("the broadcast's frame loop sleeps while paused, and a resume or a seek wakes it (pre-Proof audit)", () => {
+    // After the frame that draws the paused state, no further frame is asked for.
+    expect(main).toMatch(/own\.frame = requestAnimationFrame\(follow\);\s*(\/\/[^\n]*\n\s*)+if \(audio\.state === "suspended"\) \{\s*cancelAnimationFrame\(own\.frame\);\s*own\.frame = 0;\s*\}/);
+    // Waking never starts a second loop, and never one for a broadcast that is over.
+    expect(main).toMatch(/own\.wake = \(\) => \{\s*if \(session === own && own\.live && !own\.frame\) own\.frame = requestAnimationFrame\(follow\);\s*\};/);
+    expect(main).toMatch(/updatePosition\(s, s\.sched\.at\[target\.index\]! \+ target\.offset\);\s*\/\/[^\n]*\n\s*s\.wake\(\);/);
+    // Off air, the pending frame is cancelled as before.
+    expect(main).toContain("cancelAnimationFrame(s.frame);");
   });
 });
 
@@ -289,7 +299,7 @@ describe("true copy: the first voice download", () => {
 });
 
 describe("the voice caches are keyed to their pins", () => {
-  const pins = { revision: "1939ad2a", runtime: ORT_WASM, runtimeSha256: ORT_FILES[ORT_WASM] };
+  const pins = { revision: "1939ad2a", sha256: "c46655e8a94afc45" + "0".repeat(48), runtime: ORT_WASM, runtimeSha256: ORT_FILES[ORT_WASM] };
 
   it("the runtime has its own cache named for its sha, and its key carries the full sha", () => {
     expect(runtimeCacheName(pins)).toBe(`dial-runtime-${pins.runtimeSha256.slice(0, 16)}`);
@@ -297,17 +307,26 @@ describe("the voice caches are keyed to their pins", () => {
     expect(runtimeCacheKey(pins)).toMatch(/^\/ort\//);
   });
 
-  it("the model cache is keyed on the Kokoro revision only, so a runtime-only bump keeps the model", () => {
-    expect(voiceCacheName(pins)).toBe("dial-voice-1939ad2a");
+  it("the model cache is keyed on the Kokoro revision and the model's pin, so a runtime-only bump keeps the model", () => {
+    expect(voiceCacheName(pins)).toBe("dial-voice-1939ad2a-c46655e8a94afc45");
     const bumped = { ...pins, runtimeSha256: "f".repeat(64) };
     expect(voiceCacheName(bumped)).toBe(voiceCacheName(pins));
     expect(runtimeCacheName(bumped)).not.toBe(runtimeCacheName(pins));
   });
 
+  it("a changed model pin, even on the same revision, names a new cache, so the model downloads again (pre-Proof audit)", () => {
+    const repinned = { ...pins, sha256: "d".repeat(64) };
+    expect(voiceCacheName(repinned)).not.toBe(voiceCacheName(pins));
+    // The old cache is then stale and purged on load.
+    expect(staleVoiceCaches([voiceCacheName(pins)], [voiceCacheName(repinned), runtimeCacheName(repinned)])).toEqual([voiceCacheName(pins)]);
+    // The pre-T9 name (revision only) is purged too.
+    expect(staleVoiceCaches(["dial-voice-1939ad2a"], [voiceCacheName(pins), runtimeCacheName(pins)])).toEqual(["dial-voice-1939ad2a"]);
+  });
+
   it("the purge keeps exactly the current two and leaves other caches alone", () => {
     const current = [voiceCacheName(pins), runtimeCacheName(pins)];
-    const names = ["dial-voice-old", ...current, "kokoro-voices", "dial-runtime-0000000000000000", "dial-voice-1939ad2a-c46655e8a94afc45"];
-    expect(staleVoiceCaches(names, current)).toEqual(["dial-voice-old", "dial-runtime-0000000000000000", "dial-voice-1939ad2a-c46655e8a94afc45"]);
+    const names = ["dial-voice-old", ...current, "kokoro-voices", "dial-runtime-0000000000000000", "dial-voice-1939ad2a-0000000000000000"];
+    expect(staleVoiceCaches(names, current)).toEqual(["dial-voice-old", "dial-runtime-0000000000000000", "dial-voice-1939ad2a-0000000000000000"]);
   });
 
   it("the loader checks the runtime and the voice file against their pins on read and on fetch, purges, and survives a full quota", () => {

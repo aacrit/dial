@@ -191,14 +191,15 @@ describe("web/privacy.html, claim by claim", () => {
     expect(HEARD_SHARE).toBe(0.8);
   });
 
-  it("the shell (about 3 MB) is kept for every visitor, and the model and runtime stay after the last Remove", () => {
-    expect(text).toContain("The offline helper also keeps this site's page files (about 3 MB: the pages, scripts, styles, fonts and icons) in cache storage for every visitor");
+  it("the core shell (about 0.6 MB) is kept for every visitor, the rest on a save, and the model and runtime stay after the last Remove", () => {
+    expect(text).toContain("The offline helper also keeps this site's page files (about 0.6 MB: the pages, their main script and styles, the fonts' Latin faces and the icons) in cache storage for every visitor");
+    expect(text).toContain("When you save a work it keeps the rest of the page files too (about 2.5 MB more, mostly the script that makes speech on this device).");
     expect(text).toContain("The voice model and its runtime stay after the last Remove");
     // Registered on every page load, not on the first save.
     expect(read("web/src/main.ts")).toMatch(/^registerOfflineHelper\(\);$/m);
     const store = read("web/src/offline/store.ts");
     expect(store.slice(store.indexOf("export async function removeWork"))).not.toMatch(/voiceCacheName|runtimeCacheName/);
-    // "about 3 MB" is the built shell's size (tests/offline.test.ts computes it from dist/).
+    // "about 0.6 MB" and "2.5 MB more" are the built shells' sizes (tests/offline.test.ts computes them from dist/).
   });
 
   it("the offline helper never stores the daily counts or feedback", async () => {

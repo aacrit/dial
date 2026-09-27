@@ -31,3 +31,18 @@ export function shellPaths(distFiles) {
   }
   return [...out].sort();
 }
+
+/**
+ * Shell files a first visit does not need to open the pages offline: the
+ * render worker's script (about 2.2 MB, used only to make speech on the
+ * device) and the fonts' extended-Latin faces (used only for letters the
+ * works rarely have). They are kept with the rest of the shell as soon as a
+ * listener saves a work (the helper's ensure-shell), or at install when a
+ * work is already saved.
+ */
+const LATER = [/^\/assets\/narrate\.worker-[^/]*\.js$/, /-latin-ext-[^/]*\.woff2$/];
+
+/** The shell every visitor's helper keeps at install (the pre-Proof audit: about 0.6 MB, not 3 MB). */
+export function coreShellPaths(shell) {
+  return shell.filter((p) => !LATER.some((re) => re.test(p)));
+}

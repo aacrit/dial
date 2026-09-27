@@ -175,6 +175,10 @@ export function stationsUnreached(host: string): string {
 /** A station whose cast sheet the voices cannot honour: only that station is unavailable. */
 export const CAST_FAILED = "Dial could not cast this work's voices.";
 
+/** The render meter's accessible name while the voice downloads, and once it is making lines (web/index.html #render-meter). */
+export const METER_WARMING = "Getting the voice ready";
+export const METER_MAKING = "Lines made";
+
 export const STATIONS_SERVER = "The stations did not load. Dial could not send the works. Try again later.";
 
 // ---- Scrubbing (the progress strip, J/K/L and [ ]) --------------------------

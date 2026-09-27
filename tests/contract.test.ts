@@ -1,8 +1,12 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { isLocalUrl, loadContract, runContract } from "../scripts/contract.mjs";
+import { USER_AGENT, contractFetch, describeFetchError, isLocalUrl, loadContract, runContract } from "../scripts/contract.mjs";
+import { contractAt, deployedTag } from "../scripts/deployed-contract.mjs";
 
 let server: Server;
 let baseUrl: string;
@@ -12,6 +16,8 @@ const BAD_HOME = `<!doctype html><html><head></head><body>Demo Product TODO fix 
 
 let currentHome = GOOD_HOME;
 let currentFrameHeader = "DENY";
+const postBodies: string[] = [];
+const seenAgents: string[] = [];
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -34,6 +40,28 @@ beforeAll(async () => {
     if (req.url === "/list-bad") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(["/", "/waf"]));
+      return;
+    }
+    if (req.url === "/post-limited") {
+      // A write path: refuses anything but POST, answers 400 to the first two, then the Worker's 429.
+      if (req.method !== "POST" || req.headers["content-type"] !== "application/json") {
+        res.writeHead(405).end();
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        postBodies.push(body);
+        const limited = postBodies.length > 2;
+        res.writeHead(limited ? 429 : 400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: limited ? "rate_limited" : "event_not_allowed" }));
+      });
+      return;
+    }
+    if (req.url === "/ua") {
+      seenAgents.push(String(req.headers["user-agent"]));
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("ok");
       return;
     }
     if (req.url === "/healthz") {
@@ -152,5 +180,107 @@ describe("contract runner: deployed-only burst checks", () => {
     expect(burst).toMatchObject({ expect_status: 429, expect_error: "rate_limited", requires: "deployed" });
     expect(burst.pause_before_seconds).toBeGreaterThan(10);
     expect(burst.count).toBeGreaterThan(20);
+  });
+
+  it("a burst with method and body posts JSON, and passes once the Worker's 429 answers", async () => {
+    postBodies.length = 0;
+    const [r] = await runContract({ checks: [{ name: "post burst", type: "burst", path: "/post-limited", method: "POST", body: { name: "not_an_event" }, count: 4, concurrency: 2, expect_status: 429, expect_error: "rate_limited" }] }, baseUrl);
+    expect(r.pass).toBe(true);
+    expect(postBodies).toEqual(Array(4).fill('{"name":"not_an_event"}'));
+  });
+
+  it("contract.yaml bursts the write paths with bodies validation refuses, so nothing is counted or stored", () => {
+    const file = fileURLToPath(new URL("../contract.yaml", import.meta.url));
+    const bursts = loadContract(path.resolve(file)).checks.filter((c: { type: string }) => c.type === "burst");
+    const e = bursts.find((c: { path: string }) => c.path === "/e");
+    const fb = bursts.find((c: { path: string }) => c.path === "/feedback");
+    expect(e).toMatchObject({ method: "POST", body: { name: "not_an_event" }, expect_error: "rate_limited", requires: "deployed" });
+    expect(fb).toMatchObject({ method: "POST", body: { text: "" }, expect_error: "rate_limited", requires: "deployed" });
+    // Past each binding's limit (6 and 2 a minute), within one WAF window of 30.
+    expect(e.count).toBeGreaterThan(6);
+    expect(fb.count).toBeGreaterThan(2);
+    expect(e.concurrency).toBeLessThan(30);
+    expect(fb.concurrency).toBeLessThan(30);
+  });
+});
+
+describe("verify-production checks the deployed release's contract, not main's", () => {
+  it("reads the release tag from /healthz, and refuses a build that is not one", () => {
+    expect(deployedTag({ ok: true, build: "release/2026.09.26-2" })).toBe("release/2026.09.26-2");
+    expect(() => deployedTag({ ok: true, build: "a9ee601" })).toThrow(/not a release tag/);
+    expect(() => deployedTag({ ok: true, build: "dev" })).toThrow(/not a release tag/);
+    expect(() => deployedTag({ ok: true })).toThrow(/names no build/);
+    expect(() => deployedTag(null)).toThrow(/names no build/);
+    // A tag name is never passed to git unchecked.
+    expect(() => contractAt("release/x; rm -rf /")).toThrow(/not a release tag/);
+  });
+
+  it("reads contract.yaml as it was at the tag, not as it is now", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "dial-deployed-"));
+    try {
+      const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], { cwd: dir, stdio: "pipe" });
+      git("init", "-q");
+      writeFileSync(path.join(dir, "contract.yaml"), "checks: [released]\n");
+      git("add", "contract.yaml");
+      git("commit", "-q", "-m", "release");
+      git("tag", "release/2026.09.26-2");
+      writeFileSync(path.join(dir, "contract.yaml"), "checks: [main]\n");
+      git("commit", "-q", "-am", "main moves on");
+      expect(contractAt("release/2026.09.26-2", dir)).toBe("checks: [released]\n");
+      expect(() => contractAt("release/2026.09.27-9", dir)).toThrow(/not in this checkout/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("the workflow fetches the tags, runs that contract with main's runner, and creates its label before opening an issue", () => {
+    const wf = readFileSync(fileURLToPath(new URL("../.github/workflows/verify-production.yml", import.meta.url)), "utf8");
+    expect(wf).toMatch(/fetch-depth: 0/);
+    expect(wf).toContain('node scripts/deployed-contract.mjs --url https://dial.voidvision.org --out "$RUNNER_TEMP/deployed-contract.yaml"');
+    expect(wf).toContain('npm run contract -- --url https://dial.voidvision.org --contract "$RUNNER_TEMP/deployed-contract.yaml"');
+    expect(wf.indexOf("gh label create prod-red")).toBeGreaterThan(0);
+    expect(wf.indexOf("gh label create prod-red")).toBeLessThan(wf.indexOf("gh issue create"));
+    expect(wf).not.toMatch(/continue-on-error|\|\|\s*true/);
+  });
+});
+
+describe("contract runner: requests that fail below HTTP", () => {
+  it("every request names itself with the runner's User-Agent", async () => {
+    seenAgents.length = 0;
+    const [r] = await runContract({ checks: [{ name: "ua", type: "status", path: "/ua", expect: 200 }] }, baseUrl);
+    expect(r.pass).toBe(true);
+    expect(seenAgents).toEqual([USER_AGENT]);
+    expect(USER_AGENT).toMatch(/^dial-contract\/\d+ \(\+https:\/\/dial\.voidvision\.org\/privacy\)$/);
+  });
+
+  it("says why a fetch failed (DNS, refused), not only undici's 'fetch failed'", async () => {
+    const err = new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo ENOTFOUND dial.voidvision.org"), { code: "ENOTFOUND" }) });
+    expect(describeFetchError(err)).toBe("fetch failed: ENOTFOUND: getaddrinfo ENOTFOUND dial.voidvision.org");
+    expect(describeFetchError(new Error("plain"))).toBe("plain");
+    // A closed port: the check fails with the reason in its detail.
+    const spare = createServer();
+    await new Promise<void>((resolve) => spare.listen(0, "127.0.0.1", resolve));
+    const port = (spare.address() as { port: number }).port;
+    await new Promise<void>((resolve) => spare.close(() => resolve()));
+    const [r] = await runContract({ checks: [{ name: "closed", type: "status", path: "/", expect: 200 }] }, `http://127.0.0.1:${port}`);
+    expect(r.pass).toBe(false);
+    expect(r.detail).toMatch(/failed: fetch failed: ECONNREFUSED/);
+  }, 15_000);
+
+  it("retries once after a failure below HTTP, and never retries an HTTP answer", async () => {
+    let calls = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      calls++;
+      if (calls === 1) throw new TypeError("fetch failed");
+      return new Response("ok", { status: 503 });
+    }) as typeof fetch;
+    try {
+      const res = await contractFetch("https://example.invalid/", {}, 1);
+      expect(res.status).toBe(503);
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

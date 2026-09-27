@@ -89,6 +89,16 @@ export function recordingSentence(work: Pick<Work, "translator">, rec: Recording
   );
 }
 
+/**
+ * The Bookplate's Direction row. A work with a cast sheet is performed from
+ * the text's layout and that sheet (Law 3), so "the layout of the text
+ * alone" would contradict the sheet printed in the row above it.
+ */
+export function directionSentence(work: Pick<Work, "cast">): string {
+  const from = work.cast ? "the layout of the text and the curator's cast sheet" : "the layout of the text alone";
+  return `Nobody directed this performance. The same fixed rules perform every work, from ${from}.`;
+}
+
 /** The Bookplate: station, source, public-domain basis, voice, direction, and a human reading where one is known. */
 export function bookplateHtml(work: Work, cast?: Cast, recording?: RecordingFacts): string {
   const s = work.source;
@@ -113,7 +123,7 @@ export function bookplateHtml(work: Work, cast?: Cast, recording?: RecordingFact
       ? `${castSentence(cast)}${castSheetSentence(work.cast)}${recordingSentence(work, recording)}`
       : `${castSentence(cast)}${castSheetSentence(work.cast)}The speech is made by Kokoro-82M, an open speech model that runs on your device. AI-voiced; the words are ${esc(work.translator.split(" ").at(-1))}'s, exactly as printed.`,
   ]);
-  rows.push(["Direction", "Nobody directed this performance. The same fixed rules perform every work, from the layout of the text alone."]);
+  rows.push(["Direction", directionSentence(work)]);
   if (work.librivox) {
     rows.push(["Also", `Prefer a human reader? <a href="${esc(work.librivox)}" rel="noopener">LibriVox has a volunteer reading of the same translation</a>.`]);
   }
@@ -147,12 +157,22 @@ export function scaleSvg(works: readonly Work[], step: number, tuned: number): s
   return out;
 }
 
+/**
+ * A preset key's accessible name: its visible short name first, so a
+ * speech-input user can say what they see (WCAG 2.5.3, label in name), then
+ * the full title where it adds anything. "The Cave: The Allegory of the
+ * Cave"; "Crito" alone.
+ */
+export function presetKeyLabel(w: Pick<Work, "short" | "title">): string {
+  return w.title.toLowerCase().startsWith(w.short.toLowerCase()) ? w.title : `${w.short}: ${w.title}`;
+}
+
 /** The station preset keys: each work's short name, and its title for assistive tech (no catalogue number). */
 export function presetKeysHtml(works: readonly Work[], tuned: number): string {
   return works
     .map(
       (w, i) =>
-        `<button class="key station" type="button" data-preset="${i}" aria-pressed="${i === tuned}" aria-label="${esc(w.title)}">` +
+        `<button class="key station" type="button" data-preset="${i}" aria-pressed="${i === tuned}" aria-label="${esc(presetKeyLabel(w))}">` +
         `<span class="t">${esc(w.short)}</span></button>`,
     )
     .join("");
@@ -189,18 +209,24 @@ export function readAlongHtml(lines: readonly ReadLine[], live: number): string 
  * The full script: every cue's text exactly as printed (Law 2). Between two
  * lines goes exactly what the source has between them: nothing, a space
  * where it has whitespace, or a new paragraph where it has a blank line.
- * Each line is a control that plays from it once it is made; the live line
- * carries the amber treatment. One line holds the tab stop (the live one,
- * else the first): the arrow keys move it (a roving tabindex, main.ts).
+ * While this work is on air, each line is a control that plays from it
+ * once it is made; the live line carries the amber treatment. One line
+ * holds the tab stop (the live one, else the first): the arrow keys move it
+ * (a roving tabindex, main.ts). Off air the lines are plain text, not a page
+ * of disabled buttons, and the script's scroller takes the tab stop.
  */
-export function scriptHtml(source: string, cues: readonly { start: number; end: number; text: string }[], live: number, made: number): string {
+export function scriptHtml(source: string, cues: readonly { start: number; end: number; text: string }[], live: number, made: number, onAir = true): string {
   const stop = live >= 0 && live < cues.length ? live : 0;
   let out = "<p>";
   cues.forEach((c, i) => {
-    const cls = `sl${i === live ? " live" : ""}${i >= made ? " unmade" : ""}`;
-    const state = i >= made ? ` aria-disabled="true"` : "";
-    const current = i === live ? ` aria-current="true"` : "";
-    out += `<span class="${cls}" role="button" tabindex="${i === stop ? 0 : -1}" data-i="${i}"${state}${current}>${esc(c.text)}</span>`;
+    if (!onAir) {
+      out += `<span class="sl" data-i="${i}">${esc(c.text)}</span>`;
+    } else {
+      const cls = `sl${i === live ? " live" : ""}${i >= made ? " unmade" : ""}`;
+      const state = i >= made ? ` aria-disabled="true"` : "";
+      const current = i === live ? ` aria-current="true"` : "";
+      out += `<span class="${cls}" role="button" tabindex="${i === stop ? 0 : -1}" data-i="${i}"${state}${current}>${esc(c.text)}</span>`;
+    }
     const next = cues[i + 1];
     if (!next) return;
     const gap = source.slice(c.end, next.start);

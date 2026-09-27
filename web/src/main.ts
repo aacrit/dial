@@ -12,6 +12,7 @@ import { watchReducedMotion } from "./device/reduced-motion";
 import { PRESETS, parseSpring } from "./device/spring";
 import { mountWave } from "./device/wave";
 import { isStatableTotal, warmingLine } from "./download-size";
+import { FEEDBACK_FAILED, feedbackFailure, feedbackProblem } from "./feedback-copy";
 import { tryCast, type Cast } from "./engine/cast";
 import { segment, type Cue } from "./engine/segment";
 import { WavChunks } from "./engine/wav";
@@ -24,6 +25,8 @@ import { bookplateHeading, bookplateHtml, eyebrowHtml, metaHtml, readAlongHtml, 
 import { pageTitle, parseRoute, playPath } from "./route";
 import {
   CAST_FAILED,
+  METER_MAKING,
+  METER_WARMING,
   PLAYS_AT_ONCE,
   RECORDING_UNPLAYABLE,
   makeItHere,
@@ -115,7 +118,10 @@ interface Session {
   analyser: AnalyserNode;
   /** The render worker; none for a prepared recording. */
   worker: Worker | null;
+  /** The frame loop's pending frame; 0 while it sleeps (paused, nothing moves). */
   frame: number;
+  /** Restarts the frame loop if it sleeps: on resume, and after a seek. */
+  wake: () => void;
   /** Schedules the next lines as the listener nears them. */
   feeder: number;
   live: boolean;
@@ -669,6 +675,7 @@ function setupRadio(): void {
       analyser,
       worker,
       frame: 0,
+      wake: () => undefined,
       feeder: 0,
       live: true,
       renderDone: false,
@@ -740,6 +747,8 @@ function setupRadio(): void {
     // until then the meter is indeterminate and the line states no size.
     meter.hidden = !!rec;
     meter.removeAttribute("value");
+    // Named for what it measures: the voice's download first, then the lines made (see "ready").
+    meter.setAttribute("aria-label", METER_WARMING);
     pause.hidden = false;
     pause.textContent = "Pause";
     pause.focus();
@@ -747,7 +756,10 @@ function setupRadio(): void {
     radio.setReady(rec ? 1 : 0);
     air.analyser = analyser;
     air.redraw();
-    audio.onstatechange = setLamp;
+    audio.onstatechange = () => {
+      setLamp();
+      own.wake();
+    };
     setLamp();
     paintTuneIn();
     paintTransport();
@@ -789,6 +801,16 @@ function setupRadio(): void {
       paintPlayhead();
       own.tally();
       own.frame = requestAnimationFrame(follow);
+      // Paused, nothing on the glass moves: the loop sleeps after this frame
+      // (which has drawn the paused state) until the audio resumes or a seek
+      // wakes it. A drag paints the needle itself.
+      if (audio.state === "suspended") {
+        cancelAnimationFrame(own.frame);
+        own.frame = 0;
+      }
+    };
+    own.wake = () => {
+      if (session === own && own.live && !own.frame) own.frame = requestAnimationFrame(follow);
     };
     own.frame = requestAnimationFrame(follow);
 
@@ -888,6 +910,7 @@ function setupRadio(): void {
         paintAvail();
         meter.max = cues.length;
         meter.value = 0;
+        meter.setAttribute("aria-label", METER_MAKING);
         setValve(1, "Voice ready");
         radio.setReady(1);
         announce(firstLineLine(work.title, own.kept));
@@ -977,6 +1000,8 @@ function setupRadio(): void {
     scrubNote.textContent = target.beyond && s.made < s.cues.length ? notMadeYet(s.made, s.cues.length) : "";
     lastShown = -1;
     updatePosition(s, s.sched.at[target.index]! + target.offset);
+    // A seek while paused moves the line and the needle: one frame paints them.
+    s.wake();
   };
 
   const seekBy = (seconds: number) => {
@@ -1051,8 +1076,16 @@ function setupRadio(): void {
     const s = session?.live && session.work === w ? session : null;
     const focused = scriptBox.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.i : undefined;
     scriptNoteEl.textContent = scriptNote(w.translator, !!s);
-    scriptBox.innerHTML = text ? scriptHtml(text.source, text.cues, s ? s.line : -1, s ? s.made : 0) : "";
+    scriptBox.innerHTML = text ? scriptHtml(text.source, text.cues, s ? s.line : -1, s ? s.made : 0, !!s) : "";
+    // Off air the lines are plain text, so the scroller itself is the tab stop (keyboard scrolling); on air a line is.
+    if (s) scriptPanel.removeAttribute("tabindex");
+    else scriptPanel.tabIndex = 0;
     if (focused === undefined) return;
+    // A line that had focus when the broadcast went off air is text now: focus stays in the script, on its scroller.
+    if (!s) {
+      scriptPanel.focus({ preventScroll: true });
+      return;
+    }
     const el = scriptBox.querySelector<HTMLElement>(`.sl[data-i="${focused}"]`);
     if (!el) return;
     for (const x of scriptBox.querySelectorAll<HTMLElement>('.sl[tabindex="0"]')) x.tabIndex = -1;
@@ -1344,11 +1377,34 @@ function setupFeedback(): void {
     opener.addEventListener("click", () => sheet.open(opener));
   }
 
+  const textarea = form.elements.namedItem("text");
+  const refuse = (line: string) => {
+    status.textContent = line;
+    status.dataset.state = "error";
+  };
+  // A problem stated on the page clears as soon as the message changes.
+  if (textarea instanceof HTMLTextAreaElement) {
+    textarea.addEventListener("input", () => {
+      if (!textarea.hasAttribute("aria-invalid")) return;
+      textarea.removeAttribute("aria-invalid");
+      status.textContent = "";
+      status.removeAttribute("data-state");
+    });
+  }
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const textarea = form.elements.namedItem("text");
     const text = textarea instanceof HTMLTextAreaElement ? textarea.value.trim() : "";
-    if (!text) return;
+    // Checked here first (empty, or longer than the Worker keeps), so a message it would refuse is never sent.
+    const problem = feedbackProblem(text);
+    if (problem) {
+      refuse(problem);
+      if (textarea instanceof HTMLTextAreaElement) {
+        textarea.setAttribute("aria-invalid", "true");
+        textarea.focus();
+      }
+      return;
+    }
 
     status.textContent = "Sending.";
     status.removeAttribute("data-state");
@@ -1364,19 +1420,17 @@ function setupFeedback(): void {
     // The network failed before it arrived: the Seal's log says "not delivered".
     sending.catch(() => noteSendFailed(token));
     sending
-      .then((response) => {
-        if (response.status === 429) throw new Error("ceiling");
-        if (!response.ok) throw new Error(`status ${response.status}`);
+      .then(async (response) => {
+        if (!response.ok) {
+          // The Worker's refusals are JSON with an `error` code; the zone's own block is not, and reads as too many.
+          const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+          refuse(feedbackFailure(response.status, typeof body?.error === "string" ? body.error : undefined));
+          return;
+        }
         status.textContent = "Thank you, that was sent.";
         form.reset();
       })
-      .catch((err: unknown) => {
-        status.textContent =
-          err instanceof Error && err.message === "ceiling"
-            ? "We have had a lot of feedback today. Please try again tomorrow."
-            : "Could not send that. Please try again.";
-        status.dataset.state = "error";
-      });
+      .catch(() => refuse(FEEDBACK_FAILED));
   });
 }
 

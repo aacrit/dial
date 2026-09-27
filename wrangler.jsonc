@@ -42,9 +42,14 @@
   // Per-client rate limit (worker/src/guard.ts). The binding counts per
   // client network in memory at each Cloudflare location and stores
   // nothing. Periods can only be 10 or 60 seconds. namespace_id must be a
-  // number unique across the Cloudflare account: /brief assigns it.
+  // number unique across the Cloudflare account: /brief assigns it. Rollbook
+  // holds 7201 to 7203; Dial holds 7301 to 7303. RL_EVENTS (POST /e) and
+  // RL_FEEDBACK (POST /feedback) are the write paths' own, tighter limits;
+  // RL_API is everything else (worker/src/guard.ts limiterFor).
   "ratelimits": [
-    { "name": "RL_API", "namespace_id": "7301", "simple": { "limit": 20, "period": 10 } }
+    { "name": "RL_API", "namespace_id": "7301", "simple": { "limit": 20, "period": 10 } },
+    { "name": "RL_EVENTS", "namespace_id": "7302", "simple": { "limit": 6, "period": 60 } },
+    { "name": "RL_FEEDBACK", "namespace_id": "7303", "simple": { "limit": 2, "period": 60 } }
   ],
   "d1_databases": [
     {

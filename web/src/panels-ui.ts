@@ -5,7 +5,7 @@
 // style.css. Nothing here fetches or sends anything.
 
 import { motion } from "./device/reduced-motion";
-import { PANELS, PHONE_PORTRAIT, SHORT_LANDSCAPE, SINGLE_PANEL, type PanelId } from "./panels";
+import { NARROW_LANDSCAPE, PANELS, PHONE_PORTRAIT, SHORT_LANDSCAPE, SINGLE_PANEL, sealCovers, type PanelId } from "./panels";
 
 export type TextTab = "script" | "bookplate";
 
@@ -160,14 +160,12 @@ export function mountPanels(): Panels {
       unfill(true);
     }
   });
-  // On a phone held upright the open request list covers the work panel: the widgets under it are inert until it closes.
+  // The open request list covers the work panel on a phone held upright and on a landscape screen under 600 px wide:
+  // the widgets under it are inert until it closes. On other short landscape screens it covers the Script column, so that one alone is.
   const reqs = document.getElementById("seal-reqs") as HTMLDetailsElement | null;
-  // On a phone on its side it covers the Script column, so that one alone is inert.
   const paintInert = () => {
-    const open = !!reqs?.open;
-    const phone = open && matches(PHONE_PORTRAIT);
-    const side = open && matches(SHORT_LANDSCAPE);
-    for (const w of widgets?.querySelectorAll<HTMLElement>(":scope > .widget:not(.w-seal)") ?? []) w.inert = phone || (side && w.classList.contains("w-text"));
+    const covers = reqs?.open ? sealCovers(matches) : "none";
+    for (const w of widgets?.querySelectorAll<HTMLElement>(":scope > .widget:not(.w-seal)") ?? []) w.inert = covers === "all" || (covers === "text" && w.classList.contains("w-text"));
   };
   reqs?.addEventListener("toggle", paintInert);
 
@@ -178,6 +176,7 @@ export function mountPanels(): Panels {
       paintInert();
     });
     matchMedia(SHORT_LANDSCAPE).addEventListener("change", paintInert);
+    matchMedia(NARROW_LANDSCAPE).addEventListener("change", paintInert);
   }
 
   tabs.forEach((tab, i) => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The no-scroll rule in a real browser (design/spec.md 00, "Test rule for
 // T8"; CoS decisions F and G, 2026-09-27): loads the built site at the panel
-// map's six viewports and five smaller ones, walks every state a listener
+// map's six viewports and six smaller ones, walks every state a listener
 // can reach (the radio, offline, the work panel, the Seal's list open and
 // scrolled, the Script and the Bookplate, the feedback sheet, on air), and
 // fails if anything is wider than the viewport, anything is out of reach,
@@ -49,6 +49,7 @@ export const SMALL_VIEWPORTS = [
   [320, 568],
   [640, 360],
   [960, 540],
+  [568, 320],
 ];
 
 const arg = (name) => {
@@ -126,6 +127,21 @@ function stubStopped() {
   }
 }
 
+/** The work panel's widgets the open Seal overlaps that could still take focus (not inert). Runs in the page. */
+function coveredNotInert() {
+  const seal = document.getElementById("seal")?.getBoundingClientRect();
+  if (!seal) return [];
+  return [...document.querySelectorAll("#widgets > .widget:not(.w-seal)")]
+    .filter((w) => {
+      const r = w.getBoundingClientRect();
+      if (!r.width || !r.height) return false;
+      const across = Math.min(r.right, seal.right) - Math.max(r.left, seal.left);
+      const down = Math.min(r.bottom, seal.bottom) - Math.max(r.top, seal.top);
+      return across > 1 && down > 1 && !w.inert;
+    })
+    .map((w) => (w.id ? `#${w.id}` : `.${w.className.split(" ").join(".")}`));
+}
+
 /** Where focus is, and whether it can be seen: its panel is the band's current one, and it is on screen. */
 function focusState() {
   const el = document.activeElement;
@@ -136,7 +152,19 @@ function focusState() {
   return { id: el?.id ?? "", panel, current, onScreen };
 }
 
+/** Whether `--only` (a "<width>x<height>" string) names a checked viewport; no --only checks them all. */
+export function onlyMatches(only) {
+  return only === undefined || [...VIEWPORTS, ...SMALL_VIEWPORTS].some(([w, h]) => `${w}x${h}` === only);
+}
+
 async function main() {
+  // --only that names no checked viewport would check nothing: a failure, never a pass (T8 review).
+  const only = arg("--only");
+  if (!onlyMatches(only)) {
+    const known = [...VIEWPORTS, ...SMALL_VIEWPORTS].map(([w, h]) => `${w}x${h}`).join(", ");
+    console.error(`layout-check: --only ${only} matches no viewport (${known}); nothing was checked.`);
+    process.exit(1);
+  }
   const gate = process.argv.includes("--gate");
   const skip = (why) => {
     // In CI the check always runs (decision G); a local gate may lack a browser.
@@ -167,7 +195,6 @@ async function main() {
   const origin = base ?? `http://127.0.0.1:${port}`;
   const rows = [];
   try {
-    const only = arg("--only");
     for (const [width, height, fit] of [...VIEWPORTS.map((v) => [...v, true]), ...SMALL_VIEWPORTS.map((v) => [...v, false])]) {
       if (only && only !== `${width}x${height}`) continue;
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
@@ -232,7 +259,9 @@ async function main() {
         await check("work", inView("work"));
         // The Seal's list: open, and it scrolls inside itself.
         if (await press("#seal-reqs > summary", "seal open")) {
-          await check("seal open", inView("work"));
+          // Whatever the open Seal covers is inert: nothing under it can take focus (T8 review).
+          const underSeal = await page.evaluate(coveredNotInert);
+          await check("seal open", inView("work"), underSeal.map((w) => `${w} sits under the open Seal but is not inert`));
           const reqs = page.locator(".reqs");
           const before = await reqs.evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, top: el.scrollTop }));
           const box = await reqs.boundingBox();

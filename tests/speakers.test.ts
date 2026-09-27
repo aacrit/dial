@@ -396,10 +396,13 @@ describe("T2b review: catalogue numbers only in the dial's readout and the Bookp
     expect(eyebrowHtml()).toBe("");
   });
 
-  it("the preset keys show the name, and are named by the title", () => {
+  it("the preset keys show the name, and are named by it, then the title (label in name, WCAG 2.5.3)", () => {
     const keys = presetKeysHtml(WORKS, 1);
     expect(keys).not.toMatch(/00\d|514|data-numeral/);
-    expect([...keys.matchAll(/aria-label="([^"]*)"/g)].map((m) => m[1])).toEqual(WORKS.map((w) => esc(w.title)));
+    const labels = [...keys.matchAll(/aria-label="([^"]*)"/g)].map((m) => m[1]);
+    expect(labels).toEqual(["The Cave: The Allegory of the Cave", "Crito", "Meditations, Book II"]);
+    // Every accessible name starts with the words the key shows.
+    WORKS.forEach((w, i) => expect(labels[i]!.startsWith(w.short), w.short).toBe(true));
     expect([...keys.matchAll(/<span class="t">([^<]*)<\/span>/g)].map((m) => m[1])).toEqual(["The Cave", "Crito", "Meditations"]);
   });
 

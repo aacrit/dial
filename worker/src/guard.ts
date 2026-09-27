@@ -18,24 +18,39 @@ export interface RateLimiter {
 }
 
 export interface GuardEnv {
-  /** Every request that reaches the Worker. 20 per 10 s (wrangler.jsonc). */
+  /** Every Worker request that has no binding of its own: /healthz, /api/*, unmatched paths. 20 per 10 s (wrangler.jsonc). */
   RL_API?: RateLimiter;
+  /** POST /e. 6 per 60 s: a visit sends a page view, a tune-in per work and a listen, far below it, while one script can no longer push the success event past the kill line in minutes. */
+  RL_EVENTS?: RateLimiter;
+  /** POST /feedback. 2 per 60 s: nobody writes three messages a minute, and one client can no longer use up the day's shared feedback ceiling. */
+  RL_FEEDBACK?: RateLimiter;
 }
 
 export type LimiterName = keyof GuardEnv;
 
-/** Seconds until a limited client should retry: each binding's period (wrangler.jsonc). */
-export const LIMITER_PERIOD_SECONDS: Record<LimiterName, number> = { RL_API: 10 };
+/** Seconds until a limited client should retry: each binding's period (wrangler.jsonc; tests/hardening.test.ts keeps them equal). */
+export const LIMITER_PERIOD_SECONDS: Record<LimiterName, number> = { RL_API: 10, RL_EVENTS: 60, RL_FEEDBACK: 60 };
+
+/** Requests each binding allows per period (wrangler.jsonc; tests/hardening.test.ts keeps them equal). */
+export const LIMITER_LIMITS: Record<LimiterName, number> = { RL_API: 20, RL_EVENTS: 6, RL_FEEDBACK: 2 };
 
 /**
  * Which limiter a request counts against. Every request that reaches the
- * Worker counts against one: static assets never reach it (wrangler.jsonc's
- * run_worker_first lists only the Worker's routes), so this covers
- * /healthz and unmatched paths too. A product that adds an expensive route
- * (an issue, a lookup that can be enumerated) gives it its own binding here.
+ * Worker counts against exactly one: static assets never reach it
+ * (wrangler.jsonc's run_worker_first lists only the Worker's routes), so
+ * this covers /healthz and unmatched paths too. The two write paths have
+ * their own, tighter bindings (the pre-Proof audit, 2026-09-26).
  */
-export function limiterFor(_method: string, _pathname: string): LimiterName {
+export function limiterFor(method: string, pathname: string): LimiterName {
+  if (method === "POST" && pathname === "/e") return "RL_EVENTS";
+  if (method === "POST" && pathname === "/feedback") return "RL_FEEDBACK";
   return "RL_API";
+}
+
+/** The plain words a refused client gets with its 429, beside `error: "rate_limited"`. */
+export function rateLimitedMessage(name: LimiterName): string {
+  const wait = LIMITER_PERIOD_SECONDS[name] >= 60 ? "a minute" : `${LIMITER_PERIOD_SECONDS[name]} seconds`;
+  return `Too many requests from this network. Wait ${wait}, then try again.`;
 }
 
 /** Expands an IPv6 address to 8 hextets, or null if it is not one. Handles "::" and an embedded dotted IPv4 tail. */
