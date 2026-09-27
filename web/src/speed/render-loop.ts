@@ -97,11 +97,13 @@ export const WARM_UP = "Ready.";
 
 const say = (tts: Speaker, text: string, voice: string) => tts.generate(text, { voice: voice as never });
 
-/** Times the fixed sentence on one engine: its speed, and its speech's shape to compare. */
-async function timeSentence(tts: Speaker, voice: string, warm: boolean, now: () => number) {
-  if (warm) await say(tts, WARM_UP, voice);
+type Guard = <T>(p: Promise<T>, text: string) => Promise<T>;
+
+/** Times the fixed sentence on one engine: its speed, and its speech's shape to compare; `guard` bounds each call (the graphics chip's watchdog). */
+async function timeSentence(tts: Speaker, voice: string, warm: boolean, now: () => number, guard: Guard = (p) => p) {
+  if (warm) await guard(say(tts, WARM_UP, voice), WARM_UP);
   const t1 = now();
-  const raw = await say(tts, BENCH_SENTENCE, voice);
+  const raw = await guard(say(tts, BENCH_SENTENCE, voice), BENCH_SENTENCE);
   const ms = now() - t1;
   const shape = shapeOf(raw.audio, raw.sampling_rate);
   return { rtf: ms > 0 ? shape.seconds / (ms / 1000) : 0, shape };
@@ -121,25 +123,48 @@ async function release(tts: Speaker | null): Promise<void> {
  * loser's session goes; a graphics chip that lost, or spoke wrongly, has its
  * model deleted from this device.
  */
-export async function speedTest<M extends LoopManifest>(deps: LoopDeps<M>, cpu: Speaker, voice: string, manifest: M, cpuWarm: boolean): Promise<{ choice: SpeedChoice; gpuTts: Speaker | null; gpuRtf: number }> {
+export async function speedTest<M extends LoopManifest>(deps: LoopDeps<M>, cpu: Speaker, voice: string, manifest: M, cpuWarm: boolean): Promise<{ choice: SpeedChoice; gpuTts: Speaker | null; gpuRtf: number; stuck: boolean }> {
   const base = await timeSentence(cpu, voice, !cpuWarm, deps.now);
   const trials: Trial[] = [{ backend: "wasm", rtf: base.rtf, ok: base.shape.finite && base.shape.seconds > 0 }];
   let gpuTts: Speaker | null = null;
+  let stuck = false;
   try {
-    gpuTts = await deps.openVoice(manifest, "webgpu");
-    const g = await timeSentence(gpuTts, voice, true, deps.now);
+    // Every step on the graphics chip is bounded: a GPU that never answers must not freeze the work.
+    gpuTts = await bounded(deps, deps.openVoice(manifest, "webgpu"), GPU_OPEN_MS);
+    const g = await timeSentence(gpuTts, voice, true, deps.now, (p, text) => bounded(deps, p, gpuWatchdogMs(text)));
     trials.push({ backend: "webgpu", rtf: g.rtf, ok: soundsRight(g.shape, base.shape) });
-  } catch {
+  } catch (err) {
+    stuck = err instanceof GpuStuckError;
     trials.push({ backend: "webgpu", rtf: 0, ok: false });
   }
   const choice = pickBackend(trials);
   const gpuTrial = trials[1]!;
   if (choice.backend !== "webgpu") {
-    await release(gpuTts);
+    // A stuck session may never answer its release either: let it go without waiting.
+    if (stuck) void release(gpuTts);
+    else await release(gpuTts);
     gpuTts = null;
     await deps.dropGpuModel(manifest);
   }
-  return { choice, gpuTts, gpuRtf: gpuTrial.ok ? gpuTrial.rtf : 0 };
+  return { choice, gpuTts, gpuRtf: gpuTrial.ok ? gpuTrial.rtf : 0, stuck };
+}
+
+/** The graphics chip's session may take this long to open (the 326 MB model's first start included) before it counts as stuck. */
+export const GPU_OPEN_MS = 60_000;
+
+/** The graphics chip did not answer in time. */
+export class GpuStuckError extends Error {
+  override name = "GPUDeviceLostError";
+}
+
+/** `p`, or GpuStuckError once `ms` pass first. */
+export function bounded<T, M extends LoopManifest>(deps: Pick<LoopDeps<M>, "sleep">, p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    deps.sleep(ms).then(() => {
+      throw new GpuStuckError("the graphics chip stopped answering");
+    }),
+  ]);
 }
 
 /** One render: the page's messages come in through onMessage while render() runs. */
@@ -188,13 +213,30 @@ export class RenderLoop<M extends LoopManifest> {
       let choice: SpeedChoice = keptChoice(entry, pins, gpu) ?? { backend: "wasm", rtf: 0, trials: [], cached: false };
       let gpuRtf = entry?.gpuRtf;
       let engine: Speaker | null = null;
+      /**
+       * The graphics chip failed or stopped answering at line `at`: its runtime cannot be trusted any more, so
+       * this worker says so and stops, and the page carries on in a fresh worker on the processor, untested.
+       */
+      const lose = (at: number) => {
+        const fallback: SpeedChoice = { backend: "wasm", rtf: choice.trials.find((t) => t.backend === "wasm")?.rtf ?? 0, trials: [], cached: false };
+        // Kept as measured without the graphics chip, so the next visit starts on the processor and may test again.
+        d.post({ type: "speed", choice: fallback, entry: entryFor(fallback, pins, false), gpuOffer: 0 });
+        d.post({ type: "lost", index: at, kept: entryFor(fallback, pins, gpu, gpuRtf ?? 0) });
+      };
       if (choice.backend === "webgpu") {
-        try {
-          if (!held) throw new Error("the graphics chip's model is not on this device");
-          engine = await d.openVoice(manifest, "webgpu");
-        } catch {
+        if (!held) {
+          // Its model is gone (cleared site data): the processor, and the graphics chip was never touched.
           choice = { backend: "wasm", rtf: 0, trials: [], cached: false };
           gpuRtf = undefined;
+        } else {
+          try {
+            engine = await bounded(d, d.openVoice(manifest, "webgpu"), GPU_OPEN_MS);
+          } catch {
+            // It would not open, or never answered: its model goes, and a fresh worker carries on.
+            await d.dropGpuModel(manifest);
+            lose(from);
+            return;
+          }
         }
       }
       // On the processor: its session, opened now if this visit had expected the graphics chip.
@@ -202,17 +244,24 @@ export class RenderLoop<M extends LoopManifest> {
         cpu ??= await d.openVoice(manifest, "wasm");
         engine = cpu;
       }
-      const test = async (cpuWarm: boolean, at: number) => {
+      /** Runs the speed test; false when the graphics chip got stuck in it (then the work goes on in a fresh worker). */
+      const test = async (cpuWarm: boolean, at: number): Promise<boolean> => {
         d.post({ type: "testing" });
         const tested = await speedTest(d, cpu!, voiceAt(at), manifest, cpuWarm);
         choice = tested.choice;
         gpuRtf = tested.gpuRtf;
+        if (tested.stuck) {
+          lose(at);
+          return false;
+        }
         engine = tested.gpuTts ?? cpu!;
         d.post({ type: "speed", choice, entry: entryFor(choice, pins, gpu, gpuRtf), gpuOffer: 0 });
+        return true;
       };
       // The model is here but this graphics chip was never tested: test it now, before the first line.
-      if (held && gpuRtf === undefined && choice.backend === "wasm") await test(false, from);
-      else d.post({ type: "speed", choice, entry: entryFor(choice, pins, gpu, gpuRtf), gpuOffer: gpuOffer(gpu, manifest.gpu?.bytes, held, entry) });
+      if (held && gpuRtf === undefined && choice.backend === "wasm") {
+        if (!(await test(false, from))) return;
+      } else d.post({ type: "speed", choice, entry: entryFor(choice, pins, gpu, gpuRtf), gpuOffer: gpuOffer(gpu, manifest.gpu?.bytes, held, entry) });
       // Measured from its first line: say a short phrase first, so that line times speech, not the engine's first start.
       if (!(choice.rtf > 0)) await say(engine, WARM_UP, voiceAt(from));
       d.post({ type: "ready", kept });
@@ -231,34 +280,22 @@ export class RenderLoop<M extends LoopManifest> {
         // it only while playback waits or is well ahead, so the test's pause is never heard).
         if (this.gpuArrived && !tested) {
           tested = true;
-          await test(i > from, i);
+          if (!(await test(i > from, i))) return;
         }
         let raw;
         const t0 = d.now();
         try {
           const line = engine.generate(cues[i]!.spoken, { voice: voice as never });
           // The processor always answers; the graphics chip gets a watchdog.
-          raw =
-            engine === cpu
-              ? await line
-              : await Promise.race([
-                  line,
-                  d.sleep(gpuWatchdogMs(cues[i]!.spoken)).then(() => {
-                    throw new Error("GPUDeviceLostError: the graphics chip stopped answering");
-                  }),
-                ]);
+          raw = engine === cpu ? await line : await bounded(d, line, gpuWatchdogMs(cues[i]!.spoken));
         } catch (err) {
-          // The browser stopped the graphics chip (a lost device): the processor carries on from this line, and the page is told.
+          // The browser stopped the graphics chip (a lost device, or no answer): the page is told, and a fresh
+          // worker carries on from this line on the processor (this worker's runtime shares its state with the
+          // lost graphics chip: after a crashed GPU process its processor session made nothing more, measured).
           if (engine === cpu) throw err;
           // Let the stopped session go without waiting on it: a lost device may never answer that either.
           void release(engine);
-          const fallback: SpeedChoice = { backend: "wasm", rtf: choice.trials.find((t) => t.backend === "wasm")?.rtf ?? 0, trials: [], cached: false };
-          // Kept as measured without the graphics chip, so the next visit starts on the processor and may test again.
-          d.post({ type: "speed", choice: fallback, entry: entryFor(fallback, pins, false), gpuOffer: 0 });
-          // This worker's runtime shares its state with the lost graphics chip (after a crashed GPU process the
-          // processor's session made nothing more, measured): a fresh worker carries on from this line, on the
-          // processor, without testing again.
-          d.post({ type: "lost", index: i, kept: entryFor(fallback, pins, gpu, gpuRtf ?? 0) });
+          lose(i);
           return;
         }
         const ms = d.now() - t0;

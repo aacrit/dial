@@ -12,7 +12,7 @@ import { GPU_LOST_LINE, HOLD_LINE, MEASURING_LINE, PLAY_RECORDING_NOW, START_ANY
 import { GAUGE_MAX, engineLabel, engineWords, gaugeName, gaugeReadout, gaugeValueNow, needleAngle, type Gauge } from "../web/src/speed/gauge";
 import { NoRoomError, ROOM_MARGIN, downloadGpuModel, gpuOfferAllowed, roomFor, type DownloadDeps } from "../web/src/speed/gpu-model";
 import { Pacer, TEST_AHEAD_S, type AskOptions, type PacerHooks } from "../web/src/speed/pacer";
-import { RenderLoop, WARM_UP, gpuWatchdogMs, speedTest, type FromWorker, type LoopDeps, type LoopManifest, type Speaker } from "../web/src/speed/render-loop";
+import { GPU_OPEN_MS, RenderLoop, WARM_UP, gpuWatchdogMs, speedTest, type FromWorker, type LoopDeps, type LoopManifest, type Speaker } from "../web/src/speed/render-loop";
 import { BENCH_SENTENCE } from "../web/src/bench-sentence";
 import { AHEAD_CAP_S, CHOICE_OVER_S, MIN_LEAD_S, PLANNING_MARGIN, aheadLimit, branchFor, leadWait, nextRate, paceScale, planRate, refillLines, type PlanLine } from "../web/src/speed/plan";
 import { SPEED_KEY, keepSpeed, readSpeed } from "../web/src/speed/store";
@@ -240,7 +240,8 @@ describe("the gauge's figures (speed/gauge.ts) and the plan's words (speed/copy.
     expect(countdownClock(303)).toBe("5:03");
     expect(countdownClock(3723)).toBe("1:02:03");
     expect(countdownClock(0.3)).toBe("0:01");
-    // CoS decision O: a forecast at four fifths of the measured speed, never a promise.
+    // CoS decision O: a forecast at four fifths of the measured speed, never a promise. The words say "four fifths": the margin they name is pinned here.
+    expect(PLANNING_MARGIN).toBe(4 / 5);
     expect(countdownLine(42)).toBe("Starting in 0:42. Planned at four fifths of this device's speed, so it should not pause.");
     expect(countdownLine(8, true)).toBe("Starting in 0:08.");
     expect(countdownLine(42)).not.toMatch(/never|won't/);
@@ -288,6 +289,7 @@ interface Rig {
   gauge: { shown: string[]; values: number[] };
   gpuAsks: number;
   gpuSends: number;
+  gpuCancels: number;
 }
 
 /** A work of `n` lines, each `words` words (about `words` x 60/155 s of speech) with no pause. */
@@ -320,7 +322,7 @@ function rig(n: number, words: number, hasRecording: boolean): Rig {
       return this.pos;
     },
   };
-  const r: Rig = { clock, audio, sched, said: [], asks: [], hidden: 0, gauge: { shown: [], values: [] }, gpuAsks: 0, gpuSends: 0, pacer: null! };
+  const r: Rig = { clock, audio, sched, said: [], asks: [], hidden: 0, gauge: { shown: [], values: [] }, gpuAsks: 0, gpuSends: 0, gpuCancels: 0, pacer: null! };
   const gauge: Gauge = { show: (b) => void r.gauge.shown.push(b), set: (x) => void r.gauge.values.push(x), hide: () => undefined };
   const hooks: PacerHooks = {
     cues: Array.from({ length: n }, () => ({ spoken: Array.from({ length: words }, () => "word").join(" "), pauseAfterMs: 0 })),
@@ -335,7 +337,10 @@ function rig(n: number, words: number, hasRecording: boolean): Rig {
     hideAsk: () => void r.hidden++,
     repaint: () => undefined,
     allow: () => undefined,
-    askGpu: () => void r.gpuAsks++,
+    askGpu: () => {
+      r.gpuAsks++;
+      return () => void r.gpuCancels++;
+    },
     sendGpu: () => void r.gpuSends++,
     keep: () => undefined,
     setPauseLabel: () => undefined,
@@ -425,7 +430,9 @@ describe("the pacer (speed/pacer.ts): the countdown, the choice past two minutes
     expect(r.audio.state).toBe("suspended");
     expect(r.said).toContain(HOLD_LINE);
     // CoS decision O: a hold says only what it is doing, never a countdown promise.
-    expect(r.pacer.progressLine()).toBe(HOLD_LINE);
+    // Said once, in the announced status; the line under it keeps the broadcast's own progress (not "Paused").
+    expect(r.pacer.progressLine()).toBeNull();
+    expect(read("web/src/main.ts")).toContain('paused: s.audio.state === "suspended" && !s.pacer?.waiting,');
     // It resumes at the next line boundary once the plan holds again.
     make(r, 11.6, 2.9);
     make(r, 11.6, 2.9);
@@ -646,6 +653,39 @@ describe("the pacer and the graphics chip: offered once, downloaded on the liste
     expect(r.gauge.values.at(-1)).toBeCloseTo(11.6 / 10.5);
   });
 
+  it("while the speed test runs, nothing is made, so the countdown holds still instead of running down", () => {
+    const r = rig(60, 30, false);
+    r.pacer.speed(choiceOf(0.9), entryOf(0.9), 0);
+    r.pacer.ready();
+    make(r, 11.6, 13);
+    r.pacer.testing();
+    r.pacer.tick();
+    const before = r.pacer.progressLine();
+    r.clock.t += 10;
+    r.pacer.tick();
+    expect(r.pacer.progressLine()).toBe(before);
+    // Without a test running, the same 10 s run the countdown down.
+    const s = rig(60, 30, false);
+    s.pacer.speed(choiceOf(0.9), entryOf(0.9), 0);
+    s.pacer.ready();
+    make(s, 11.6, 13);
+    s.pacer.tick();
+    const was = s.pacer.progressLine();
+    s.clock.t += 10;
+    s.pacer.tick();
+    expect(s.pacer.progressLine()).not.toBe(was);
+  });
+
+  it("the graphics chip's download stops when the broadcast does", () => {
+    const r = rig(60, 30, false);
+    r.pacer.speed(choiceOf(0.9), entryOf(0.9), BYTES);
+    r.pacer.ready();
+    r.pacer.testGpu();
+    r.pacer.dispose();
+    expect(r.gpuCancels).toBe(1);
+    expect(read("web/src/main.ts")).toMatch(/dl\.postMessage\("start"\);\s*\/\/[^\n]*\n\s*return end;/);
+  });
+
   it("a failed download says why, and names the fix when there was no room", () => {
     const r = rig(60, 30, false);
     r.pacer.speed(choiceOf(0.9), entryOf(0.9), BYTES);
@@ -682,7 +722,7 @@ function engine(clock: { ms: number }, rtf: number, opts: { failAt?: number; han
   return e;
 }
 
-function loopRig(opts: { held: boolean; gpuRtf: number; gpuFailAt?: number; gpuHangAt?: number; gpuWrong?: boolean; kept?: SpeedEntry | null }) {
+function loopRig(opts: { held: boolean; gpuRtf: number; gpuFailAt?: number; gpuHangAt?: number; gpuOpenHangs?: boolean; gpuWrong?: boolean; kept?: SpeedEntry | null }) {
   const clock = { ms: 0 };
   const cpu = engine(clock, 1);
   const gpu = engine(clock, opts.gpuRtf, { failAt: opts.gpuFailAt, hangAt: opts.gpuHangAt, wrong: opts.gpuWrong });
@@ -699,6 +739,8 @@ function loopRig(opts: { held: boolean; gpuRtf: number; gpuFailAt?: number; gpuH
     },
     openVoice: async (_m, backend) => {
       opened.push(backend);
+      // A graphics chip whose session never finishes opening.
+      if (backend === "webgpu" && opts.gpuOpenHangs) return new Promise<never>(() => undefined);
       if (backend === "webgpu") return gpu;
       const again = engine(clock, 1);
       reopened.push(again);
@@ -810,12 +852,43 @@ describe("the render loop: the engine choice, as behaviour", () => {
     await r.run();
     expect(r.msgs.at(-1)?.type).toBe("lost");
     expect(cuesMade(r.msgs)).toEqual([0]);
-    // Watchdogs only on the graphics chip's lines: five times real time for their words, never under 15 s.
-    expect(r.state.watchdogs).toEqual([15_000, 18_000]);
+    // Watchdogs only on the graphics chip: its session's opening (60 s), then its lines (five times real time for their words, never under 15 s).
+    expect(r.state.watchdogs).toEqual([GPU_OPEN_MS, 15_000, 18_000]);
     // main.ts starts the fresh worker on "lost", and ignores its warming.
     const main = read("web/src/main.ts");
     expect(main).toMatch(/if \(msg\.type === "lost"\) \{[\s\S]*?next\.postMessage\(\{ type: "render", cues, voices: cast\.voices, from: msg\.index, kept: msg\.kept \} satisfies ToWorker\);/);
     expect(gpuWatchdogMs(Array.from({ length: 300 }, () => "w").join(" "))).toBe(600_000);
+  });
+
+  for (const [hangAt, step] of [
+    [1, "its warm-up"],
+    [2, "the timed sentence"],
+  ] as const) {
+    it(`a graphics chip that never answers during the speed test (${step}) fails the trial: its model goes, and a fresh worker carries on`, async () => {
+      const r = loopRig({ held: true, gpuRtf: 10, gpuHangAt: hangAt });
+      await r.run();
+      expect(r.msgs.some((m) => m.type === "testing")).toBe(true);
+      expect(r.state.drops).toBe(1);
+      // Nothing was made here, and no ready: the fresh worker starts from the first line.
+      expect(cuesMade(r.msgs)).toEqual([]);
+      const lost = r.msgs.at(-1) as Extract<FromWorker, { type: "lost" }>;
+      expect(lost).toMatchObject({ type: "lost", index: 0 });
+      expect(lost.kept.backend).toBe("wasm");
+      expect(lost.kept.gpuRtf).toBe(0);
+      // The open (60 s), then the warm-up and the sentence (15 s each) were bounded.
+      expect(r.state.watchdogs.slice(0, 2)).toEqual([GPU_OPEN_MS, 15_000]);
+    });
+  }
+
+  it("a kept graphics chip whose session never opens: its model goes, and a fresh worker carries on from the first line", async () => {
+    const r = loopRig({ held: true, gpuRtf: 10, gpuOpenHangs: true, kept: keptGpu });
+    await r.run();
+    expect(r.state.watchdogs).toEqual([GPU_OPEN_MS]);
+    expect(r.state.drops).toBe(1);
+    expect(cuesMade(r.msgs)).toEqual([]);
+    expect(r.msgs.at(-1)).toMatchObject({ type: "lost", index: 0 });
+    // main.ts: a fresh worker before the first "ready" still brings the broadcast's own warming and ready.
+    expect(read("web/src/main.ts")).toMatch(/if \(restarting && own\.ready && \(msg\.type === "loading" \|\| msg\.type === "ready"\)\)/);
   });
 
   it("the kept choice with its model gone (cleared site data): the processor makes the work", async () => {

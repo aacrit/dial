@@ -50,7 +50,7 @@ export interface PacerHooks {
   /** The device may make lines up to this index (chapter-ahead within the memory cap). */
   allow: (upTo: number) => void;
   /** Downloads the graphics chip's model (the listener pressed its key); the page calls gpuLoading, gpuReady or gpuFailed. */
-  askGpu: () => void;
+  askGpu: () => (() => void) | void;
   /** Tells the render worker the model is here: it tests it between two lines, a pause in the making. */
   sendGpu: () => void;
   /** Keeps this device's measured speed on this device (speed/store.ts). */
@@ -96,6 +96,10 @@ export class Pacer {
   private gpuOffered = false;
   /** Its model is here, waiting for a safe moment to be tested. */
   private gpuPending = false;
+  /** Stops the graphics chip's download (its worker), if one runs. */
+  private cancelGpu: (() => void) | null = null;
+  /** The render worker is timing the speed test: nothing is made meanwhile, so the plan does not count that time as making. */
+  private testing_ = false;
   private gpuLine = "";
   private firstWait = 0;
   private allowed = Infinity;
@@ -124,6 +128,7 @@ export class Pacer {
 
   /** The speed test is timing its sentence: the making pauses for it. */
   testing(): void {
+    this.testing_ = true;
     if (this.mode === "loading") this.h.setValve(1, "Testing");
     this.h.gauge.show(this.backend);
     this.h.announce(TESTING_LINE);
@@ -132,6 +137,7 @@ export class Pacer {
   /** The engine in use (after loading, a test, or a graphics chip the browser stopped) and what to keep. */
   speed(choice: SpeedChoice, entry: SpeedEntry, gpuOffer: number): void {
     const switched = choice.backend !== this.backend;
+    this.testing_ = false;
     // The browser stopped the graphics chip (not a test's result): say so; the plan follows the processor's speed.
     if (switched && this.backend === "webgpu" && !choice.trials.length && this.mode !== "loading") this.h.announce(GPU_LOST_LINE);
     this.choice = choice;
@@ -175,6 +181,7 @@ export class Pacer {
   /** A line was made in `workSeconds` (timed by the worker): its speech measures the device live, and the plan follows. */
   cue(speechSeconds: number, workSeconds: number): void {
     const t = this.h.now();
+    this.testing_ = false;
     const first = !(this.measured > 0);
     this.measured = nextRate(this.measured, speechSeconds, workSeconds);
     this.lastCueAt = t;
@@ -234,7 +241,8 @@ export class Pacer {
     if (this.gpuAsked || !(this.gpuBytes > 0)) return;
     this.gpuAsked = true;
     this.h.hideAsk();
-    this.h.askGpu();
+    // Its cancel: the download stops when the broadcast does.
+    this.cancelGpu = this.h.askGpu() ?? null;
     this.h.announce(gpuLoadingLine(0, this.gpuBytes));
     this.gpuLine = gpuProgress(0, this.gpuBytes);
     this.h.repaint();
@@ -271,6 +279,8 @@ export class Pacer {
   }
 
   dispose(): void {
+    this.cancelGpu?.();
+    this.cancelGpu = null;
     this.mode = "off";
     this.text = null;
     this.keepMeasured();
@@ -303,7 +313,9 @@ export class Pacer {
     const pos = s.position();
     const all = this.lines();
     const lines = this.mayPause ? refillLines(all, pos) : all;
-    return leadWait(lines, s.made, pos, planRate(this.measured), this.h.now() - this.lastCueAt);
+    // While the speed test runs nothing is made: none of that time counts as making under way (the plan holds still).
+    const spent = this.testing_ ? 0 : this.h.now() - this.lastCueAt;
+    return leadWait(lines, s.made, pos, planRate(this.measured), spent);
   }
 
   /** Past two minutes, the choice; with a real countdown, the graphics chip where there is one to test, once a visit. */
@@ -348,7 +360,8 @@ export class Pacer {
     const counting = known && !late && (this.mode === "hold" || branchFor(this.firstWait) !== "short");
     // A hold says only what it is doing (CoS decision O); the valve counts it down.
     const holding = this.mode === "hold";
-    this.text = holding ? HOLD_LINE : counting ? countdownLine(wait, this.mayPause) : known ? SHORT_LEAD_LINE : MEASURING_SHORT;
+    // A hold is said once, in the announced status; the line under it keeps the broadcast's own progress.
+    this.text = holding ? null : counting ? countdownLine(wait, this.mayPause) : known ? SHORT_LEAD_LINE : MEASURING_SHORT;
     this.shortText = !holding && counting ? countdownLine(wait, true) : null;
     const share = this.firstWait > 0 && known && Number.isFinite(this.firstWait) ? Math.max(0.08, Math.min(1, 1 - wait / this.firstWait)) : 0.08;
     this.h.setValve(share, counting ? (holding ? valveResuming(wait) : valveCountdown(wait)) : holding ? "Making" : known ? "Warming" : "Measuring");

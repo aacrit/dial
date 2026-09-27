@@ -34,7 +34,7 @@ export interface PlanLine {
 
 /**
  * Seconds to wait, from now, before playback may start at `position` (work
- * time) so that it never catches the making, at `rate` (the planned speed).
+ * time) so that, if the making keeps to `rate` (the planned speed), playback never catches it.
  * `made` lines are ready; the rest are made in order from now, the first of
  * them already `spent` seconds into its making. 0 when playback may start at
  * once. Infinity when nothing can be made (rate 0).
@@ -93,7 +93,7 @@ export function paceScale(real: readonly number[], estimated: readonly number[])
 export type Branch =
   /** A lead of MIN_LEAD_S or less: no countdown, the valve simply warms (design/spec.md 0.2). */
   | "short"
-  /** Count down, then start: it will never pause. */
+  /** Count down, then start: planned at four fifths of the measured speed, so it should not pause (a forecast, CoS decision O). */
   | "countdown"
   /** Over two minutes: offer Dial's recording (where the work has one) or starting anyway. */
   | "choice";

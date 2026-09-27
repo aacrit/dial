@@ -360,7 +360,8 @@ function setupRadio(): void {
       heard: s.line + 1,
       made: s.made,
       total: s.cues.length,
-      paused: s.audio.state === "suspended",
+      // A hold is not the listener's pause: the line stays on air (the status says what is being made).
+      paused: s.audio.state === "suspended" && !s.pacer?.waiting,
       renderDone: s.renderDone,
       prepared: s.kind === "prepared",
     });
@@ -789,6 +790,8 @@ function setupRadio(): void {
             if (mine()) own.pacer?.gpuFailed();
           };
           dl.postMessage("start");
+          // The pacer calls this on teardown: the download stops with the broadcast.
+          return end;
         },
         sendGpu: () => own.worker?.postMessage({ type: "gpu" } satisfies ToWorker),
         // Kept on this device only, so the speed test runs once (speed/store.ts); never sent.
@@ -1000,7 +1003,8 @@ function setupRadio(): void {
       if (event.data.type === "requests") return recordEntries(event.data.entries);
       if (session !== own || !own.live) return;
       const msg = event.data;
-      if (restarting && (msg.type === "loading" || msg.type === "ready")) {
+      // (Before the first "ready", a stuck speed test at the start, the fresh worker's warming and ready are the broadcast's own.)
+      if (restarting && own.ready && (msg.type === "loading" || msg.type === "ready")) {
         if (msg.type === "ready") restarting = false;
         return;
       }

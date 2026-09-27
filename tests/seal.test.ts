@@ -439,7 +439,7 @@ describe("speed of this device: processor only, results never sent", () => {
       expect(src, name).not.toMatch(/sendEvent|reportCoreSuccess|fetch\(|sendBeacon|\/e\b|noteSend/);
     }
     // It times the one fixed sentence on each engine it compares, with the voice already loaded.
-    expect(testFn).toMatch(/await say\(tts, BENCH_SENTENCE, voice\)/);
+    expect(testFn).toMatch(/await guard\(say\(tts, BENCH_SENTENCE, voice\), BENCH_SENTENCE\)/);
     // The worker never loads the page's rendering code or the voice table (types only), and the sentence has its own module.
     expect(worker).not.toMatch(/^import \{[^}]*\} from "\.\/(engine\/cast|bench|render)";$/m);
     expect(loop).not.toMatch(/^import \{[^}]*\} from "\.\.\/(engine\/cast|bench|render)";$/m);

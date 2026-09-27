@@ -147,14 +147,14 @@ describe("web/privacy.html, claim by claim", () => {
     expect([...gpuModel.matchAll(/fetch\(\s*([^,)]+)/g)].map((m) => m[1])).toEqual(['"/voice/manifest.json"', "`/voice/models/${m.repo}/onnx/${gpu.parts[i]}`"]);
     expect(gpuModel).toMatch(/if \(\(await deps\.sha256\(buf\)\) !== gpu\.partSha256\[i\]\) throw/);
     expect(read("web/src/main.ts")).toMatch(/speedGpu\.addEventListener\("click", \(\) => session\?\.pacer\?\.testGpu\(\)\);/);
-    expect(read("web/src/speed/pacer.ts")).toMatch(/testGpu\(\): void \{\s*if \(this\.gpuAsked \|\| !\(this\.gpuBytes > 0\)\) return;\s*this\.gpuAsked = true;\s*this\.h\.hideAsk\(\);\s*this\.h\.askGpu\(\);/);
+    expect(read("web/src/speed/pacer.ts")).toMatch(/testGpu\(\): void \{\s*if \(this\.gpuAsked \|\| !\(this\.gpuBytes > 0\)\) return;\s*this\.gpuAsked = true;\s*this\.h\.hideAsk\(\);\s*\/\/[^\n]*\n\s*this\.cancelGpu = this\.h\.askGpu\(\) \?\? null;/);
     // Kept with the pin it was checked against, answered to the runtime only while that pin is the manifest's, never fetched by the loader; dropped when it loses.
     expect(gpuModel).toMatch(/\[GPU_PIN_HEADER\]: gpu\.sha256/);
     const files = read("web/src/voice-files.ts");
     expect(files).toMatch(/if \(m\.gpu && key === gpuModelKey\(\{ repo: m\.repo, gpu: m\.gpu \}\)\) \{\s*return \(await heldGpuModel\(cache, \{ repo: m\.repo, gpu: m\.gpu \}\)\) \?\? failingResponse\(/);
     expect(files).toMatch(/return hit && hit\.headers\.get\(GPU_PIN_HEADER\) === m\.gpu\.sha256 \? hit : undefined;/);
     // Deleted when it loses: tests/speed.test.ts "a graphics chip that loses" drives it.
-    expect(loop).toMatch(/if \(choice\.backend !== "webgpu"\) \{\s*await release\(gpuTts\);\s*gpuTts = null;\s*await deps\.dropGpuModel\(manifest\);/);
+    expect(loop).toMatch(/if \(choice\.backend !== "webgpu"\) \{[\s\S]*?gpuTts = null;\s*await deps\.dropGpuModel\(manifest\);/);
   });
 
   it("the narration is made on the device: the render worker only receives text and posts audio back, and the voice sits in cache storage", () => {
