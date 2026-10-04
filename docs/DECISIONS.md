@@ -143,3 +143,6 @@ Chief of Staff approval, from the T7 review. The graphics chip's fp32 model (326
 
 ## 2026-09-27: The countdown forecasts, never promises (CoS decision O)
 Chief of Staff decision, from the T7 review. The plan is made at four fifths of the measured speed and a device can slow further, so "so it never pauses" was a promise the code cannot keep. The countdown says "Starting in 0:42. Planned at four fifths of this device's speed, so it should not pause."; after "Start anyway; it may pause" only "Starting in 0:08."; a hold says only "Making the next line…" (the valve reads "Resuming in 0:12"). The choice past two minutes states the wait as making time, not audio: "To play without a pause, this device needs 33:33 of making before it starts." design/spec.md 0.2 is amended to match.
+
+## 2026-10-04: Dial on hold
+The founder put Dial on hold and asked for it to be marked archived/on hold (Board gate `dial-hold`). Dial leaves build so Ratio can take the one build slot (R-07). Nothing is torn down: dial.voidvision.org stays live at release/2026.09.26-2, the repo and D1 are kept, and no data is deleted. Resuming needs a founder decision returning Dial to build; the next ticket was T2b.
